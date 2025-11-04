@@ -49,21 +49,32 @@ export class CommandBuffer {
    * Execute all commands and clear the buffer
    */
   execute(): void {
-    // Group commands by entity
-    const entityCommands = new Map<EntityId, Command[]>();
-    for (const cmd of this.commands) {
-      if (!entityCommands.has(cmd.entityId)) {
-        entityCommands.set(cmd.entityId, []);
+    const MAX_ITERATIONS = 100;
+    let iterations = 0;
+
+    while (this.commands.length > 0) {
+      if (iterations >= MAX_ITERATIONS) {
+        throw new Error("Command execution exceeded maximum iterations, possible infinite loop");
       }
-      entityCommands.get(cmd.entityId)!.push(cmd);
-    }
+      iterations++;
 
-    // Process each entity's commands with optimization
-    for (const [entityId, commands] of entityCommands) {
-      this.executeEntityCommands(entityId, commands);
-    }
+      const currentCommands = [...this.commands];
+      this.commands = [];
 
-    this.commands = [];
+      // Group commands by entity
+      const entityCommands = new Map<EntityId, Command[]>();
+      for (const cmd of currentCommands) {
+        if (!entityCommands.has(cmd.entityId)) {
+          entityCommands.set(cmd.entityId, []);
+        }
+        entityCommands.get(cmd.entityId)!.push(cmd);
+      }
+
+      // Process each entity's commands with optimization
+      for (const [entityId, commands] of entityCommands) {
+        this.executeEntityCommands(entityId, commands);
+      }
+    }
   }
 
   /**
