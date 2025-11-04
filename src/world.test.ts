@@ -245,5 +245,56 @@ describe("World", () => {
       expect(mixedEntities).not.toContain(entity2);
       expect(mixedEntities).not.toContain(entity3);
     });
+
+    it("should clean up relation components when target entity is destroyed", () => {
+      const world = new World();
+
+      // Create component IDs
+      const positionComponent = createComponentId<{ x: number; y: number }>(1);
+      const followsComponent = createComponentId<void>(2);
+
+      // Create entities
+      const entity1 = world.createEntity(); // This will be followed
+      const entity2 = world.createEntity(); // This will follow entity1
+      const entity3 = world.createEntity(); // This will also follow entity1
+
+      // Add position to entity1
+      world.addComponent(entity1, positionComponent, { x: 10, y: 20 });
+      world.flushCommands();
+
+      // Create relation components (entity2 and entity3 follow entity1)
+      const followsEntity1 = createRelationId(followsComponent, entity1);
+      world.addComponent(entity2, followsEntity1, null);
+      world.addComponent(entity3, followsEntity1, null);
+      world.flushCommands();
+
+      // Verify relations exist
+      expect(world.hasComponent(entity2, followsEntity1)).toBe(true);
+      expect(world.hasComponent(entity3, followsEntity1)).toBe(true);
+
+      // Query entities that follow entity1
+      const followers = world.queryEntities([followsEntity1]);
+      expect(followers).toContain(entity2);
+      expect(followers).toContain(entity3);
+
+      // Destroy entity1
+      world.destroyEntity(entity1);
+      world.flushCommands();
+
+      // Verify entity1 is destroyed
+      expect(world.hasEntity(entity1)).toBe(false);
+
+      // Verify relation components are cleaned up
+      expect(world.hasComponent(entity2, followsEntity1)).toBe(false);
+      expect(world.hasComponent(entity3, followsEntity1)).toBe(false);
+
+      // Query should now return empty
+      const followersAfterDestroy = world.queryEntities([followsEntity1]);
+      expect(followersAfterDestroy).toHaveLength(0);
+
+      // entity2 and entity3 should still exist but without the relation components
+      expect(world.hasEntity(entity2)).toBe(true);
+      expect(world.hasEntity(entity3)).toBe(true);
+    });
   });
 });

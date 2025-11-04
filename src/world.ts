@@ -22,6 +22,12 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
   private commandBuffer: CommandBuffer;
   private componentToArchetypes = new Map<EntityId<any>, Archetype[]>();
 
+  /**
+   * Reverse index tracking which entities have relation components pointing to each target entity
+   * Maps target entity ID to set of {sourceEntityId, relationType} pairs
+   */
+  private relationReverseIndex = new Map<EntityId, Set<{ sourceEntityId: EntityId; relationType: EntityId }>>();
+
   constructor() {
     this.commandBuffer = new CommandBuffer((entityId, commands) => this.executeEntityCommands(entityId, commands));
   }
@@ -53,6 +59,41 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
     if (!archetype) {
       return; // Entity doesn't exist, nothing to do
     }
+
+    // Clean up relation components pointing to this entity
+    const relationReferences = this.getRelationReferences(entityId);
+    for (const { sourceEntityId, relationType } of relationReferences) {
+      // Directly remove the relation component from the source entity
+      const sourceArchetype = this.entityToArchetype.get(sourceEntityId);
+      if (sourceArchetype && sourceArchetype.componentTypes.includes(relationType)) {
+        // Remove from current archetype and move to new archetype without this component
+        const currentComponents = new Map<EntityId<any>, any>();
+        for (const componentType of sourceArchetype.componentTypes) {
+          if (componentType !== relationType) {
+            const data = sourceArchetype.getComponent(sourceEntityId, componentType);
+            if (data !== undefined) {
+              currentComponents.set(componentType, data);
+            }
+          }
+        }
+
+        const newComponentTypes = Array.from(currentComponents.keys()).sort((a, b) => a - b);
+        const newArchetype = this.getOrCreateArchetype(newComponentTypes);
+
+        // Remove from current archetype
+        sourceArchetype.removeEntity(sourceEntityId);
+
+        // Add to new archetype
+        newArchetype.addEntity(sourceEntityId, currentComponents);
+        this.entityToArchetype.set(sourceEntityId, newArchetype);
+
+        // Remove from relation reverse index
+        this.removeRelationReference(sourceEntityId, relationType, entityId);
+      }
+    }
+
+    // Clean up the reverse index for this entity
+    this.relationReverseIndex.delete(entityId);
 
     archetype.removeEntity(entityId);
     this.entityToArchetype.delete(entityId);
@@ -367,6 +408,24 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
       }
       // Removals are already handled by not including them in finalComponents
     }
+
+    // Update relation reverse index for removed components
+    for (const componentType of removes) {
+      const detailedType = getDetailedIdType(componentType);
+      if (detailedType.type === "entity-relation") {
+        const targetEntityId = detailedType.targetId!;
+        this.removeRelationReference(entityId, componentType, targetEntityId);
+      }
+    }
+
+    // Update relation reverse index for added components
+    for (const [componentType, component] of adds) {
+      const detailedType = getDetailedIdType(componentType);
+      if (detailedType.type === "entity-relation") {
+        const targetEntityId = detailedType.targetId!;
+        this.addRelationReference(entityId, componentType, targetEntityId);
+      }
+    }
   }
 
   /**
@@ -395,5 +454,48 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
 
       return newArchetype;
     });
+  }
+
+  /**
+   * Add a relation reference to the reverse index
+   * @param sourceEntityId The entity that has the relation component
+   * @param relationType The relation component type
+   * @param targetEntityId The entity being pointed to
+   */
+  private addRelationReference(sourceEntityId: EntityId, relationType: EntityId, targetEntityId: EntityId): void {
+    if (!this.relationReverseIndex.has(targetEntityId)) {
+      this.relationReverseIndex.set(targetEntityId, new Set());
+    }
+    this.relationReverseIndex.get(targetEntityId)!.add({ sourceEntityId, relationType });
+  }
+
+  /**
+   * Remove a relation reference from the reverse index
+   * @param sourceEntityId The entity that has the relation component
+   * @param relationType The relation component type
+   * @param targetEntityId The entity being pointed to
+   */
+  private removeRelationReference(sourceEntityId: EntityId, relationType: EntityId, targetEntityId: EntityId): void {
+    const references = this.relationReverseIndex.get(targetEntityId);
+    if (references) {
+      references.forEach(ref => {
+        if (ref.sourceEntityId === sourceEntityId && ref.relationType === relationType) {
+          references.delete(ref);
+        }
+      });
+      if (references.size === 0) {
+        this.relationReverseIndex.delete(targetEntityId);
+      }
+    }
+  }
+
+  /**
+   * Get all relation references pointing to a target entity
+   * @param targetEntityId The target entity
+   * @returns Array of {sourceEntityId, relationType} pairs
+   */
+  private getRelationReferences(targetEntityId: EntityId): Array<{ sourceEntityId: EntityId; relationType: EntityId }> {
+    const references = this.relationReverseIndex.get(targetEntityId);
+    return references ? Array.from(references) : [];
   }
 }
