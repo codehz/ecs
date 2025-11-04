@@ -296,5 +296,41 @@ describe("World", () => {
       expect(world.hasEntity(entity2)).toBe(true);
       expect(world.hasEntity(entity3)).toBe(true);
     });
+
+    it("should clean up components when entity is used directly as component type and destroyed", () => {
+      const world = new World();
+
+      // Create entities
+      const entity1 = world.createEntity(); // This will be used as component type
+      const entity2 = world.createEntity(); // This will have entity1 as component
+
+      // Add entity1 directly as a component type to entity2
+      world.addComponent(entity2, entity1, null);
+      world.flushCommands();
+
+      // Verify the component exists
+      expect(world.hasComponent(entity2, entity1)).toBe(true);
+
+      // Query entities that have entity1 as component
+      const entitiesWithComponent = world.queryEntities([entity1]);
+      expect(entitiesWithComponent).toContain(entity2);
+
+      // Destroy entity1
+      world.destroyEntity(entity1);
+      world.flushCommands();
+
+      // Verify entity1 is destroyed
+      expect(world.hasEntity(entity1)).toBe(false);
+
+      // Verify the component is cleaned up
+      expect(world.hasComponent(entity2, entity1)).toBe(false);
+
+      // Query should now return empty
+      const entitiesWithComponentAfterDestroy = world.queryEntities([entity1]);
+      expect(entitiesWithComponentAfterDestroy).toHaveLength(0);
+
+            // entity2 should still exist
+      expect(world.hasEntity(entity2)).toBe(true);
+    });
   });
 });
