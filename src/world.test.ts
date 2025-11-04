@@ -333,4 +333,165 @@ describe("World", () => {
       expect(world.hasEntity(entity2)).toBe(true);
     });
   });
+
+  describe("Component Hooks", () => {
+    type Position = { x: number; y: number };
+    type Velocity = { x: number; y: number };
+
+    const positionComponent = createComponentId<Position>(1);
+    const velocityComponent = createComponentId<Velocity>(2);
+
+    it("should trigger component added hooks", () => {
+      const world = new World();
+      const entity = world.createEntity();
+      const position: Position = { x: 10, y: 20 };
+
+      let hookCalled = false;
+      let hookEntityId: EntityId | undefined;
+      let hookComponentType: EntityId<Position> | undefined;
+      let hookComponent: Position | undefined;
+
+      world.registerComponentLifecycleHook(positionComponent, {
+        onAdded: (entityId, componentType, component) => {
+          hookCalled = true;
+          hookEntityId = entityId;
+          hookComponentType = componentType;
+          hookComponent = component;
+        }
+      });
+
+      world.addComponent(entity, positionComponent, position);
+      world.flushCommands();
+
+      expect(hookCalled).toBe(true);
+      expect(hookEntityId).toBe(entity);
+      expect(hookComponentType).toBe(positionComponent);
+      expect(hookComponent).toEqual(position);
+    });
+
+    it("should trigger component removed hooks", () => {
+      const world = new World();
+      const entity = world.createEntity();
+      const position: Position = { x: 10, y: 20 };
+
+      world.addComponent(entity, positionComponent, position);
+      world.flushCommands();
+
+      let hookCalled = false;
+      let hookEntityId: EntityId | undefined;
+      let hookComponentType: EntityId<Position> | undefined;
+
+      world.registerComponentLifecycleHook(positionComponent, {
+        onRemoved: (entityId, componentType) => {
+          hookCalled = true;
+          hookEntityId = entityId;
+          hookComponentType = componentType;
+        }
+      });
+
+      world.removeComponent(entity, positionComponent);
+      world.flushCommands();
+
+      expect(hookCalled).toBe(true);
+      expect(hookEntityId).toBe(entity);
+      expect(hookComponentType).toBe(positionComponent);
+    });
+
+    it("should handle multiple hooks for the same component type", () => {
+      const world = new World();
+      const entity = world.createEntity();
+      const position: Position = { x: 10, y: 20 };
+
+      let hook1Called = false;
+      let hook2Called = false;
+
+      world.registerComponentLifecycleHook(positionComponent, {
+        onAdded: () => {
+          hook1Called = true;
+        }
+      });
+
+      world.registerComponentLifecycleHook(positionComponent, {
+        onAdded: () => {
+          hook2Called = true;
+        }
+      });
+
+      world.addComponent(entity, positionComponent, position);
+      world.flushCommands();
+
+      expect(hook1Called).toBe(true);
+      expect(hook2Called).toBe(true);
+    });
+
+    it("should support hooks with both onAdded and onRemoved", () => {
+      const world = new World();
+      const entity = world.createEntity();
+      const position: Position = { x: 10, y: 20 };
+
+      let addedCalled = false;
+      let removedCalled = false;
+
+      world.registerComponentLifecycleHook(positionComponent, {
+        onAdded: () => {
+          addedCalled = true;
+        },
+        onRemoved: () => {
+          removedCalled = true;
+        }
+      });
+
+      world.addComponent(entity, positionComponent, position);
+      world.flushCommands();
+
+      expect(addedCalled).toBe(true);
+      expect(removedCalled).toBe(false);
+
+      world.removeComponent(entity, positionComponent);
+      world.flushCommands();
+
+      expect(removedCalled).toBe(true);
+    });
+
+    it("should support hooks with only onAdded", () => {
+      const world = new World();
+      const entity = world.createEntity();
+      const position: Position = { x: 10, y: 20 };
+
+      let addedCalled = false;
+
+      world.registerComponentLifecycleHook(positionComponent, {
+        onAdded: () => {
+          addedCalled = true;
+        }
+      });
+
+      world.addComponent(entity, positionComponent, position);
+      world.flushCommands();
+
+      expect(addedCalled).toBe(true);
+    });
+
+    it("should support hooks with only onRemoved", () => {
+      const world = new World();
+      const entity = world.createEntity();
+      const position: Position = { x: 10, y: 20 };
+
+      world.addComponent(entity, positionComponent, position);
+      world.flushCommands();
+
+      let removedCalled = false;
+
+      world.registerComponentLifecycleHook(positionComponent, {
+        onRemoved: () => {
+          removedCalled = true;
+        }
+      });
+
+      world.removeComponent(entity, positionComponent);
+      world.flushCommands();
+
+      expect(removedCalled).toBe(true);
+    });
+  });
 });

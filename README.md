@@ -50,6 +50,33 @@ query.forEach([PositionId, VelocityId], (entity, position, velocity) => {
 });
 ```
 
+### 组件生命周期钩子
+
+ECS 支持在组件添加或移除时执行回调函数：
+
+```typescript
+// 注册组件生命周期钩子
+world.registerComponentLifecycleHook(PositionId, {
+  onAdded: (entityId, componentType, component) => {
+    console.log(`组件 ${componentType} 被添加到实体 ${entityId}`);
+  },
+  onRemoved: (entityId, componentType) => {
+    console.log(`组件 ${componentType} 被从实体 ${entityId} 移除`);
+  }
+});
+
+// 你也可以只注册其中一个钩子
+world.registerComponentLifecycleHook(VelocityId, {
+  onRemoved: (entityId, componentType) => {
+    console.log(`组件 ${componentType} 被从实体 ${entityId} 移除`);
+  }
+});
+
+// 添加组件时会触发钩子
+world.addComponent(entity, PositionId, { x: 0, y: 0 });
+world.flushCommands(); // 钩子在这里被调用
+```
+
 ### 运行示例
 
 ```bash
@@ -65,6 +92,8 @@ bun run examples/simple/demo.ts
 - `removeComponent(entity, componentId)`: 从实体移除组件
 - `createQuery(componentIds)`: 创建查询
 - `registerSystem(system)`: 注册系统
+- `registerComponentLifecycleHook(componentId, hook)`: 注册组件生命周期钩子
+- `unregisterComponentLifecycleHook(componentId, hook)`: 注销组件生命周期钩子
 - `update(deltaTime)`: 更新世界
 - `flushCommands()`: 应用命令缓冲区
 

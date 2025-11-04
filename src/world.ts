@@ -9,6 +9,20 @@ import type { System } from "./system";
 import { getOrCreateWithSideEffect } from "./utils";
 
 /**
+ * Hook types for component lifecycle events
+ */
+export interface ComponentLifecycleHook<T> {
+  /**
+   * Called when a component is added to an entity
+   */
+  onAdded?: (entityId: EntityId, componentType: EntityId<T>, component: T) => void;
+  /**
+   * Called when a component is removed from an entity
+   */
+  onRemoved?: (entityId: EntityId, componentType: EntityId<T>) => void;
+}
+
+/**
  * World class for ECS architecture
  * Manages entities, components, and systems
  */
@@ -21,6 +35,11 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
   private queries: Query[] = [];
   private commandBuffer: CommandBuffer;
   private componentToArchetypes = new Map<EntityId<any>, Archetype[]>();
+
+  /**
+   * Hook storage for component lifecycle events
+   */
+  private componentLifecycleHooks = new Map<EntityId<any>, Set<ComponentLifecycleHook<any>>>();
 
   /**
    * Reverse index tracking which entities use each entity as a component type
@@ -165,6 +184,29 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
     const index = this.systems.indexOf(system);
     if (index !== -1) {
       this.systems.splice(index, 1);
+    }
+  }
+
+  /**
+   * Register a lifecycle hook for component events
+   */
+  registerComponentLifecycleHook<T>(componentType: EntityId<T>, hook: ComponentLifecycleHook<T>): void {
+    if (!this.componentLifecycleHooks.has(componentType)) {
+      this.componentLifecycleHooks.set(componentType, new Set());
+    }
+    this.componentLifecycleHooks.get(componentType)!.add(hook);
+  }
+
+  /**
+   * Unregister a lifecycle hook for component events
+   */
+  unregisterComponentLifecycleHook<T>(componentType: EntityId<T>, hook: ComponentLifecycleHook<T>): void {
+    const hooks = this.componentLifecycleHooks.get(componentType);
+    if (hooks) {
+      hooks.delete(hook);
+      if (hooks.size === 0) {
+        this.componentLifecycleHooks.delete(componentType);
+      }
     }
   }
 
@@ -433,6 +475,30 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
       } else if (detailedType.type === "entity") {
         // For direct entity usage as component type, track the component type itself
         this.addComponentReference(entityId, componentType, componentType);
+      }
+    }
+
+    // Trigger component added hooks
+    for (const [componentType, component] of adds) {
+      const hooks = this.componentLifecycleHooks.get(componentType);
+      if (hooks) {
+        for (const hook of hooks) {
+          if (hook.onAdded) {
+            hook.onAdded(entityId, componentType, component);
+          }
+        }
+      }
+    }
+
+    // Trigger component removed hooks
+    for (const componentType of removes) {
+      const hooks = this.componentLifecycleHooks.get(componentType);
+      if (hooks) {
+        for (const hook of hooks) {
+          if (hook.onRemoved) {
+            hook.onRemoved(entityId, componentType);
+          }
+        }
       }
     }
   }

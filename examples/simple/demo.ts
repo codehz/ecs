@@ -51,6 +51,19 @@ function main() {
   world.addComponent(entity2, PositionId, { x: 10, y: 10 });
   world.addComponent(entity2, VelocityId, { x: -0.5, y: 1 });
 
+  // 注册组件钩子
+  world.registerComponentLifecycleHook(PositionId, {
+    onAdded: (entityId, componentType, component) => {
+      console.log(`组件添加钩子触发: 实体 ${entityId} 添加了 ${componentType} 组件，值为 (${component.x}, ${component.y})`);
+    }
+  });
+
+  world.registerComponentLifecycleHook(VelocityId, {
+    onRemoved: (entityId, componentType) => {
+      console.log(`组件移除钩子触发: 实体 ${entityId} 移除了 ${componentType} 组件`);
+    }
+  });
+
   // 执行命令以应用组件添加
   world.flushCommands();
 
@@ -60,6 +73,11 @@ function main() {
     console.log(`\nUpdate ${i + 1}:`);
     world.update(deltaTime);
   }
+
+  // 演示组件移除钩子
+  console.log("\n移除组件演示:");
+  world.removeComponent(entity1, VelocityId);
+  world.flushCommands();
 
   console.log("\nDemo completed!");
 }
