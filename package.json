@@ -3,14 +3,27 @@
   "module": "src/index.ts",
   "type": "module",
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.6",
+    "organize-imports-cli": "^0.10.0"
   },
   "scripts": {
     "test": "bun test",
     "demo": "bun run examples/simple/demo.ts",
-    "release": "bun run scripts/release.ts"
+    "release": "bun run scripts/release.ts",
+    "prepare": "husky"
   },
   "peerDependencies": {
     "typescript": "~5.9.2"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "organize-imports-cli",
+      "prettier --write"
+    ],
+    "*.{json,md}": [
+      "prettier --write"
+    ]
   }
 }
