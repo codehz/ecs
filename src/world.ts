@@ -11,28 +11,13 @@ import { getOrCreateWithSideEffect } from "./utils";
 /**
  * Hook types for component lifecycle events
  */
-export interface ComponentLifecycleHook<T> {
+export interface LifecycleHook<T = unknown> {
   /**
    * Called when a component is added to an entity
    */
   onAdded?: (entityId: EntityId, componentType: EntityId<T>, component: T) => void;
   /**
    * Called when a component is removed from an entity
-   */
-  onRemoved?: (entityId: EntityId, componentType: EntityId<T>) => void;
-}
-
-/**
- * Hook types for wildcard relation lifecycle events
- * These hooks are triggered for any component that matches a wildcard relation pattern
- */
-export interface WildcardRelationLifecycleHook<T = unknown> {
-  /**
-   * Called when any component matching the wildcard relation pattern is added to an entity
-   */
-  onAdded?: (entityId: EntityId, componentType: EntityId<T>, component: T) => void;
-  /**
-   * Called when any component matching the wildcard relation pattern is removed from an entity
    */
   onRemoved?: (entityId: EntityId, componentType: EntityId<T>) => void;
 }
@@ -54,13 +39,13 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
   /**
    * Hook storage for component lifecycle events
    */
-  private componentLifecycleHooks = new Map<EntityId<any>, Set<ComponentLifecycleHook<any>>>();
+  private componentLifecycleHooks = new Map<EntityId<any>, Set<LifecycleHook<any>>>();
 
   /**
    * Hook storage for wildcard relation lifecycle events
    * Maps base component type to set of wildcard relation hooks
    */
-  private wildcardRelationLifecycleHooks = new Map<EntityId<any>, Set<WildcardRelationLifecycleHook>>();
+  private wildcardRelationLifecycleHooks = new Map<EntityId<any>, Set<LifecycleHook>>();
 
   /**
    * Reverse index tracking which entities use each entity as a component type
@@ -237,7 +222,7 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
   /**
    * Register a lifecycle hook for component events
    */
-  registerComponentLifecycleHook<T>(componentType: EntityId<T>, hook: ComponentLifecycleHook<T>): void {
+  registerComponentLifecycleHook<T>(componentType: EntityId<T>, hook: LifecycleHook<T>): void {
     if (!this.componentLifecycleHooks.has(componentType)) {
       this.componentLifecycleHooks.set(componentType, new Set());
     }
@@ -247,7 +232,7 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
   /**
    * Unregister a lifecycle hook for component events
    */
-  unregisterComponentLifecycleHook<T>(componentType: EntityId<T>, hook: ComponentLifecycleHook<T>): void {
+  unregisterComponentLifecycleHook<T>(componentType: EntityId<T>, hook: LifecycleHook<T>): void {
     const hooks = this.componentLifecycleHooks.get(componentType);
     if (hooks) {
       hooks.delete(hook);
@@ -261,20 +246,20 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
    * Register a lifecycle hook for wildcard relation events
    * The hook will be triggered for any component that matches the wildcard relation pattern
    */
-  registerWildcardRelationLifecycleHook<T>(baseComponentType: EntityId<T>, hook: WildcardRelationLifecycleHook<T>): void {
+  registerWildcardRelationLifecycleHook<T>(baseComponentType: EntityId<T>, hook: LifecycleHook<T>): void {
     if (!this.wildcardRelationLifecycleHooks.has(baseComponentType)) {
       this.wildcardRelationLifecycleHooks.set(baseComponentType, new Set());
     }
-    this.wildcardRelationLifecycleHooks.get(baseComponentType)!.add(hook as WildcardRelationLifecycleHook<any>);
+    this.wildcardRelationLifecycleHooks.get(baseComponentType)!.add(hook as LifecycleHook<any>);
   }
 
   /**
    * Unregister a lifecycle hook for wildcard relation events
    */
-  unregisterWildcardRelationLifecycleHook<T>(baseComponentType: EntityId<T>, hook: WildcardRelationLifecycleHook<T>): void {
+  unregisterWildcardRelationLifecycleHook<T>(baseComponentType: EntityId<T>, hook: LifecycleHook<T>): void {
     const hooks = this.wildcardRelationLifecycleHooks.get(baseComponentType);
     if (hooks) {
-      hooks.delete(hook as WildcardRelationLifecycleHook<any>);
+      hooks.delete(hook as LifecycleHook<any>);
       if (hooks.size === 0) {
         this.wildcardRelationLifecycleHooks.delete(baseComponentType);
       }
