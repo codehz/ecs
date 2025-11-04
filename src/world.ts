@@ -4,23 +4,9 @@ import type { EntityId } from "./entity";
 import { EntityIdManager, getDetailedIdType } from "./entity";
 import { Query } from "./query";
 import type { QueryFilter } from "./query-filter";
-import type { ComponentTuple } from "./types";
+import type { ComponentTuple, LifecycleHook } from "./types";
 import type { System } from "./system";
 import { getOrCreateWithSideEffect } from "./utils";
-
-/**
- * Hook types for component lifecycle events
- */
-export interface LifecycleHook<T = unknown> {
-  /**
-   * Called when a component is added to an entity
-   */
-  onAdded?: (entityId: EntityId, componentType: EntityId<T>, component: T) => void;
-  /**
-   * Called when a component is removed from an entity
-   */
-  onRemoved?: (entityId: EntityId, componentType: EntityId<T>) => void;
-}
 
 /**
  * World class for ECS architecture
