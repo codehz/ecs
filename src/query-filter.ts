@@ -1,0 +1,47 @@
+import { Archetype } from "./archetype";
+import type { EntityId } from "./entity";
+import { getDetailedIdType, decodeRelationId, isRelationId } from "./entity";
+
+/**
+ * Filter options for queries
+ */
+export interface QueryFilter {
+  negativeComponentTypes?: EntityId<any>[];
+}
+
+/**
+ * Check if an archetype matches the given component types
+ */
+export function matchesComponentTypes(archetype: Archetype, componentTypes: EntityId<any>[]): boolean {
+  return componentTypes.every((type) => {
+    const detailedType = getDetailedIdType(type);
+    if (detailedType.type === "wildcard-relation") {
+      // For wildcard relations, check if archetype contains the component
+      return archetype.componentTypes.includes(detailedType.componentId!);
+    } else {
+      // For regular components, check direct inclusion
+      return archetype.componentTypes.includes(type);
+    }
+  });
+}
+
+/**
+ * Check if an archetype matches the filter conditions (only filtering logic)
+ */
+export function matchesFilter(archetype: Archetype, filter: QueryFilter): boolean {
+  const negativeTypes = filter.negativeComponentTypes || [];
+  return negativeTypes.every((type) => {
+    const detailedType = getDetailedIdType(type);
+    if (detailedType.type === "wildcard-relation") {
+      // For wildcard relations in negative filter, exclude archetypes that contain ANY relation with the same component
+      return !archetype.componentTypes.some((archetypeType) => {
+        if (!isRelationId(archetypeType)) return false;
+        const decoded = decodeRelationId(archetypeType);
+        return decoded.componentId === detailedType.componentId;
+      });
+    } else {
+      // For regular components, check direct exclusion
+      return !archetype.componentTypes.includes(type);
+    }
+  });
+}
