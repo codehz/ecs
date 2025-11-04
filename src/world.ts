@@ -85,7 +85,7 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
     for (const { sourceEntityId, componentType } of componentReferences) {
       // Directly remove the component from the source entity
       const sourceArchetype = this.entityToArchetype.get(sourceEntityId);
-      if (sourceArchetype && sourceArchetype.componentTypes.includes(componentType)) {
+      if (sourceArchetype) {
         // Remove from current archetype and move to new archetype without this component
         const currentComponents = new Map<EntityId<any>, any>();
         for (const compType of sourceArchetype.componentTypes) {
@@ -102,6 +102,9 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
 
         // Remove from current archetype
         sourceArchetype.removeEntity(sourceEntityId);
+        if (sourceArchetype.getEntities().length === 0) {
+          this.removeEmptyArchetype(sourceArchetype);
+        }
 
         // Add to new archetype
         newArchetype.addEntity(sourceEntityId, currentComponents);
@@ -116,6 +119,9 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
     this.entityReverseIndex.delete(entityId);
 
     archetype.removeEntity(entityId);
+    if (archetype.getEntities().length === 0) {
+      this.removeEmptyArchetype(archetype);
+    }
     this.entityToArchetype.delete(entityId);
     this.entityIdManager.deallocate(entityId);
   }
@@ -574,5 +580,39 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
   ): Array<{ sourceEntityId: EntityId; componentType: EntityId }> {
     const references = this.entityReverseIndex.get(targetEntityId);
     return references ? Array.from(references) : [];
+  }
+
+  /**
+   * Remove an empty archetype from all internal data structures
+   */
+  private removeEmptyArchetype(archetype: Archetype): void {
+    // Only remove if archetype is actually empty
+    if (archetype.getEntities().length > 0) {
+      return;
+    }
+
+    // Remove from archetypes array
+    const index = this.archetypes.indexOf(archetype);
+    if (index !== -1) {
+      this.archetypes.splice(index, 1);
+    }
+
+    // Remove from archetypeMap
+    const hashKey = this.getComponentTypesHash(archetype.componentTypes);
+    this.archetypeMap.delete(hashKey);
+
+    // Remove from componentToArchetypes
+    for (const componentType of archetype.componentTypes) {
+      const archetypes = this.componentToArchetypes.get(componentType);
+      if (archetypes) {
+        const compIndex = archetypes.indexOf(archetype);
+        if (compIndex !== -1) {
+          archetypes.splice(compIndex, 1);
+          if (archetypes.length === 0) {
+            this.componentToArchetypes.delete(componentType);
+          }
+        }
+      }
+    }
   }
 }
