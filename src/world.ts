@@ -112,6 +112,9 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
 
         // Remove from component reverse index
         this.removeComponentReference(sourceEntityId, componentType, entityId);
+
+        // Trigger component removed hooks
+        this.executeComponentLifecycleHooks(sourceEntityId, new Map(), new Set([componentType]));
       }
     }
 
@@ -484,29 +487,8 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
       }
     }
 
-    // Trigger component added hooks
-    for (const [componentType, component] of adds) {
-      const hooks = this.componentLifecycleHooks.get(componentType);
-      if (hooks) {
-        for (const hook of hooks) {
-          if (hook.onAdded) {
-            hook.onAdded(entityId, componentType, component);
-          }
-        }
-      }
-    }
-
-    // Trigger component removed hooks
-    for (const componentType of removes) {
-      const hooks = this.componentLifecycleHooks.get(componentType);
-      if (hooks) {
-        for (const hook of hooks) {
-          if (hook.onRemoved) {
-            hook.onRemoved(entityId, componentType);
-          }
-        }
-      }
-    }
+    // Trigger component lifecycle hooks
+    this.executeComponentLifecycleHooks(entityId, adds, removes);
   }
 
   /**
@@ -610,6 +592,39 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
           archetypes.splice(compIndex, 1);
           if (archetypes.length === 0) {
             this.componentToArchetypes.delete(componentType);
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Execute component lifecycle hooks for added and removed components
+   */
+  private executeComponentLifecycleHooks(
+    entityId: EntityId,
+    addedComponents: Map<EntityId<any>, any>,
+    removedComponents: Set<EntityId<any>>
+  ): void {
+    // Trigger component added hooks
+    for (const [componentType, component] of addedComponents) {
+      const hooks = this.componentLifecycleHooks.get(componentType);
+      if (hooks) {
+        for (const hook of hooks) {
+          if (hook.onAdded) {
+            hook.onAdded(entityId, componentType, component);
+          }
+        }
+      }
+    }
+
+    // Trigger component removed hooks
+    for (const componentType of removedComponents) {
+      const hooks = this.componentLifecycleHooks.get(componentType);
+      if (hooks) {
+        for (const hook of hooks) {
+          if (hook.onRemoved) {
+            hook.onRemoved(entityId, componentType);
           }
         }
       }
