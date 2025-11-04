@@ -164,6 +164,16 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
     if (!this.hasEntity(entityId)) {
       throw new Error(`Entity ${entityId} does not exist`);
     }
+
+    // Validate component type
+    const detailedType = getDetailedIdType(componentType);
+    if (detailedType.type === "invalid") {
+      throw new Error(`Invalid component type: ${componentType}`);
+    }
+    if (detailedType.type === "wildcard-relation") {
+      throw new Error(`Cannot directly add wildcard relation components: ${componentType}`);
+    }
+
     this.commandBuffer.addComponent(entityId, componentType, component);
   }
 
@@ -174,6 +184,13 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
     if (!this.hasEntity(entityId)) {
       throw new Error(`Entity ${entityId} does not exist`);
     }
+
+    // Validate component type
+    const detailedType = getDetailedIdType(componentType);
+    if (detailedType.type === "invalid") {
+      throw new Error(`Invalid component type: ${componentType}`);
+    }
+
     this.commandBuffer.removeComponent(entityId, componentType);
   }
 
@@ -459,8 +476,23 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
           break;
         case "removeComponent":
           if (cmd.componentType) {
-            removes.add(cmd.componentType);
-            adds.delete(cmd.componentType); // Remove from adds if it was going to be added
+            const detailedType = getDetailedIdType(cmd.componentType);
+            if (detailedType.type === "wildcard-relation") {
+              // For wildcard relation removal, find all matching relation components
+              const baseComponentId = detailedType.componentId!;
+              for (const componentType of currentArchetype.componentTypes) {
+                const componentDetailedType = getDetailedIdType(componentType);
+                if (componentDetailedType.type === "entity-relation" || componentDetailedType.type === "component-relation") {
+                  if (componentDetailedType.componentId === baseComponentId) {
+                    removes.add(componentType);
+                    adds.delete(componentType); // Remove from adds if it was going to be added
+                  }
+                }
+              }
+            } else {
+              removes.add(cmd.componentType);
+              adds.delete(cmd.componentType); // Remove from adds if it was going to be added
+            }
           }
           break;
       }
