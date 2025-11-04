@@ -27,7 +27,7 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
    * Maps entity ID to set of {sourceEntityId, componentType} pairs where componentType uses this entity
    * This includes both relation components and direct usage of entities as component types
    */
-  private entityAsComponentReverseIndex = new Map<EntityId, Set<{ sourceEntityId: EntityId; componentType: EntityId }>>();
+  private entityReverseIndex = new Map<EntityId, Set<{ sourceEntityId: EntityId; componentType: EntityId }>>();
 
   constructor() {
     this.commandBuffer = new CommandBuffer((entityId, commands) => this.executeEntityCommands(entityId, commands));
@@ -94,7 +94,7 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
     }
 
     // Clean up the reverse index for this entity
-    this.entityAsComponentReverseIndex.delete(entityId);
+    this.entityReverseIndex.delete(entityId);
 
     archetype.removeEntity(entityId);
     this.entityToArchetype.delete(entityId);
@@ -286,14 +286,14 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
   queryEntities(componentTypes: EntityId<any>[]): EntityId[];
   queryEntities<const T extends readonly EntityId<any>[]>(
     componentTypes: T,
-    includeComponents: true,
+    includeComponents: true
   ): Array<{
     entity: EntityId;
     components: ComponentTuple<T>;
   }>;
   queryEntities(
     componentTypes: EntityId<any>[],
-    includeComponents?: boolean,
+    includeComponents?: boolean
   ):
     | EntityId[]
     | Array<{
@@ -472,10 +472,10 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
    * @param targetEntityId The entity being used as component type
    */
   private addComponentReference(sourceEntityId: EntityId, componentType: EntityId, targetEntityId: EntityId): void {
-    if (!this.entityAsComponentReverseIndex.has(targetEntityId)) {
-      this.entityAsComponentReverseIndex.set(targetEntityId, new Set());
+    if (!this.entityReverseIndex.has(targetEntityId)) {
+      this.entityReverseIndex.set(targetEntityId, new Set());
     }
-    this.entityAsComponentReverseIndex.get(targetEntityId)!.add({ sourceEntityId, componentType });
+    this.entityReverseIndex.get(targetEntityId)!.add({ sourceEntityId, componentType });
   }
 
   /**
@@ -485,15 +485,15 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
    * @param targetEntityId The entity being used as component type
    */
   private removeComponentReference(sourceEntityId: EntityId, componentType: EntityId, targetEntityId: EntityId): void {
-    const references = this.entityAsComponentReverseIndex.get(targetEntityId);
+    const references = this.entityReverseIndex.get(targetEntityId);
     if (references) {
-      references.forEach(ref => {
+      references.forEach((ref) => {
         if (ref.sourceEntityId === sourceEntityId && ref.componentType === componentType) {
           references.delete(ref);
         }
       });
       if (references.size === 0) {
-        this.entityAsComponentReverseIndex.delete(targetEntityId);
+        this.entityReverseIndex.delete(targetEntityId);
       }
     }
   }
@@ -503,8 +503,10 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
    * @param targetEntityId The target entity
    * @returns Array of {sourceEntityId, componentType} pairs
    */
-  private getComponentReferences(targetEntityId: EntityId): Array<{ sourceEntityId: EntityId; componentType: EntityId }> {
-    const references = this.entityAsComponentReverseIndex.get(targetEntityId);
+  private getComponentReferences(
+    targetEntityId: EntityId
+  ): Array<{ sourceEntityId: EntityId; componentType: EntityId }> {
+    const references = this.entityReverseIndex.get(targetEntityId);
     return references ? Array.from(references) : [];
   }
 }
