@@ -1,7 +1,7 @@
 import { Archetype } from "./archetype";
 import { CommandBuffer, type Command } from "./command-buffer";
-import type { EntityId } from "./entity";
-import { EntityIdManager, getDetailedIdType } from "./entity";
+import type { EntityId, WildcardRelationId } from "./entity";
+import { EntityIdManager, getDetailedIdType, getIdType } from "./entity";
 import { Query } from "./query";
 import type { QueryFilter } from "./query-filter";
 import type { ComponentTuple, LifecycleHook } from "./types";
@@ -181,11 +181,23 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
   }
 
   /**
+   * Get wildcard relations from an entity
+   */
+  getComponent<T>(entityId: EntityId, componentType: WildcardRelationId<T>): [EntityId<unknown>, any][] | undefined;
+  /**
    * Get a component from an entity
    */
-  getComponent<T>(entityId: EntityId, componentType: EntityId<T>): T | undefined {
+  getComponent<T>(entityId: EntityId, componentType: EntityId<T>): T | undefined;
+  getComponent<T>(entityId: EntityId, componentType: EntityId<T> | WildcardRelationId<T>): T | [EntityId<unknown>, any][] | undefined {
     const archetype = this.entityToArchetype.get(entityId);
-    return archetype ? archetype.getComponent(entityId, componentType) : undefined;
+    if (!archetype) {
+      if (getIdType(componentType) === "wildcard-relation") {
+        return [];
+      } else {
+        return undefined;
+      }
+    }
+    return archetype.getComponent(entityId, componentType);
   }
 
   /**

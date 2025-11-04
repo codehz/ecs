@@ -1,4 +1,4 @@
-import type { EntityId } from "./entity";
+import type { EntityId, WildcardRelationId } from "./entity";
 import { getIdType, decodeRelationId } from "./entity";
 import type { ComponentTuple } from "./types";
 import { getOrComputeCache } from "./utils";
@@ -133,16 +133,47 @@ export class Archetype {
   }
 
   /**
+   * Get component data for a specific entity and wildcard relation type
+   * Returns an array of all matching relation instances
+   * @param entityId The entity
+   * @param componentType The wildcard relation type
+   */
+  getComponent<T>(entityId: EntityId, componentType: WildcardRelationId<T>): [EntityId<unknown>, any][] | undefined;
+  /**
    * Get component data for a specific entity and component type
    * @param entityId The entity
    * @param componentType The component type
    */
-  getComponent<T>(entityId: EntityId, componentType: EntityId<T>): T | undefined {
+  getComponent<T>(entityId: EntityId, componentType: EntityId<T>): T | undefined;
+  getComponent<T>(entityId: EntityId, componentType: EntityId<T> | WildcardRelationId<T>): T | [EntityId<unknown>, any][] | undefined {
     const index = this.entityToIndex.get(entityId);
     if (index === undefined) {
-      return undefined;
+      if (getIdType(componentType) === "wildcard-relation") {
+        return [];
+      } else {
+        return undefined;
+      }
     }
-    return this.componentData.get(componentType)?.[index];
+
+    if (getIdType(componentType) === "wildcard-relation") {
+      const decoded = decodeRelationId(componentType);
+      const componentId = decoded.componentId;
+      const relations: [EntityId<unknown>, any][] = [];
+
+      for (const relType of this.componentTypes) {
+        const relDecoded = decodeRelationId(relType);
+        if (relDecoded.componentId === componentId && (getIdType(relType) === "entity-relation" || getIdType(relType) === "component-relation")) {
+          const dataArray = this.componentData.get(relType);
+          if (dataArray && dataArray[index] !== undefined) {
+            relations.push([relDecoded.targetId, dataArray[index]]);
+          }
+        }
+      }
+
+      return relations;
+    } else {
+      return this.componentData.get(componentType)?.[index];
+    }
   }
 
   /**

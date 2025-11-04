@@ -114,6 +114,34 @@ describe("World", () => {
       expect(world.hasComponent(entity, relationId2)).toBe(false);
     });
 
+    it("should get wildcard relation components", () => {
+      const world = new World();
+      const entity = world.createEntity();
+      const position: Position = { x: 10, y: 20 };
+      const targetEntity1 = world.createEntity();
+      const targetEntity2 = world.createEntity();
+      const relationId1 = createRelationId(positionComponent, targetEntity1);
+      const relationId2 = createRelationId(positionComponent, targetEntity2);
+
+      // Add multiple relation components with the same base component
+      world.addComponent(entity, relationId1, position);
+      world.addComponent(entity, relationId2, { x: 20, y: 30 });
+      world.flushCommands();
+
+      // Get wildcard relations
+      const wildcardRelation = createRelationId(positionComponent, "*");
+      const relations = world.getComponent(entity, wildcardRelation);
+      expect(relations).toEqual([
+        [targetEntity2, { x: 20, y: 30 }],
+        [targetEntity1, { x: 10, y: 20 }],
+      ]);
+
+      // Test with entity not having components
+      const otherEntity = world.createEntity();
+      const result = world.getComponent(otherEntity, wildcardRelation);
+      expect(result).toEqual([]);
+    });
+
     it("should handle multiple components", () => {
       const world = new World();
       const entity = world.createEntity();

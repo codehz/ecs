@@ -66,6 +66,41 @@ describe("Archetype", () => {
     expect(retrieved2).toEqual(newPosition);
   });
 
+  it("should get wildcard relation components", () => {
+    // Create relation component types
+    const target1 = createEntityId(1027);
+    const target2 = createEntityId(1028);
+    const relation1 = createRelationId(positionComponent, target1);
+    const relation2 = createRelationId(positionComponent, target2);
+    const wildcardPositionRelation = createRelationId(positionComponent, "*");
+
+    const entity = createEntityId(1024);
+
+    // Archetype with multiple relations
+    const archetype = new Archetype([relation1, relation2]);
+
+    // Add entity with relations to target1 and target2
+    archetype.addEntity(
+      entity,
+      new Map([
+        [relation1, { distance: 10 }],
+        [relation2, { distance: 20 }],
+      ])
+    );
+
+    // Get wildcard relations
+    const relations = archetype.getComponent(entity, wildcardPositionRelation);
+    expect(relations).toEqual([
+      [target2, { distance: 20 }],
+      [target1, { distance: 10 }],
+    ]);
+
+    // Test with entity not in archetype
+    const nonExistentEntity = createEntityId(9999);
+    const result = archetype.getComponent(nonExistentEntity, wildcardPositionRelation);
+    expect(result).toEqual([]);
+  });
+
   it("should iterate over entities", () => {
     const archetype = new Archetype([positionComponent]);
     const entity1 = createEntityId(1024);
