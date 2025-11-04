@@ -23,6 +23,21 @@ export interface ComponentLifecycleHook<T> {
 }
 
 /**
+ * Hook types for wildcard relation lifecycle events
+ * These hooks are triggered for any component that matches a wildcard relation pattern
+ */
+export interface WildcardRelationLifecycleHook<T = unknown> {
+  /**
+   * Called when any component matching the wildcard relation pattern is added to an entity
+   */
+  onAdded?: (entityId: EntityId, componentType: EntityId<T>, component: T) => void;
+  /**
+   * Called when any component matching the wildcard relation pattern is removed from an entity
+   */
+  onRemoved?: (entityId: EntityId, componentType: EntityId<T>) => void;
+}
+
+/**
  * World class for ECS architecture
  * Manages entities, components, and systems
  */
@@ -40,6 +55,12 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
    * Hook storage for component lifecycle events
    */
   private componentLifecycleHooks = new Map<EntityId<any>, Set<ComponentLifecycleHook<any>>>();
+
+  /**
+   * Hook storage for wildcard relation lifecycle events
+   * Maps base component type to set of wildcard relation hooks
+   */
+  private wildcardRelationLifecycleHooks = new Map<EntityId<any>, Set<WildcardRelationLifecycleHook>>();
 
   /**
    * Reverse index tracking which entities use each entity as a component type
@@ -215,6 +236,30 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
       hooks.delete(hook);
       if (hooks.size === 0) {
         this.componentLifecycleHooks.delete(componentType);
+      }
+    }
+  }
+
+  /**
+   * Register a lifecycle hook for wildcard relation events
+   * The hook will be triggered for any component that matches the wildcard relation pattern
+   */
+  registerWildcardRelationLifecycleHook<T>(baseComponentType: EntityId<T>, hook: WildcardRelationLifecycleHook<T>): void {
+    if (!this.wildcardRelationLifecycleHooks.has(baseComponentType)) {
+      this.wildcardRelationLifecycleHooks.set(baseComponentType, new Set());
+    }
+    this.wildcardRelationLifecycleHooks.get(baseComponentType)!.add(hook as WildcardRelationLifecycleHook<any>);
+  }
+
+  /**
+   * Unregister a lifecycle hook for wildcard relation events
+   */
+  unregisterWildcardRelationLifecycleHook<T>(baseComponentType: EntityId<T>, hook: WildcardRelationLifecycleHook<T>): void {
+    const hooks = this.wildcardRelationLifecycleHooks.get(baseComponentType);
+    if (hooks) {
+      hooks.delete(hook as WildcardRelationLifecycleHook<any>);
+      if (hooks.size === 0) {
+        this.wildcardRelationLifecycleHooks.delete(baseComponentType);
       }
     }
   }
@@ -616,6 +661,19 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
           }
         }
       }
+
+      // Trigger wildcard relation hooks for added components
+      const detailedType = getDetailedIdType(componentType);
+      if (detailedType.type === "entity-relation" || detailedType.type === "component-relation" || detailedType.type === "wildcard-relation") {
+        const wildcardHooks = this.wildcardRelationLifecycleHooks.get(detailedType.componentId!);
+        if (wildcardHooks) {
+          for (const hook of wildcardHooks) {
+            if (hook.onAdded) {
+              (hook as any).onAdded(entityId, componentType, component);
+            }
+          }
+        }
+      }
     }
 
     // Trigger component removed hooks
@@ -625,6 +683,19 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
         for (const hook of hooks) {
           if (hook.onRemoved) {
             hook.onRemoved(entityId, componentType);
+          }
+        }
+      }
+
+      // Trigger wildcard relation hooks for removed components
+      const detailedType = getDetailedIdType(componentType);
+      if (detailedType.type === "entity-relation" || detailedType.type === "component-relation" || detailedType.type === "wildcard-relation") {
+        const wildcardHooks = this.wildcardRelationLifecycleHooks.get(detailedType.componentId!);
+        if (wildcardHooks) {
+          for (const hook of wildcardHooks) {
+            if (hook.onRemoved) {
+              (hook as any).onRemoved(entityId, componentType);
+            }
           }
         }
       }

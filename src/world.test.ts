@@ -494,4 +494,70 @@ describe("World", () => {
       expect(removedCalled).toBe(true);
     });
   });
+
+  describe("Wildcard Relation Hooks", () => {
+    it("should trigger wildcard relation hooks for matching relation components", () => {
+      const world = new World();
+      const positionComponent = createComponentId<{ x: number; y: number }>(1);
+      const entity1 = world.createEntity();
+      const entity2 = world.createEntity();
+
+      // Create a relation component (positionComponent -> entity2)
+      const relationId = createRelationId(positionComponent, entity2);
+
+      let addedCalled = false;
+      let removedCalled = false;
+      let addedComponentType: EntityId<{ x: number; y: number }> | undefined;
+      let removedComponentType: EntityId<{ x: number; y: number }> | undefined;
+
+      // Register a wildcard relation hook for positionComponent
+      world.registerWildcardRelationLifecycleHook(positionComponent, {
+        onAdded: (entityId, componentType, component) => {
+          addedCalled = true;
+          addedComponentType = componentType;
+        },
+        onRemoved: (entityId, componentType) => {
+          removedCalled = true;
+          removedComponentType = componentType;
+        },
+      });
+
+      // Add the relation component
+      world.addComponent(entity1, relationId, { x: 10, y: 20 });
+      world.flushCommands();
+
+      expect(addedCalled).toBe(true);
+      expect(addedComponentType).toBe(relationId);
+
+      // Remove the relation component
+      world.removeComponent(entity1, relationId);
+      world.flushCommands();
+
+      expect(removedCalled).toBe(true);
+      expect(removedComponentType).toBe(relationId);
+    });
+
+    it("should not trigger wildcard relation hooks for non-matching components", () => {
+      const world = new World();
+      const positionComponent = createComponentId<{ x: number; y: number }>(1);
+      const velocityComponent = createComponentId<{ vx: number; vy: number }>(2);
+      const entity1 = world.createEntity();
+      const entity2 = world.createEntity();
+
+      let hookCalled = false;
+
+      // Register a wildcard relation hook for positionComponent
+      world.registerWildcardRelationLifecycleHook(positionComponent, {
+        onAdded: () => {
+          hookCalled = true;
+        },
+      });
+
+      // Add a velocity component (not a position relation)
+      world.addComponent(entity1, velocityComponent, { vx: 1, vy: 2 });
+      world.flushCommands();
+
+      expect(hookCalled).toBe(false);
+    });
+  });
 });
