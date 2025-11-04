@@ -102,4 +102,94 @@ describe("CommandBuffer", () => {
     buffer.clear();
     expect(buffer.getCommands()).toHaveLength(0);
   });
+
+  it("should execute commands added during execution until queue is empty", () => {
+    const executedCommands: { entityId: EntityId; commands: Command[] }[] = [];
+
+    let bufferRef: CommandBuffer;
+    const mockExecutor = (entityId: EntityId, commands: Command[]) => {
+      executedCommands.push({ entityId, commands });
+
+      // If this is the first execution, add more commands
+      if (executedCommands.length === 1) {
+        const newEntity = 3 as EntityId;
+        const newComponentType = 300 as EntityId<any>;
+        bufferRef.addComponent(newEntity, newComponentType, { z: 3 });
+      }
+    };
+
+    const buffer = new CommandBuffer(mockExecutor);
+    bufferRef = buffer;
+
+    const entity1 = 1 as EntityId;
+    const entity2 = 2 as EntityId;
+    const componentType1 = 100 as EntityId<any>;
+    const componentType2 = 200 as EntityId<any>;
+
+    // Add initial commands
+    buffer.addComponent(entity1, componentType1, { x: 1 });
+    buffer.addComponent(entity2, componentType2, { y: 2 });
+
+    // Execute
+    buffer.execute();
+
+    // Should have executed three times: entity1, entity2, and the new entity3
+    expect(executedCommands).toHaveLength(3);
+
+    // First execution: entity1
+    const entity1Execution = executedCommands.find((e) => e.entityId === entity1);
+    expect(entity1Execution).toBeDefined();
+    if (entity1Execution) {
+      expect(entity1Execution.commands).toHaveLength(1);
+      expect(entity1Execution.commands[0]!.type).toBe("addComponent");
+    }
+
+    // Second execution: entity2
+    const entity2Execution = executedCommands.find((e) => e.entityId === entity2);
+    expect(entity2Execution).toBeDefined();
+    if (entity2Execution) {
+      expect(entity2Execution.commands).toHaveLength(1);
+      expect(entity2Execution.commands[0]!.type).toBe("addComponent");
+    }
+
+    // Third execution: new entity
+    const entity3Execution = executedCommands.find((e) => e.entityId === 3 as EntityId);
+    expect(entity3Execution).toBeDefined();
+    if (entity3Execution) {
+      expect(entity3Execution.commands).toHaveLength(1);
+      expect(entity3Execution.commands[0]!.type).toBe("addComponent");
+    }
+
+    // Buffer should be empty
+    expect(buffer.getCommands()).toHaveLength(0);
+  });
+
+  it("should throw error on infinite loop detection", () => {
+    const executedCommands: { entityId: EntityId; commands: Command[] }[] = [];
+
+    let bufferRef: CommandBuffer;
+    const mockExecutor = (entityId: EntityId, commands: Command[]) => {
+      executedCommands.push({ entityId, commands });
+
+      // Always add more commands to create infinite loop
+      const newEntity = (entityId + 1) as EntityId;
+      const newComponentType = 100 as EntityId<any>;
+      bufferRef.addComponent(newEntity, newComponentType, { value: entityId });
+    };
+
+    const buffer = new CommandBuffer(mockExecutor);
+    bufferRef = buffer;
+
+    const entity = 1 as EntityId;
+    const componentType = 100 as EntityId<any>;
+
+    // Add initial command
+    buffer.addComponent(entity, componentType, { x: 1 });
+
+    // Execute should throw error due to infinite loop
+    expect(() => buffer.execute()).toThrow("Command execution exceeded maximum iterations, possible infinite loop");
+
+    // Should have executed many times (up to MAX_ITERATIONS)
+    expect(executedCommands.length).toBeGreaterThan(0);
+  });
 });
