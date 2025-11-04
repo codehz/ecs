@@ -82,6 +82,38 @@ describe("World", () => {
       expect(world.getComponent(entity, positionComponent)).toBeUndefined();
     });
 
+    it("should throw error when removing invalid component type", () => {
+      const world = new World();
+      const entity = world.createEntity();
+      const invalidComponentType = 0 as EntityId<any>; // Invalid component ID
+
+      expect(() => world.removeComponent(entity, invalidComponentType)).toThrow("Invalid component type: 0");
+    });
+
+    it("should allow removing wildcard relation components", () => {
+      const world = new World();
+      const entity = world.createEntity();
+      const position: Position = { x: 10, y: 20 };
+      const targetEntity1 = world.createEntity();
+      const targetEntity2 = world.createEntity();
+      const relationId1 = createRelationId(positionComponent, targetEntity1);
+      const relationId2 = createRelationId(positionComponent, targetEntity2);
+
+      // Add multiple relation components with the same base component
+      world.addComponent(entity, relationId1, position);
+      world.addComponent(entity, relationId2, { x: 20, y: 30 });
+      world.flushCommands();
+      expect(world.hasComponent(entity, relationId1)).toBe(true);
+      expect(world.hasComponent(entity, relationId2)).toBe(true);
+
+      // Remove using wildcard relation should remove all matching components
+      const wildcardRelation = createRelationId(positionComponent, "*");
+      world.removeComponent(entity, wildcardRelation);
+      world.flushCommands();
+      expect(world.hasComponent(entity, relationId1)).toBe(false);
+      expect(world.hasComponent(entity, relationId2)).toBe(false);
+    });
+
     it("should handle multiple components", () => {
       const world = new World();
       const entity = world.createEntity();
@@ -104,6 +136,24 @@ describe("World", () => {
       const position: Position = { x: 10, y: 20 };
 
       expect(() => world.addComponent(fakeEntity, positionComponent, position)).toThrow("Entity 9999 does not exist");
+    });
+
+    it("should throw error when adding invalid component type", () => {
+      const world = new World();
+      const entity = world.createEntity();
+      const position: Position = { x: 10, y: 20 };
+      const invalidComponentType = 0 as EntityId<any>; // Invalid component ID
+
+      expect(() => world.addComponent(entity, invalidComponentType, position)).toThrow("Invalid component type: 0");
+    });
+
+    it("should throw error when adding wildcard relation component", () => {
+      const world = new World();
+      const entity = world.createEntity();
+      const position: Position = { x: 10, y: 20 };
+      const wildcardRelation = createRelationId(positionComponent, "*");
+
+      expect(() => world.addComponent(entity, wildcardRelation, position)).toThrow("Cannot directly add wildcard relation components");
     });
 
     it("should throw error when getting component from non-existent entity", () => {
