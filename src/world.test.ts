@@ -181,7 +181,9 @@ describe("World", () => {
       const position: Position = { x: 10, y: 20 };
       const wildcardRelation = createRelationId(positionComponent, "*");
 
-      expect(() => world.addComponent(entity, wildcardRelation, position)).toThrow("Cannot directly add wildcard relation components");
+      expect(() => world.addComponent(entity, wildcardRelation, position)).toThrow(
+        "Cannot directly add wildcard relation components",
+      );
     });
 
     it("should throw error when getting component from non-existent entity", () => {
@@ -407,7 +409,7 @@ describe("World", () => {
       const entitiesWithComponentAfterDestroy = world.queryEntities([entity1]);
       expect(entitiesWithComponentAfterDestroy).toHaveLength(0);
 
-            // entity2 should still exist
+      // entity2 should still exist
       expect(world.hasEntity(entity2)).toBe(true);
     });
   });
@@ -435,7 +437,7 @@ describe("World", () => {
           hookEntityId = entityId;
           hookComponentType = componentType;
           hookComponent = component;
-        }
+        },
       });
 
       world.addComponent(entity, positionComponent, position);
@@ -464,7 +466,7 @@ describe("World", () => {
           hookCalled = true;
           hookEntityId = entityId;
           hookComponentType = componentType;
-        }
+        },
       });
 
       world.removeComponent(entity, positionComponent);
@@ -486,13 +488,13 @@ describe("World", () => {
       world.registerComponentLifecycleHook(positionComponent, {
         onAdded: () => {
           hook1Called = true;
-        }
+        },
       });
 
       world.registerComponentLifecycleHook(positionComponent, {
         onAdded: () => {
           hook2Called = true;
-        }
+        },
       });
 
       world.addComponent(entity, positionComponent, position);
@@ -516,7 +518,7 @@ describe("World", () => {
         },
         onRemoved: () => {
           removedCalled = true;
-        }
+        },
       });
 
       world.addComponent(entity, positionComponent, position);
@@ -541,7 +543,7 @@ describe("World", () => {
       world.registerComponentLifecycleHook(positionComponent, {
         onAdded: () => {
           addedCalled = true;
-        }
+        },
       });
 
       world.addComponent(entity, positionComponent, position);
@@ -563,7 +565,7 @@ describe("World", () => {
       world.registerComponentLifecycleHook(positionComponent, {
         onRemoved: () => {
           removedCalled = true;
-        }
+        },
       });
 
       world.removeComponent(entity, positionComponent);

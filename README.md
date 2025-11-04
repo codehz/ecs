@@ -64,14 +64,14 @@ world.registerComponentLifecycleHook(PositionId, {
   },
   onRemoved: (entityId, componentType) => {
     console.log(`组件 ${componentType} 被从实体 ${entityId} 移除`);
-  }
+  },
 });
 
 // 你也可以只注册其中一个钩子
 world.registerComponentLifecycleHook(VelocityId, {
   onRemoved: (entityId, componentType) => {
     console.log(`组件 ${componentType} 被从实体 ${entityId} 移除`);
-  }
+  },
 });
 
 // 添加组件时会触发钩子

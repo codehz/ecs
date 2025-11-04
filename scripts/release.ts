@@ -44,17 +44,12 @@ await build();
 
 // 生成 exports
 console.log("📋 Generating package exports...");
-const distFiles = readdirSync("dist", { recursive: true }).filter(
-  (f) => typeof f === "string" && f.endsWith(".js"),
-);
+const distFiles = readdirSync("dist", { recursive: true }).filter((f) => typeof f === "string" && f.endsWith(".js"));
 const exports: Record<string, any> = {};
 for (const file of distFiles) {
   if (typeof file !== "string") continue;
   const normalizedFile = file.replace(/\\/g, "/");
-  const key =
-    normalizedFile === "index.js"
-      ? "."
-      : `./${normalizedFile.replace(/\.js$/, "")}`;
+  const key = normalizedFile === "index.js" ? "." : `./${normalizedFile.replace(/\.js$/, "")}`;
   exports[key] = {
     types: `./${normalizedFile.replace(/\.js$/, ".d.ts")}`,
     import: `./${normalizedFile}`,
@@ -77,10 +72,7 @@ const publishPkg = {
   peerDependencies: pkg.peerDependencies,
 };
 
-writeFileSync(
-  join("dist", "package.json"),
-  JSON.stringify(publishPkg, null, 2),
-);
+writeFileSync(join("dist", "package.json"), JSON.stringify(publishPkg, null, 2));
 console.log("✅ dist/package.json created");
 
 // 复制 LICENSE 文件到 dist
@@ -99,6 +91,4 @@ for (const file of readmeFiles) {
 console.log(`✅ ${readmeFiles.length} README files copied`);
 
 const totalTime = Date.now() - startTime;
-console.log(
-  `🎉 Release script completed in ${totalTime}ms! Ready for publish.`,
-);
+console.log(`🎉 Release script completed in ${totalTime}ms! Ready for publish.`);

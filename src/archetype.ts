@@ -1,5 +1,5 @@
 import type { EntityId, WildcardRelationId } from "./entity";
-import { getIdType, decodeRelationId } from "./entity";
+import { decodeRelationId, getIdType } from "./entity";
 import type { ComponentTuple } from "./types";
 import { getOrComputeCache } from "./utils";
 
@@ -145,7 +145,10 @@ export class Archetype {
    * @param componentType The component type
    */
   getComponent<T>(entityId: EntityId, componentType: EntityId<T>): T | undefined;
-  getComponent<T>(entityId: EntityId, componentType: EntityId<T> | WildcardRelationId<T>): T | [EntityId<unknown>, any][] | undefined {
+  getComponent<T>(
+    entityId: EntityId,
+    componentType: EntityId<T> | WildcardRelationId<T>,
+  ): T | [EntityId<unknown>, any][] | undefined {
     const index = this.entityToIndex.get(entityId);
     if (index === undefined) {
       if (getIdType(componentType) === "wildcard-relation") {
@@ -162,7 +165,10 @@ export class Archetype {
 
       for (const relType of this.componentTypes) {
         const relDecoded = decodeRelationId(relType);
-        if (relDecoded.componentId === componentId && (getIdType(relType) === "entity-relation" || getIdType(relType) === "component-relation")) {
+        if (
+          relDecoded.componentId === componentId &&
+          (getIdType(relType) === "entity-relation" || getIdType(relType) === "component-relation")
+        ) {
           const dataArray = this.componentData.get(relType);
           if (dataArray && dataArray[index] !== undefined) {
             relations.push([relDecoded.targetId, dataArray[index]]);

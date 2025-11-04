@@ -1,7 +1,6 @@
 // scripts/dist.ts - 构建脚本
 
 import { $ } from "bun";
-import { readdirSync } from "fs";
 
 export async function build() {
   const startTime = Date.now();
@@ -36,9 +35,7 @@ export async function build() {
   console.log(`✅ Build successful in ${buildTime}ms!`);
   console.log(`📦 Generated ${result.outputs.length} files:`);
   for (const output of result.outputs) {
-    const size = output.size
-      ? `${(output.size / 1024).toFixed(1)} KB`
-      : "unknown";
+    const size = output.size ? `${(output.size / 1024).toFixed(1)} KB` : "unknown";
     console.log(`  ${output.path} (${size})`);
   }
   console.log();

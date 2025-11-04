@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { Archetype, createComponentId, createEntityId, createRelationId, type EntityId } from "./index";
 
 describe("Archetype", () => {
@@ -85,7 +85,7 @@ describe("Archetype", () => {
       new Map([
         [relation1, { distance: 10 }],
         [relation2, { distance: 20 }],
-      ])
+      ]),
     );
 
     // Get wildcard relations

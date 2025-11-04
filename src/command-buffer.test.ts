@@ -153,7 +153,7 @@ describe("CommandBuffer", () => {
     }
 
     // Third execution: new entity
-    const entity3Execution = executedCommands.find((e) => e.entityId === 3 as EntityId);
+    const entity3Execution = executedCommands.find((e) => e.entityId === (3 as EntityId));
     expect(entity3Execution).toBeDefined();
     if (entity3Execution) {
       expect(entity3Execution.commands).toHaveLength(1);

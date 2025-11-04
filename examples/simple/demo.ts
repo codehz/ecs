@@ -1,7 +1,7 @@
-import { World } from "../../src/world";
 import { createComponentId } from "../../src/entity";
-import type { System } from "../../src/system";
 import type { Query } from "../../src/query";
+import type { System } from "../../src/system";
+import { World } from "../../src/world";
 
 // 定义组件类型
 type Position = { x: number; y: number };
@@ -54,14 +54,16 @@ function main() {
   // 注册组件钩子
   world.registerComponentLifecycleHook(PositionId, {
     onAdded: (entityId, componentType, component) => {
-      console.log(`组件添加钩子触发: 实体 ${entityId} 添加了 ${componentType} 组件，值为 (${component.x}, ${component.y})`);
-    }
+      console.log(
+        `组件添加钩子触发: 实体 ${entityId} 添加了 ${componentType} 组件，值为 (${component.x}, ${component.y})`,
+      );
+    },
   });
 
   world.registerComponentLifecycleHook(VelocityId, {
     onRemoved: (entityId, componentType) => {
       console.log(`组件移除钩子触发: 实体 ${entityId} 移除了 ${componentType} 组件`);
-    }
+    },
   });
 
   // 执行命令以应用组件添加

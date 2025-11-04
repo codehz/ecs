@@ -4,8 +4,8 @@ import type { EntityId, WildcardRelationId } from "./entity";
 import { EntityIdManager, getDetailedIdType, getIdType } from "./entity";
 import { Query } from "./query";
 import type { QueryFilter } from "./query-filter";
-import type { ComponentTuple, LifecycleHook } from "./types";
 import type { System } from "./system";
+import type { ComponentTuple, LifecycleHook } from "./types";
 import { getOrCreateWithSideEffect } from "./utils";
 
 /**
@@ -188,7 +188,10 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
    * Get a component from an entity
    */
   getComponent<T>(entityId: EntityId, componentType: EntityId<T>): T | undefined;
-  getComponent<T>(entityId: EntityId, componentType: EntityId<T> | WildcardRelationId<T>): T | [EntityId<unknown>, any][] | undefined {
+  getComponent<T>(
+    entityId: EntityId,
+    componentType: EntityId<T> | WildcardRelationId<T>,
+  ): T | [EntityId<unknown>, any][] | undefined {
     const archetype = this.entityToArchetype.get(entityId);
     if (!archetype) {
       if (getIdType(componentType) === "wildcard-relation") {
@@ -382,14 +385,14 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
   queryEntities(componentTypes: EntityId<any>[]): EntityId[];
   queryEntities<const T extends readonly EntityId<any>[]>(
     componentTypes: T,
-    includeComponents: true
+    includeComponents: true,
   ): Array<{
     entity: EntityId;
     components: ComponentTuple<T>;
   }>;
   queryEntities(
     componentTypes: EntityId<any>[],
-    includeComponents?: boolean
+    includeComponents?: boolean,
   ):
     | EntityId[]
     | Array<{
@@ -465,7 +468,10 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
               const baseComponentId = detailedType.componentId!;
               for (const componentType of currentArchetype.componentTypes) {
                 const componentDetailedType = getDetailedIdType(componentType);
-                if (componentDetailedType.type === "entity-relation" || componentDetailedType.type === "component-relation") {
+                if (
+                  componentDetailedType.type === "entity-relation" ||
+                  componentDetailedType.type === "component-relation"
+                ) {
                   if (componentDetailedType.componentId === baseComponentId) {
                     removes.add(componentType);
                     adds.delete(componentType); // Remove from adds if it was going to be added
@@ -618,7 +624,7 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
    * @returns Array of {sourceEntityId, componentType} pairs
    */
   private getComponentReferences(
-    targetEntityId: EntityId
+    targetEntityId: EntityId,
   ): Array<{ sourceEntityId: EntityId; componentType: EntityId }> {
     const references = this.entityReverseIndex.get(targetEntityId);
     return references ? Array.from(references) : [];
@@ -664,7 +670,7 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
   private executeComponentLifecycleHooks(
     entityId: EntityId,
     addedComponents: Map<EntityId<any>, any>,
-    removedComponents: Set<EntityId<any>>
+    removedComponents: Set<EntityId<any>>,
   ): void {
     // Trigger component added hooks
     for (const [componentType, component] of addedComponents) {
@@ -679,7 +685,11 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
 
       // Trigger wildcard relation hooks for added components
       const detailedType = getDetailedIdType(componentType);
-      if (detailedType.type === "entity-relation" || detailedType.type === "component-relation" || detailedType.type === "wildcard-relation") {
+      if (
+        detailedType.type === "entity-relation" ||
+        detailedType.type === "component-relation" ||
+        detailedType.type === "wildcard-relation"
+      ) {
         const wildcardHooks = this.wildcardRelationLifecycleHooks.get(detailedType.componentId!);
         if (wildcardHooks) {
           for (const hook of wildcardHooks) {
@@ -704,7 +714,11 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
 
       // Trigger wildcard relation hooks for removed components
       const detailedType = getDetailedIdType(componentType);
-      if (detailedType.type === "entity-relation" || detailedType.type === "component-relation" || detailedType.type === "wildcard-relation") {
+      if (
+        detailedType.type === "entity-relation" ||
+        detailedType.type === "component-relation" ||
+        detailedType.type === "wildcard-relation"
+      ) {
         const wildcardHooks = this.wildcardRelationLifecycleHooks.get(detailedType.componentId!);
         if (wildcardHooks) {
           for (const hook of wildcardHooks) {
