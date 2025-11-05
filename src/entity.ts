@@ -360,6 +360,26 @@ export class EntityIdManager {
   getNextId(): number {
     return this.nextId;
   }
+
+  /**
+   * Serialize internal state for persistence.
+   * Returns a plain object representing allocator state. Values may be non-JSON-serializable.
+   */
+  serializeState(): { nextId: number; freelist: number[] } {
+    return { nextId: this.nextId, freelist: Array.from(this.freelist) };
+  }
+
+  /**
+   * Restore internal state from a previously-serialized object.
+   * Overwrites the current nextId and freelist.
+   */
+  deserializeState(state: { nextId: number; freelist?: number[] }): void {
+    if (typeof state.nextId !== "number") {
+      throw new Error("Invalid state for EntityIdManager.deserializeState");
+    }
+    this.nextId = state.nextId;
+    this.freelist = new Set((state.freelist || []) as EntityId[]);
+  }
 }
 
 /**

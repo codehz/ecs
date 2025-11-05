@@ -180,6 +180,80 @@ bun run examples/simple/demo.ts
 - `update(...params)`: 更新世界（参数取决于泛型配置）
 - `sync()`: 应用命令缓冲区
 
+### 序列化（快照）
+
+库提供了对世界状态的「内存快照」序列化接口，用于保存/恢复实体与组件的数据。注意关键点：
+
+- `World.serialize()` 返回一个内存中的快照对象（snapshot），快照会按引用保存组件的实际值；它不会对数据做 JSON.stringify 操作，也不会尝试把组件值转换为可序列化格式。
+- `World.deserialize(snapshot)` 接受由 `World.serialize()` 生成的快照对象并重建世界状态。它期望一个内存对象（非 JSON 字符串）。
+
+为什么采用这种设计？很多情况下组件值可能包含函数、类实例、循环引用或其他无法用 JSON 表示的值。库不对组件值强行进行序列化/字符串化，以避免数据丢失或不可信的自动转换。
+
+示例：内存回环（component 值可为任意对象）
+
+```ts
+// 获取快照（内存对象）
+const snapshot = world.serialize();
+
+// 在同一进程内直接恢复
+const restored = World.deserialize(snapshot);
+```
+
+持久化到磁盘或跨进程传输
+
+如果你需要把世界保存到文件或通过网络传输，需要自己实现组件值的编码/解码策略：
+
+1. 使用 `World.serialize()` 得到 snapshot。
+2. 对 snapshot 中的组件值逐项进行可自定义的编码（例如将类实例转成纯数据、把函数替换为标识符，或使用自定义二进制编码）。
+3. 将编码后的对象字符串化并持久化。恢复时执行相反的解码步骤，得到与 `World.serialize()` 兼容的快照对象，然后调用 `World.deserialize(decodedSnapshot)`。
+
+简单示例：当组件值都是 JSON-友好时
+
+```ts
+const snapshot = world.serialize();
+// 如果组件值都可 JSON 化，可以直接 stringify
+const text = JSON.stringify(snapshot);
+// 写入文件或发送到网络
+
+// 恢复：parse -> deserialize
+const parsed = JSON.parse(text);
+const restored = World.deserialize(parsed);
+```
+
+示例：带自定义编码的持久化（伪代码）
+
+```ts
+const snapshot = world.serialize();
+
+// 将组件值编码为可持久化格式
+const encoded = {
+  ...snapshot,
+  entities: snapshot.entities.map((e) => ({
+    id: e.id,
+    components: e.components.map((c) => ({ type: c.type, value: myEncode(c.value) })),
+  })),
+};
+
+// 持久化 encoded（JSON.stringify / 二进制写入等）
+
+// 恢复时解码回原始组件值
+const decoded = /* parse file and decode */ encoded;
+const readySnapshot = {
+  ...decoded,
+  entities: decoded.entities.map((e) => ({
+    id: e.id,
+    components: e.components.map((c) => ({ type: c.type, value: myDecode(c.value) })),
+  })),
+};
+
+const restored = World.deserialize(readySnapshot);
+```
+
+注意事项
+
+- 快照只包含实体、组件、以及 `EntityIdManager` 的分配器状态（用于保留下一次分配的 ID）；并不会自动恢复已注册的系统、查询缓存或生命周期钩子。恢复后应由应用负责重新注册系统与钩子。
+- 若需要跨版本兼容，建议在持久化格式中包含 `version` 字段，并在恢复时进行格式兼容性检查与迁移。
+
 ### Entity
 
 - `component<T>(id)`: 分配类型安全的组件ID（上限：1022个）

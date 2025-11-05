@@ -44,7 +44,8 @@ export class World<UpdateParams extends any[] = []> {
    */
   private exclusiveComponents = new Set<EntityId>();
 
-  constructor() {
+  constructor(entityIdManager?: EntityIdManager) {
+    this.entityIdManager = entityIdManager || new EntityIdManager();
     this.commandBuffer = new CommandBuffer((entityId, commands) => this.executeEntityCommands(entityId, commands));
   }
 
@@ -762,5 +763,92 @@ export class World<UpdateParams extends any[] = []> {
         }
       }
     }
+  }
+
+  /**
+   * Convert the world into a plain JSON-serializable object.
+   * Note: component values must be JSON-serializable by the caller.
+   */
+  /**
+   * Convert the world into a plain snapshot object.
+   * This returns an in-memory structure and does not perform JSON stringification.
+   * Component values are stored as-is (they may be non-JSON-serializable).
+   */
+  serialize(): any {
+    const entities: Array<{ id: number; components: Array<{ type: number; value: any }> }> = [];
+
+    for (const [entityId, archetype] of this.entityToArchetype.entries()) {
+      const compEntries: Array<{ type: number; value: any }> = [];
+      for (const compType of archetype.componentTypes) {
+        const value = archetype.get(entityId as EntityId, compType as EntityId<any>);
+        compEntries.push({ type: compType as number, value });
+      }
+      entities.push({ id: entityId as number, components: compEntries });
+    }
+
+    return {
+      version: 1,
+      entityManager: this.entityIdManager.serializeState(),
+      exclusiveComponents: Array.from(this.exclusiveComponents),
+      entities,
+    };
+  }
+
+  /**
+   * Deserialize a world from a previously-created snapshot object.
+   * The snapshot must have been produced by `world.serialize()` and may contain
+   * non-JSON values (they will be copied by reference).
+   */
+  static deserialize<T extends any[] = []>(obj: any): World<T> {
+    if (!obj || typeof obj !== "object") {
+      throw new Error("World.deserialize expects a snapshot object (not a JSON string)");
+    }
+
+    const entityManager = new EntityIdManager();
+    if (obj && obj.entityManager) {
+      entityManager.deserializeState(obj.entityManager);
+    }
+
+    const world = new World<T>(entityManager);
+
+    // Restore exclusive components
+    if (obj && Array.isArray(obj.exclusiveComponents)) {
+      for (const id of obj.exclusiveComponents) {
+        world.exclusiveComponents.add(id);
+      }
+    }
+
+    // Restore entities and their components
+    if (obj && Array.isArray(obj.entities)) {
+      for (const entry of obj.entities) {
+        const entityId = entry.id as EntityId;
+        const componentsArray: Array<{ type: number; value: any }> = entry.components || [];
+
+        const componentMap = new Map<EntityId<any>, any>();
+        const componentTypes: EntityId<any>[] = [];
+
+        for (const c of componentsArray) {
+          componentMap.set(c.type as EntityId<any>, c.value);
+          componentTypes.push(c.type as EntityId<any>);
+        }
+
+        const archetype = world.getOrCreateArchetype(componentTypes);
+        archetype.addEntity(entityId, componentMap);
+        world.entityToArchetype.set(entityId, archetype);
+
+        // Update reverse index based on component types
+        for (const compType of componentTypes) {
+          const detailedType = getDetailedIdType(compType);
+          if (detailedType.type === "entity-relation") {
+            const targetEntityId = detailedType.targetId!;
+            world.addComponentReference(entityId, compType, targetEntityId);
+          } else if (detailedType.type === "entity") {
+            world.addComponentReference(entityId, compType, compType);
+          }
+        }
+      }
+    }
+
+    return world;
   }
 }
