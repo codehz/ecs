@@ -102,8 +102,20 @@ export function isEntityId(id: EntityId<any>): boolean {
 /**
  * Check if an ID is a relation ID
  */
-export function isRelationId(id: EntityId): boolean {
+export function isRelationId<T>(id: EntityId<T>): boolean {
   return id < 0;
+}
+
+/**
+ * Check if a entity ID is a wildcard relation id
+ */
+export function isWildcardRelationId<T>(id: EntityId<T>): id is WildcardRelationId<T> {
+  if (!isRelationId(id)) {
+    return false;
+  }
+  const absId = -id;
+  const targetId = absId % RELATION_SHIFT;
+  return targetId === WILDCARD_TARGET_ID;
 }
 
 /**

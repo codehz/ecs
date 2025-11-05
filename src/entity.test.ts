@@ -16,6 +16,7 @@ import {
   isComponentId,
   isEntityId,
   isRelationId,
+  isWildcardRelationId,
 } from "./entity";
 
 describe("Entity ID System", () => {
@@ -117,6 +118,21 @@ describe("Entity ID System", () => {
 
       expect(relationId).toBeLessThan(0);
       expect(isRelationId(relationId)).toBe(true);
+    });
+
+    it("should identify wildcard relation IDs correctly", () => {
+      const compId = createComponentId(5);
+      const wildcardRelationId = createRelationId(compId, "*");
+      const entityRelationId = createRelationId(compId, createEntityId(ENTITY_ID_START));
+      const componentRelationId = createRelationId(compId, createComponentId(10));
+      const entityId = createEntityId(ENTITY_ID_START);
+      const componentId = createComponentId(1);
+
+      expect(isWildcardRelationId(wildcardRelationId)).toBe(true);
+      expect(isWildcardRelationId(entityRelationId)).toBe(false);
+      expect(isWildcardRelationId(componentRelationId)).toBe(false);
+      expect(isWildcardRelationId(entityId)).toBe(false);
+      expect(isWildcardRelationId(componentId)).toBe(false);
     });
 
     it("should decode wildcard relation IDs correctly", () => {
