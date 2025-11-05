@@ -1,12 +1,12 @@
 /**
- * Brand for EntityId to create nominal typing with component type information
+ * Unique symbol brand for associating component type information with EntityId
  */
-declare const __entityIdBrand: unique symbol;
+declare const __componentTypeMarker: unique symbol;
 
 /**
- * Brand for EntityId type information
+ * Unique symbol brand for tagging the kind of EntityId (e.g., 'component', 'entity-relation')
  */
-declare const __entityIdTypeBrand: unique symbol;
+declare const __entityIdTypeTag: unique symbol;
 
 /**
  * Entity ID type for ECS architecture
@@ -16,8 +16,8 @@ declare const __entityIdTypeBrand: unique symbol;
  * - Relation IDs: negative numbers encoding component and entity associations
  */
 export type EntityId<T = void, U = unknown> = number & {
-  readonly [__entityIdBrand]: T;
-  readonly [__entityIdTypeBrand]: U;
+  readonly [__componentTypeMarker]: T;
+  readonly [__entityIdTypeTag]: U;
 };
 
 export type ComponentId<T = void> = EntityId<T, "component">;
