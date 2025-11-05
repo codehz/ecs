@@ -1,9 +1,9 @@
 import { Archetype } from "./archetype";
 import { CommandBuffer, type Command } from "./command-buffer";
 import type { EntityId, WildcardRelationId } from "./entity";
-import { EntityIdManager, relation, getDetailedIdType, getIdType, isWildcardRelationId } from "./entity";
+import { EntityIdManager, getDetailedIdType, getIdType, relation } from "./entity";
 import { Query } from "./query";
-import type { QueryFilter } from "./query-filter";
+import { serializeQueryFilter, type QueryFilter } from "./query-filter";
 import type { System } from "./system";
 import { SystemScheduler } from "./system-scheduler";
 import type { ComponentTuple, LifecycleHook } from "./types";
@@ -20,6 +20,8 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
   private entityToArchetype = new Map<EntityId, Archetype>();
   private systemScheduler = new SystemScheduler<ExtraParams>();
   private queries: Query[] = [];
+  // Cache for queries keyed by component types + filter signature
+  private queryCache = new Map<string, { query: Query; refCount: number }>();
   private commandBuffer: CommandBuffer;
   private componentToArchetypes = new Map<EntityId<any>, Archetype[]>();
 
@@ -257,23 +259,70 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
    * Create a cached query for efficient entity lookups
    */
   createQuery(componentTypes: EntityId<any>[], filter: QueryFilter = {}): Query {
-    return new Query(this, componentTypes, filter);
+    // Build a deterministic key for the query (component types sorted + filter negative components sorted)
+    const sortedTypes = [...componentTypes].sort((a, b) => a - b);
+    const filterKey = serializeQueryFilter(filter);
+    const key = `${this.getComponentTypesHash(sortedTypes)}${filterKey ? `|${filterKey}` : ""}`;
+
+    const cached = this.queryCache.get(key);
+    if (cached) {
+      cached.refCount++;
+      return cached.query;
+    }
+
+    const query = new Query(this, sortedTypes, filter, key);
+    this.queryCache.set(key, { query, refCount: 1 });
+    return query;
   }
 
   /**
    * @internal Register a query for archetype update notifications
    */
-  registerQuery(query: Query): void {
+  _registerQuery(query: Query): void {
     this.queries.push(query);
   }
 
   /**
    * @internal Unregister a query
    */
-  unregisterQuery(query: Query): void {
+  _unregisterQuery(query: Query): void {
     const index = this.queries.indexOf(query);
     if (index !== -1) {
       this.queries.splice(index, 1);
+    }
+  }
+
+  /**
+   * Release a query reference obtained from createQuery.
+   * Decrements the refCount and fully disposes the query when it reaches zero.
+   */
+  releaseQuery(query: Query): void {
+    const key = query.key;
+    // Fallback: try to find by identity
+    for (const [k, v] of this.queryCache.entries()) {
+      if (v.query === query) {
+        v.refCount--;
+        if (v.refCount <= 0) {
+          this.queryCache.delete(k);
+          // Fully dispose the query (will unregister it from notification list)
+          v.query._disposeInternal();
+        }
+        return;
+      }
+    }
+
+    const entry = this.queryCache.get(key);
+    if (!entry) {
+      // Nothing cached, ensure it's unregistered
+      this._unregisterQuery(query);
+      return;
+    }
+
+    entry.refCount--;
+    if (entry.refCount <= 0) {
+      this.queryCache.delete(key);
+      // Fully dispose the query (will unregister it from notification list)
+      entry.query._disposeInternal();
     }
   }
 

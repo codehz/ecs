@@ -1,12 +1,22 @@
 import { Archetype } from "./archetype";
 import type { EntityId } from "./entity";
-import { getDetailedIdType, decodeRelationId, isRelationId } from "./entity";
+import { decodeRelationId, getDetailedIdType, isRelationId } from "./entity";
 
 /**
  * Filter options for queries
  */
 export interface QueryFilter {
   negativeComponentTypes?: EntityId<any>[];
+}
+
+/**
+ * Serialize a QueryFilter into a deterministic string suitable for cache keys.
+ * Currently only serializes `negativeComponentTypes`.
+ */
+export function serializeQueryFilter(filter: QueryFilter = {}): string {
+  const negative = (filter.negativeComponentTypes || []).slice().sort((a, b) => a - b);
+  if (negative.length === 0) return "";
+  return `neg:${negative.join(",")}`;
 }
 
 /**

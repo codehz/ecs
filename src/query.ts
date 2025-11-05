@@ -1,26 +1,30 @@
 import { Archetype } from "./archetype";
 import type { EntityId } from "./entity";
-import type { ComponentTuple } from "./types";
 import { matchesComponentTypes, matchesFilter, type QueryFilter } from "./query-filter";
+import type { ComponentTuple } from "./types";
 import type { World } from "./world";
 
 /**
  * Query class for efficient entity queries with cached archetypes
  */
 export class Query {
+  // Public key used by World to identify cached queries
+  public readonly key: string;
+
   private world: World<any[]>;
   private componentTypes: EntityId<any>[];
   private filter: QueryFilter;
   private cachedArchetypes: Archetype[] = [];
   private isDisposed = false;
 
-  constructor(world: World<any[]>, componentTypes: EntityId<any>[], filter: QueryFilter = {}) {
+  constructor(world: World<any[]>, componentTypes: EntityId<any>[], filter: QueryFilter = {}, key?: string) {
     this.world = world;
     this.componentTypes = [...componentTypes].sort((a, b) => a - b);
     this.filter = filter;
+    this.key = key ?? `${this.componentTypes.join(",")}|`;
     this.updateCache();
     // Register with world for archetype updates
-    world.registerQuery(this);
+    world._registerQuery(this);
   }
 
   /**
@@ -129,9 +133,23 @@ export class Query {
   /**
    * Dispose the query and disconnect from world
    */
+  /**
+   * Request disposal of this query.
+   * This will decrement the world's reference count for the query.
+   * The query will only be fully disposed when the ref count reaches zero.
+   */
   dispose(): void {
+    // Ask the world to release this query (decrement refcount and fully dispose when zero)
+    this.world.releaseQuery(this);
+  }
+
+  /**
+   * Internal full dispose called by World when refCount reaches zero.
+   */
+  _disposeInternal(): void {
     if (!this.isDisposed) {
-      this.world.unregisterQuery(this);
+      // Unregister from world (remove from notification list)
+      this.world._unregisterQuery(this);
       this.cachedArchetypes = [];
       this.isDisposed = true;
     }
