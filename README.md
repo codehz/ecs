@@ -177,7 +177,7 @@ bun run examples/simple/demo.ts
 - `registerSystem(system)`: 注册系统
 - `registerLifecycleHook(componentId, hook)`: 注册组件或通配符关系生命周期钩子
 - `unregisterLifecycleHook(componentId, hook)`: 注销组件或通配符关系生命周期钩子
-- `update(deltaTime)`: 更新世界
+- `update(...params)`: 更新世界（参数取决于泛型配置）
 - `flushCommands()`: 应用命令缓冲区
 
 ### Entity
@@ -196,19 +196,48 @@ bun run examples/simple/demo.ts
 
 ```typescript
 class MySystem implements System {
-  update(world: World, deltaTime: number): void {
+  update(): void {
     // 系统逻辑
   }
 }
 ```
 
-系统支持依赖关系排序，确保正确的执行顺序：
+如果需要接收额外参数（如时间增量），可以指定泛型参数：
 
 ```typescript
-// 注册系统时指定依赖
+class MovementSystem implements System<[deltaTime: number]> {
+  update(deltaTime: number): void {
+    // 使用 deltaTime 更新位置
+  }
+}
+```
+
+系统支持依赖关系排序，确保正确的执行顺序。依赖关系通过系统的 `dependencies` 属性指定：
+
+```typescript
+class InputSystem implements System<[deltaTime: number]> {
+  readonly dependencies: readonly System<[deltaTime: number]>[] = [];
+  update(deltaTime: number): void {
+    // 处理输入
+  }
+}
+
+class MovementSystem implements System<[deltaTime: number]> {
+  readonly dependencies: readonly System<[deltaTime: number]>[];
+
+  constructor(inputSystem: InputSystem) {
+    this.dependencies = [inputSystem]; // 指定依赖
+  }
+
+  update(deltaTime: number): void {
+    // 更新位置
+  }
+}
+
+// 注册系统
+const inputSystem = new InputSystem();
 world.registerSystem(inputSystem);
-world.registerSystem(movementSystem, [inputSystem]); // movementSystem 依赖 inputSystem
-world.registerSystem(renderSystem, [movementSystem]); // renderSystem 依赖 movementSystem
+world.registerSystem(new MovementSystem(inputSystem));
 ```
 
 系统将按照拓扑排序执行，依赖系统始终在被依赖系统之前运行。

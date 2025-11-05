@@ -13,15 +13,15 @@ const VelocityId = component<Velocity>();
 const ChildOf = component(); // Exclusive relation component
 
 // 移动系统
-class MovementSystem implements System {
+class MovementSystem implements System<[deltaTime: number]> {
   private query: Query; // 缓存查询
 
-  constructor(world: World) {
+  constructor(world: World<[deltaTime: number]>) {
     // 在构造函数中预先创建并缓存查询
     this.query = world.createQuery([PositionId, VelocityId]);
   }
 
-  update(world: World, deltaTime: number): void {
+  update(deltaTime: number): void {
     // 使用缓存的查询的forEach方法，直接获取组件数据
     this.query.forEach([PositionId, VelocityId], (entity, position, velocity) => {
       // 更新位置
@@ -37,7 +37,7 @@ function main() {
   console.log("ECS Simple Demo");
 
   // 创建世界
-  const world = new World();
+  const world = new World<[deltaTime: number]>();
 
   // 注册系统（传递world参数）
   world.registerSystem(new MovementSystem(world));

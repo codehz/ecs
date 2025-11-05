@@ -14,7 +14,7 @@ import { getOrCreateWithSideEffect } from "./utils";
  * World class for ECS architecture
  * Manages entities, components, and systems
  */
-export class World<ExtraParams extends any[] = [deltaTime: number]> {
+export class World<ExtraParams extends any[] = []> {
   private entityIdManager = new EntityIdManager();
   private archetypes: Archetype[] = [];
   private archetypeMap = new Map<string, Archetype>();
@@ -254,7 +254,7 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
   update(...params: ExtraParams): void {
     const systems = this.systemScheduler.getExecutionOrder();
     for (const system of systems) {
-      system.update(this, ...params);
+      system.update(...params);
     }
     this.commandBuffer.execute();
   }

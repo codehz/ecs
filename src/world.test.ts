@@ -247,8 +247,8 @@ describe("World", () => {
 
   describe("System Management", () => {
     it("should register systems", () => {
-      const world = new World();
-      const system = { update: () => {} };
+      const world = new World<[deltaTime: number]>();
+      const system = { update: (dt: number) => {} };
 
       world.registerSystem(system);
       // Update should not throw
@@ -256,12 +256,11 @@ describe("World", () => {
     });
 
     it("should call system update methods", () => {
-      const world = new World();
+      const world = new World<[deltaTime: number]>();
       let updateCalled = false;
       const system = {
-        update: (w: World, dt: number) => {
+        update: (dt: number) => {
           updateCalled = true;
-          expect(w).toBe(world);
           expect(dt).toBe(0.016);
         },
       };
@@ -273,18 +272,18 @@ describe("World", () => {
     });
 
     it("should execute systems in dependency order", () => {
-      const world = new World();
+      const world = new World<[deltaTime: number]>();
       const executionOrder: string[] = [];
 
       const systemA = {
-        update: () => executionOrder.push("A"),
+        update: (dt: number) => executionOrder.push("A"),
       };
       const systemB = {
-        update: () => executionOrder.push("B"),
+        update: (dt: number) => executionOrder.push("B"),
         dependencies: [systemA],
       };
       const systemC = {
-        update: () => executionOrder.push("C"),
+        update: (dt: number) => executionOrder.push("C"),
         dependencies: [systemB],
       };
 

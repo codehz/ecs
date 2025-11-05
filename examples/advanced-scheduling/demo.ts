@@ -14,26 +14,26 @@ const VelocityId = component<Velocity>();
 const HealthId = component<Health>();
 
 // 输入系统 - 处理用户输入
-class InputSystem implements System {
-  readonly dependencies: readonly System[] = [];
+class InputSystem implements System<[deltaTime: number]> {
+  readonly dependencies: readonly System<[deltaTime: number]>[] = [];
 
-  update(world: World, deltaTime: number): void {
+  update(deltaTime: number): void {
     console.log(`[InputSystem] Processing input at ${Date.now()}`);
     // 这里可以处理键盘/鼠标输入等
   }
 }
 
 // 移动系统 - 依赖输入系统
-class MovementSystem implements System {
-  readonly dependencies: readonly System[];
+class MovementSystem implements System<[deltaTime: number]> {
+  readonly dependencies: readonly System<[deltaTime: number]>[];
   private query: Query;
 
-  constructor(world: World, inputSystem: InputSystem) {
+  constructor(world: World<[deltaTime: number]>, inputSystem: InputSystem) {
     this.dependencies = [inputSystem];
     this.query = world.createQuery([PositionId, VelocityId]);
   }
 
-  update(world: World, deltaTime: number): void {
+  update(deltaTime: number): void {
     console.log(`[MovementSystem] Updating positions`);
 
     this.query.forEach([PositionId, VelocityId], (entity, position, velocity) => {
@@ -45,16 +45,16 @@ class MovementSystem implements System {
 }
 
 // 伤害系统 - 依赖移动系统
-class DamageSystem implements System {
-  readonly dependencies: readonly System[];
+class DamageSystem implements System<[deltaTime: number]> {
+  readonly dependencies: readonly System<[deltaTime: number]>[];
   private query: Query;
 
-  constructor(world: World, movementSystem: MovementSystem) {
+  constructor(world: World<[deltaTime: number]>, movementSystem: MovementSystem) {
     this.dependencies = [movementSystem];
     this.query = world.createQuery([PositionId, HealthId]);
   }
 
-  update(world: World, deltaTime: number): void {
+  update(deltaTime: number): void {
     console.log(`[DamageSystem] Applying damage based on position`);
 
     this.query.forEach([PositionId, HealthId], (entity, position, health) => {
@@ -67,16 +67,16 @@ class DamageSystem implements System {
 }
 
 // 渲染系统 - 依赖所有其他系统最后执行
-class RenderSystem implements System {
-  readonly dependencies: readonly System[];
+class RenderSystem implements System<[deltaTime: number]> {
+  readonly dependencies: readonly System<[deltaTime: number]>[];
   private query: Query;
 
-  constructor(world: World, damageSystem: DamageSystem) {
+  constructor(world: World<[deltaTime: number]>, damageSystem: DamageSystem) {
     this.dependencies = [damageSystem];
     this.query = world.createQuery([PositionId]);
   }
 
-  update(world: World, deltaTime: number): void {
+  update(deltaTime: number): void {
     console.log(`[RenderSystem] Rendering entities`);
 
     this.query.forEach([PositionId], (entity, position) => {
@@ -89,7 +89,7 @@ function main() {
   console.log("ECS Advanced Scheduling Demo - System Dependencies");
   console.log("=================================================");
 
-  const world = new World();
+  const world = new World<[deltaTime: number]>();
 
   // 创建系统实例
   const inputSystem = new InputSystem();
