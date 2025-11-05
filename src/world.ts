@@ -14,12 +14,12 @@ import { getOrCreateWithSideEffect } from "./utils";
  * World class for ECS architecture
  * Manages entities, components, and systems
  */
-export class World<ExtraParams extends any[] = []> {
+export class World<UpdateParams extends any[] = []> {
   private entityIdManager = new EntityIdManager();
   private archetypes: Archetype[] = [];
   private archetypeMap = new Map<string, Archetype>();
   private entityToArchetype = new Map<EntityId, Archetype>();
-  private systemScheduler = new SystemScheduler<ExtraParams>();
+  private systemScheduler = new SystemScheduler<UpdateParams>();
   private queries: Query[] = [];
   // Cache for queries keyed by component types + filter signature
   private queryCache = new Map<string, { query: Query; refCount: number }>();
@@ -213,7 +213,7 @@ export class World<ExtraParams extends any[] = []> {
   /**
    * Register a system with optional dependencies
    */
-  registerSystem(system: System<ExtraParams>): void {
+  registerSystem(system: System<UpdateParams>): void {
     this.systemScheduler.addSystem(system);
   }
 
@@ -251,7 +251,7 @@ export class World<ExtraParams extends any[] = []> {
   /**
    * Update the world (run all systems in dependency order)
    */
-  update(...params: ExtraParams): void {
+  update(...params: UpdateParams): void {
     const systems = this.systemScheduler.getExecutionOrder();
     for (const system of systems) {
       system.update(...params);

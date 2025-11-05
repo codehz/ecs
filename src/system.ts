@@ -3,14 +3,14 @@ import type { World } from "./world";
 /**
  * Base System interface
  */
-export interface System<ExtraParams extends any[] = []> {
+export interface System<UpdateParams extends any[] = []> {
   /**
    * Update the system
    */
-  update(...params: ExtraParams): void;
+  update(...params: UpdateParams): void;
 
   /**
    * Dependencies of this system (systems that must run before this one)
    */
-  readonly dependencies?: readonly System<ExtraParams>[];
+  readonly dependencies?: readonly System<UpdateParams>[];
 }

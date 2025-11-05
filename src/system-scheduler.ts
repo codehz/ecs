@@ -3,15 +3,15 @@ import type { System } from "./system";
 /**
  * System Scheduler for managing system dependencies and execution order
  */
-export class SystemScheduler<ExtraParams extends any[] = [deltaTime: number]> {
-  private systems = new Set<System<ExtraParams>>();
-  private cachedExecutionOrder: System<ExtraParams>[] | null = null;
+export class SystemScheduler<UpdateParams extends any[] = [deltaTime: number]> {
+  private systems = new Set<System<UpdateParams>>();
+  private cachedExecutionOrder: System<UpdateParams>[] | null = null;
 
   /**
    * Add a system with optional dependencies
    * @param system The system to add
    */
-  addSystem(system: System<ExtraParams>): void {
+  addSystem(system: System<UpdateParams>): void {
     this.systems.add(system);
     // Also add dependencies to the set
     for (const dep of system.dependencies || []) {
@@ -24,16 +24,16 @@ export class SystemScheduler<ExtraParams extends any[] = [deltaTime: number]> {
    * Get the execution order of systems based on dependencies
    * Uses topological sort
    */
-  getExecutionOrder(): System<ExtraParams>[] {
+  getExecutionOrder(): System<UpdateParams>[] {
     if (this.cachedExecutionOrder !== null) {
       return this.cachedExecutionOrder;
     }
 
-    const result: System<ExtraParams>[] = [];
-    const visited = new Set<System<ExtraParams>>();
-    const visiting = new Set<System<ExtraParams>>();
+    const result: System<UpdateParams>[] = [];
+    const visited = new Set<System<UpdateParams>>();
+    const visiting = new Set<System<UpdateParams>>();
 
-    const visit = (system: System<ExtraParams>): void => {
+    const visit = (system: System<UpdateParams>): void => {
       if (visited.has(system)) return;
       if (visiting.has(system)) {
         throw new Error("Circular dependency detected in system scheduling");
