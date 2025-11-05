@@ -4,9 +4,9 @@
 declare const __entityIdBrand: unique symbol;
 
 /**
- * Brand for wildcard relation IDs
+ * Brand for EntityId type information
  */
-declare const __wildcardRelationBrand: unique symbol;
+declare const __entityIdTypeBrand: unique symbol;
 
 /**
  * Entity ID type for ECS architecture
@@ -15,9 +15,16 @@ declare const __wildcardRelationBrand: unique symbol;
  * - Entity IDs: 1024+
  * - Relation IDs: negative numbers encoding component and entity associations
  */
-export type EntityId<T = void> = number & { readonly [__entityIdBrand]: T };
+export type EntityId<T = void, U = unknown> = number & {
+  readonly [__entityIdBrand]: T;
+  readonly [__entityIdTypeBrand]: U;
+};
 
-export type WildcardRelationId<T = void> = EntityId<T> & { readonly [__wildcardRelationBrand]: true };
+export type ComponentId<T = void> = EntityId<T, "component">;
+export type EntityRelationId<T = void> = EntityId<T, "entity-relation">;
+export type ComponentRelationId<T = void> = EntityId<T, "component-relation">;
+export type WildcardRelationId<T = void> = EntityId<T, "wildcard-relation">;
+export type RelationId<T = void> = EntityRelationId<T> | ComponentRelationId<T> | WildcardRelationId<T>;
 
 /**
  * Constants for ID ranges
@@ -36,11 +43,11 @@ export const WILDCARD_TARGET_ID = 0;
  * Create a component ID
  * @param id Component identifier (1-1023)
  */
-export function createComponentId<T = void>(id: number): EntityId<T> {
+export function createComponentId<T = void>(id: number): ComponentId<T> {
   if (id < 1 || id > COMPONENT_ID_MAX) {
     throw new Error(`Component ID must be between 1 and ${COMPONENT_ID_MAX}`);
   }
-  return id as EntityId<T>;
+  return id as ComponentId<T>;
 }
 
 /**
@@ -57,16 +64,24 @@ export function createEntityId(id: number): EntityId {
 /**
  * Type for relation ID based on component and target types
  */
-type RelationIdType<T, U> = U extends void ? EntityId<T> : T extends void ? EntityId<U> : EntityId<never>;
+// type RelationIdType<T, U> = U extends void ? EntityId<T> : T extends void ? EntityId<U> : EntityId<never>;
+type RelationIdType<T, R> =
+  R extends ComponentId<infer U>
+    ? U extends void
+      ? ComponentRelationId<T>
+      : ComponentRelationId<T & U>
+    : R extends EntityId<any>
+      ? EntityRelationId<T>
+      : never;
 
 /**
  * Create a relation ID by associating a component with another ID (entity or component)
  * @param componentId The component ID (0-1023)
  * @param targetId The target ID (entity, component, or '*' for wildcard)
  */
-export function relation<T>(componentId: EntityId<T>, targetId: "*"): WildcardRelationId<T>;
-export function relation<T, U>(componentId: EntityId<T>, targetId: EntityId<U>): RelationIdType<T, U>;
-export function relation<T>(componentId: EntityId<T>, targetId: EntityId<any> | "*"): EntityId<any> {
+export function relation<T>(componentId: ComponentId<T>, targetId: "*"): WildcardRelationId<T>;
+export function relation<T, R extends EntityId<any>>(componentId: ComponentId<T>, targetId: R): RelationIdType<T, R>;
+export function relation<T>(componentId: ComponentId<T>, targetId: EntityId<any> | "*"): EntityId<any> {
   if (!isComponentId(componentId)) {
     throw new Error("First argument must be a valid component ID");
   }
@@ -88,26 +103,26 @@ export function relation<T>(componentId: EntityId<T>, targetId: EntityId<any> | 
 /**
  * Check if an ID is a component ID
  */
-export function isComponentId(id: EntityId<any>): boolean {
+export function isComponentId<T>(id: EntityId<T>): id is ComponentId<T> {
   return id >= 1 && id <= COMPONENT_ID_MAX;
 }
 
 /**
  * Check if an ID is an entity ID
  */
-export function isEntityId(id: EntityId<any>): boolean {
+export function isEntityId<T>(id: EntityId<T>): id is EntityId<T> {
   return id >= ENTITY_ID_START;
 }
 
 /**
  * Check if an ID is a relation ID
  */
-export function isRelationId<T>(id: EntityId<T>): boolean {
+export function isRelationId<T>(id: EntityId<T>): id is RelationId<T> {
   return id < 0;
 }
 
 /**
- * Check if a entity ID is a wildcard relation id
+ * Check if an ID is a wildcard relation id
  */
 export function isWildcardRelationId<T>(id: EntityId<T>): id is WildcardRelationId<T> {
   if (!isRelationId(id)) {
@@ -123,8 +138,8 @@ export function isWildcardRelationId<T>(id: EntityId<T>): id is WildcardRelation
  * @param relationId The relation ID (must be negative)
  * @returns Object with componentId, targetId, and relation type
  */
-export function decodeRelationId(relationId: EntityId<any>): {
-  componentId: EntityId<any>;
+export function decodeRelationId(relationId: RelationId<any>): {
+  componentId: ComponentId<any>;
   targetId: EntityId<any>;
   type: "entity" | "component" | "wildcard";
 } {
@@ -133,8 +148,8 @@ export function decodeRelationId(relationId: EntityId<any>): {
   }
   const absId = -relationId;
 
-  const componentId = Math.floor(absId / RELATION_SHIFT) as EntityId;
-  const targetId = (absId % RELATION_SHIFT) as EntityId;
+  const componentId = Math.floor(absId / RELATION_SHIFT) as ComponentId<any>;
+  const targetId = (absId % RELATION_SHIFT) as EntityId<any>;
 
   // Determine type based on targetId range
   if (targetId === WILDCARD_TARGET_ID) {
@@ -188,11 +203,17 @@ export function getIdType(
  * @param id The EntityId to analyze
  * @returns Detailed type information including relation subtypes
  */
-export function getDetailedIdType(id: EntityId<any>): {
-  type: "component" | "entity" | "entity-relation" | "component-relation" | "wildcard-relation" | "invalid";
-  componentId?: EntityId<any>;
-  targetId?: EntityId<any>;
-} {
+export function getDetailedIdType(id: EntityId<any>):
+  | {
+      type: "component" | "entity" | "invalid";
+      componentId?: never;
+      targetId?: never;
+    }
+  | {
+      type: "entity-relation" | "component-relation" | "wildcard-relation";
+      componentId: ComponentId<any>;
+      targetId: EntityId<any>;
+    } {
   if (isComponentId(id)) {
     return { type: "component" };
   }
@@ -351,13 +372,13 @@ export class ComponentIdManager {
    * Allocate a new component ID
    * Increments counter sequentially from 1
    */
-  allocate<T = void>(): EntityId<T> {
+  allocate<T = void>(): ComponentId<T> {
     if (this.nextId > COMPONENT_ID_MAX) {
       throw new Error(`Component ID overflow: maximum ${COMPONENT_ID_MAX} components allowed`);
     }
     const id = this.nextId;
     this.nextId++;
-    return id as EntityId<T>;
+    return id as ComponentId<T>;
   }
 
   /**

@@ -1,5 +1,5 @@
-import type { EntityId, WildcardRelationId } from "./entity";
-import { decodeRelationId, getIdType } from "./entity";
+import type { EntityId, RelationId, WildcardRelationId } from "./entity";
+import { decodeRelationId, getDetailedIdType, getIdType, isWildcardRelationId } from "./entity";
 import type { ComponentTuple } from "./types";
 import { getOrComputeCache } from "./utils";
 
@@ -158,20 +158,20 @@ export class Archetype {
       }
     }
 
-    if (getIdType(componentType) === "wildcard-relation") {
+    if (isWildcardRelationId(componentType)) {
       const decoded = decodeRelationId(componentType);
       const componentId = decoded.componentId;
       const relations: [EntityId<unknown>, any][] = [];
 
       for (const relType of this.componentTypes) {
-        const relDecoded = decodeRelationId(relType);
+        const relDetailed = getDetailedIdType(relType);
         if (
-          relDecoded.componentId === componentId &&
-          (getIdType(relType) === "entity-relation" || getIdType(relType) === "component-relation")
+          (relDetailed.type === "entity-relation" || relDetailed.type === "component-relation") &&
+          relDetailed.componentId === componentId
         ) {
           const dataArray = this.componentData.get(relType);
           if (dataArray && dataArray[index] !== undefined) {
-            relations.push([relDecoded.targetId, dataArray[index]]);
+            relations.push([relDetailed.targetId, dataArray[index]]);
           }
         }
       }
@@ -258,17 +258,15 @@ export class Archetype {
       // For wildcard relations, cache the matching relation types
       // For regular components, cache the data array reference
       return componentTypes.map((compType) => {
-        if (getIdType(compType) === "wildcard-relation") {
-          // Decode the wildcard relation to get the component ID
-          const decoded = decodeRelationId(compType);
-          const componentId = decoded.componentId;
+        const detailedType = getDetailedIdType(compType);
+        if (detailedType.type === "wildcard-relation") {
+          const componentId = detailedType.componentId;
 
           // Find all concrete relation componentTypes in this archetype that match the wildcard
           const matchingRelations = this.componentTypes.filter((ct) => {
-            const ctType = getIdType(ct);
-            if (ctType !== "entity-relation" && ctType !== "component-relation") return false;
-            const decodedCt = decodeRelationId(ct);
-            return decodedCt.componentId === componentId;
+            const detailedCt = getDetailedIdType(ct);
+            if (detailedCt.type !== "entity-relation" && detailedCt.type !== "component-relation") return false;
+            return detailedCt.componentId === componentId;
           });
 
           return matchingRelations;
@@ -291,7 +289,7 @@ export class Archetype {
           for (const relType of matchingRelations) {
             const dataArray = this.componentData.get(relType);
             if (dataArray && dataArray[entityIndex] !== undefined) {
-              const decodedRel = decodeRelationId(relType);
+              const decodedRel = decodeRelationId(relType as RelationId<any>);
               relations.push([decodedRel.targetId, dataArray[entityIndex]]);
             }
           }

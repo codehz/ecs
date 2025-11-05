@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { EntityId } from "./entity";
+import type { ComponentId, EntityId } from "./entity";
 import {
   COMPONENT_ID_MAX,
   ComponentIdManager,
@@ -83,7 +83,7 @@ describe("Entity ID System", () => {
 
     it("should reject invalid relation creation", () => {
       const entId = createEntityId(ENTITY_ID_START);
-      expect(() => relation(1024 as EntityId, entId)).toThrow(); // invalid component id
+      expect(() => relation(1024 as ComponentId, entId)).toThrow(); // invalid component id
       expect(() => relation(createComponentId(5), -1 as EntityId)).toThrow(); // invalid target id
       expect(() => relation(createComponentId(5), relation(createComponentId(1), createEntityId(1025)))).toThrow(); // relation as target
     });

@@ -1,14 +1,14 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { Archetype } from "./archetype";
-import type { EntityId } from "./entity";
+import type { ComponentId, EntityId } from "./entity";
 import { relation } from "./entity";
 import { matchesComponentTypes, matchesFilter, type QueryFilter } from "./query-filter";
 
 // Mock component IDs for testing
-const positionComponent = 1 as EntityId<{ x: number; y: number }>;
-const velocityComponent = 2 as EntityId<{ dx: number; dy: number }>;
-const healthComponent = 3 as EntityId<{ value: number }>;
-const relationComponent = 4 as EntityId<{ strength: number }>;
+const positionComponent = 1 as ComponentId<{ x: number; y: number }>;
+const velocityComponent = 2 as ComponentId<{ dx: number; dy: number }>;
+const healthComponent = 3 as ComponentId<{ value: number }>;
+const relationComponent = 4 as ComponentId<{ strength: number }>;
 
 describe("Query Filter Functions", () => {
   describe("matchesComponentTypes", () => {
