@@ -10,6 +10,7 @@
 - 📦 轻量级：零依赖，易于集成
 - ⚡ 内存高效：连续内存布局，优化的迭代性能
 - 🎣 生命周期钩子：支持组件和通配符关系的事件监听
+- 🔄 系统调度：支持系统依赖关系和拓扑排序执行
 
 ## 安装
 
@@ -139,7 +140,7 @@ bun run examples/simple/demo.ts
 - `addComponent(entity, componentId, data)`: 向实体添加组件
 - `removeComponent(entity, componentId)`: 从实体移除组件
 - `createQuery(componentIds)`: 创建查询
-- `registerSystem(system)`: 注册系统
+- `registerSystem(system, dependencies?)`: 注册系统，可选指定依赖系统列表
 - `registerLifecycleHook(componentId, hook)`: 注册组件或通配符关系生命周期钩子
 - `unregisterLifecycleHook(componentId, hook)`: 注销组件或通配符关系生命周期钩子
 - `update(deltaTime)`: 更新世界
@@ -166,6 +167,17 @@ class MySystem implements System {
   }
 }
 ```
+
+系统支持依赖关系排序，确保正确的执行顺序：
+
+```typescript
+// 注册系统时指定依赖
+world.registerSystem(inputSystem);
+world.registerSystem(movementSystem, [inputSystem]); // movementSystem 依赖 inputSystem
+world.registerSystem(renderSystem, [movementSystem]); // renderSystem 依赖 movementSystem
+```
+
+系统将按照拓扑排序执行，依赖系统始终在被依赖系统之前运行。
 
 ## 性能特点
 
@@ -199,6 +211,7 @@ src/
 ├── query.ts              # 查询系统
 ├── query-filter.ts       # 查询过滤器
 ├── system.ts             # 系统接口
+├── system-scheduler.ts   # 系统调度器
 ├── command-buffer.ts     # 命令缓冲区
 ├── types.ts              # 类型定义
 ├── utils.ts              # 工具函数

@@ -224,6 +224,30 @@ describe("World", () => {
 
       expect(updateCalled).toBe(true);
     });
+
+    it("should execute systems in dependency order", () => {
+      const world = new World();
+      const executionOrder: string[] = [];
+
+      const systemA = {
+        update: () => executionOrder.push("A"),
+      };
+      const systemB = {
+        update: () => executionOrder.push("B"),
+      };
+      const systemC = {
+        update: () => executionOrder.push("C"),
+      };
+
+      // C depends on B, B depends on A
+      world.registerSystem(systemA);
+      world.registerSystem(systemB, [systemA]);
+      world.registerSystem(systemC, [systemB]);
+
+      world.update(0.016);
+
+      expect(executionOrder).toEqual(["A", "B", "C"]);
+    });
   });
 
   describe("Query", () => {

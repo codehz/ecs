@@ -5,6 +5,7 @@ import { EntityIdManager, relation, getDetailedIdType, getIdType, isWildcardRela
 import { Query } from "./query";
 import type { QueryFilter } from "./query-filter";
 import type { System } from "./system";
+import { SystemScheduler } from "./system-scheduler";
 import type { ComponentTuple, LifecycleHook } from "./types";
 import { getOrCreateWithSideEffect } from "./utils";
 
@@ -17,7 +18,7 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
   private archetypes: Archetype[] = [];
   private archetypeMap = new Map<string, Archetype>();
   private entityToArchetype = new Map<EntityId, Archetype>();
-  private systems: System<ExtraParams>[] = [];
+  private systemScheduler = new SystemScheduler<ExtraParams>();
   private queries: Query[] = [];
   private commandBuffer: CommandBuffer;
   private componentToArchetypes = new Map<EntityId<any>, Archetype[]>();
@@ -198,20 +199,17 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
   }
 
   /**
-   * Register a system
+   * Register a system with optional dependencies
    */
-  registerSystem(system: System<ExtraParams>): void {
-    this.systems.push(system);
+  registerSystem(system: System<ExtraParams>, dependencies: System<ExtraParams>[] = []): void {
+    this.systemScheduler.addSystem(system, dependencies);
   }
 
   /**
    * Unregister a system
    */
   unregisterSystem(system: System<ExtraParams>): void {
-    const index = this.systems.indexOf(system);
-    if (index !== -1) {
-      this.systems.splice(index, 1);
-    }
+    this.systemScheduler.removeSystem(system);
   }
 
   /**
@@ -238,10 +236,11 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
   }
 
   /**
-   * Update the world (run all systems)
+   * Update the world (run all systems in dependency order)
    */
   update(...params: ExtraParams): void {
-    for (const system of this.systems) {
+    const systems = this.systemScheduler.getExecutionOrder();
+    for (const system of systems) {
       system.update(this, ...params);
     }
     this.commandBuffer.execute();
