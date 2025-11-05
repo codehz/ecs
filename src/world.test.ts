@@ -190,7 +190,7 @@ describe("World", () => {
       const world = new World();
       const fakeEntity = createEntityId(9999);
 
-      expect(world.getComponent(fakeEntity, positionComponent)).toBeUndefined();
+      expect(() => world.getComponent(fakeEntity, positionComponent)).toThrow("Entity 9999 does not exist");
     });
   });
 

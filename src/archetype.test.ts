@@ -97,8 +97,9 @@ describe("Archetype", () => {
 
     // Test with entity not in archetype
     const nonExistentEntity = createEntityId(9999);
-    const result = archetype.getComponent(nonExistentEntity, wildcardPositionRelation);
-    expect(result).toEqual([]);
+    expect(() => archetype.getComponent(nonExistentEntity, wildcardPositionRelation)).toThrow(
+      "Entity 9999 is not in this archetype",
+    );
   });
 
   it("should iterate over entities", () => {

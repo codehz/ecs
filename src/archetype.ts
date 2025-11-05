@@ -4,6 +4,11 @@ import type { ComponentTuple } from "./types";
 import { getOrComputeCache } from "./utils";
 
 /**
+ * Special value to represent missing component data
+ */
+const MISSING_COMPONENT = Symbol("missing component");
+
+/**
  * Archetype class for ECS architecture
  * Represents a group of entities that share the same set of components
  * Optimized for fast iteration and component access
@@ -86,10 +91,7 @@ export class Archetype {
     // Add component data
     for (const componentType of this.componentTypes) {
       const data = componentData.get(componentType);
-      if (data === undefined) {
-        throw new Error(`Missing component data for type ${componentType}`);
-      }
-      this.componentData.get(componentType)!.push(data);
+      this.componentData.get(componentType)!.push(data === undefined ? MISSING_COMPONENT : data);
     }
   }
 
@@ -138,24 +140,20 @@ export class Archetype {
    * @param entityId The entity
    * @param componentType The wildcard relation type
    */
-  getComponent<T>(entityId: EntityId, componentType: WildcardRelationId<T>): [EntityId<unknown>, any][] | undefined;
+  getComponent<T>(entityId: EntityId, componentType: WildcardRelationId<T>): [EntityId<unknown>, any][];
   /**
    * Get component data for a specific entity and component type
    * @param entityId The entity
    * @param componentType The component type
    */
-  getComponent<T>(entityId: EntityId, componentType: EntityId<T>): T | undefined;
+  getComponent<T>(entityId: EntityId, componentType: EntityId<T>): T;
   getComponent<T>(
     entityId: EntityId,
     componentType: EntityId<T> | WildcardRelationId<T>,
-  ): T | [EntityId<unknown>, any][] | undefined {
+  ): T | [EntityId<unknown>, any][] {
     const index = this.entityToIndex.get(entityId);
     if (index === undefined) {
-      if (getIdType(componentType) === "wildcard-relation") {
-        return [];
-      } else {
-        return undefined;
-      }
+      throw new Error(`Entity ${entityId} is not in this archetype`);
     }
 
     if (isWildcardRelationId(componentType)) {
@@ -171,14 +169,16 @@ export class Archetype {
         ) {
           const dataArray = this.componentData.get(relType);
           if (dataArray && dataArray[index] !== undefined) {
-            relations.push([relDetailed.targetId, dataArray[index]]);
+            const data = dataArray[index];
+            relations.push([relDetailed.targetId, data === MISSING_COMPONENT ? undefined : data]);
           }
         }
       }
 
       return relations;
     } else {
-      return this.componentData.get(componentType)?.[index];
+      const data = this.componentData.get(componentType)?.[index];
+      return data === MISSING_COMPONENT ? (undefined as T) : data;
     }
   }
 
@@ -189,14 +189,14 @@ export class Archetype {
    * @param data The component data
    */
   setComponent<T>(entityId: EntityId, componentType: EntityId<T>, data: T): void {
+    if (!this.componentData.has(componentType)) {
+      throw new Error(`Component type ${componentType} is not in this archetype`);
+    }
     const index = this.entityToIndex.get(entityId);
     if (index === undefined) {
       throw new Error(`Entity ${entityId} is not in this archetype`);
     }
-    const dataArray = this.componentData.get(componentType);
-    if (!dataArray) {
-      throw new Error(`Component type ${componentType} is not in this archetype`);
-    }
+    const dataArray = this.componentData.get(componentType)!;
     dataArray[index] = data;
   }
 
@@ -289,14 +289,16 @@ export class Archetype {
           for (const relType of matchingRelations) {
             const dataArray = this.componentData.get(relType);
             if (dataArray && dataArray[entityIndex] !== undefined) {
+              const data = dataArray[entityIndex];
               const decodedRel = decodeRelationId(relType as RelationId<any>);
-              relations.push([decodedRel.targetId, dataArray[entityIndex]]);
+              relations.push([decodedRel.targetId, data === MISSING_COMPONENT ? undefined : data]);
             }
           }
           return relations;
         } else {
           const dataArray = dataSource as any[];
-          return dataArray ? dataArray[entityIndex] : undefined;
+          const data = dataArray ? dataArray[entityIndex] : undefined;
+          return data === MISSING_COMPONENT ? undefined : data;
         }
       }) as ComponentTuple<T>;
 
@@ -312,7 +314,8 @@ export class Archetype {
     for (let i = 0; i < this.entities.length; i++) {
       const components = new Map<EntityId<any>, any>();
       for (const componentType of this.componentTypes) {
-        components.set(componentType, this.componentData.get(componentType)![i]);
+        const data = this.componentData.get(componentType)![i];
+        components.set(componentType, data === MISSING_COMPONENT ? undefined : data);
       }
       callback(this.entities[i]!, components);
     }

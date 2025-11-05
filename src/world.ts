@@ -181,22 +181,18 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
   /**
    * Get wildcard relations from an entity
    */
-  getComponent<T>(entityId: EntityId, componentType: WildcardRelationId<T>): [EntityId<unknown>, any][] | undefined;
+  getComponent<T>(entityId: EntityId, componentType: WildcardRelationId<T>): [EntityId<unknown>, any][];
   /**
    * Get a component from an entity
    */
-  getComponent<T>(entityId: EntityId, componentType: EntityId<T>): T | undefined;
+  getComponent<T>(entityId: EntityId, componentType: EntityId<T>): T;
   getComponent<T>(
     entityId: EntityId,
     componentType: EntityId<T> | WildcardRelationId<T>,
-  ): T | [EntityId<unknown>, any][] | undefined {
+  ): T | [EntityId<unknown>, any][] {
     const archetype = this.entityToArchetype.get(entityId);
     if (!archetype) {
-      if (getIdType(componentType) === "wildcard-relation") {
-        return [];
-      } else {
-        return undefined;
-      }
+      throw new Error(`Entity ${entityId} does not exist`);
     }
     return archetype.getComponent(entityId, componentType);
   }
