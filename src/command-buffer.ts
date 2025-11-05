@@ -4,7 +4,7 @@ import type { EntityId } from "./entity";
  * Command for deferred execution
  */
 export interface Command {
-  type: "addComponent" | "removeComponent" | "destroyEntity";
+  type: "set" | "delete" | "destroy";
   entityId: EntityId;
   componentType?: EntityId<any>;
   component?: any;
@@ -27,24 +27,24 @@ export class CommandBuffer {
   /**
    * Add a component to an entity (deferred)
    */
-  addComponent(entityId: EntityId, componentType: EntityId<void>): void;
-  addComponent<T>(entityId: EntityId, componentType: EntityId<T>, component: NoInfer<T>): void;
-  addComponent(entityId: EntityId, componentType: EntityId, component?: any): void {
-    this.commands.push({ type: "addComponent", entityId, componentType, component });
+  set(entityId: EntityId, componentType: EntityId<void>): void;
+  set<T>(entityId: EntityId, componentType: EntityId<T>, component: NoInfer<T>): void;
+  set(entityId: EntityId, componentType: EntityId, component?: any): void {
+    this.commands.push({ type: "set", entityId, componentType, component });
   }
 
   /**
    * Remove a component from an entity (deferred)
    */
-  removeComponent<T>(entityId: EntityId, componentType: EntityId<T>): void {
-    this.commands.push({ type: "removeComponent", entityId, componentType });
+  delete<T>(entityId: EntityId, componentType: EntityId<T>): void {
+    this.commands.push({ type: "delete", entityId, componentType });
   }
 
   /**
    * Destroy an entity (deferred)
    */
-  destroyEntity(entityId: EntityId): void {
-    this.commands.push({ type: "destroyEntity", entityId });
+  destroy(entityId: EntityId): void {
+    this.commands.push({ type: "destroy", entityId });
   }
 
   /**

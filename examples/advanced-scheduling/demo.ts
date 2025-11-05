@@ -111,15 +111,15 @@ function main() {
   world.registerSystem(renderSystem);
 
   // 创建一些实体
-  const entity1 = world.createEntity();
-  world.addComponent(entity1, PositionId, { x: 0, y: 0 });
-  world.addComponent(entity1, VelocityId, { x: 2, y: 1 });
-  world.addComponent(entity1, HealthId, { value: 100 });
+  const entity1 = world.new();
+  world.set(entity1, PositionId, { x: 0, y: 0 });
+  world.set(entity1, VelocityId, { x: 2, y: 1 });
+  world.set(entity1, HealthId, { value: 100 });
 
-  const entity2 = world.createEntity();
-  world.addComponent(entity2, PositionId, { x: 5, y: 3 });
-  world.addComponent(entity2, VelocityId, { x: -1, y: 0.5 });
-  world.addComponent(entity2, HealthId, { value: 80 });
+  const entity2 = world.new();
+  world.set(entity2, PositionId, { x: 5, y: 3 });
+  world.set(entity2, VelocityId, { x: -1, y: 0.5 });
+  world.set(entity2, HealthId, { value: 80 });
 
   // 运行几帧
   console.log("\n--- Frame 1 ---");

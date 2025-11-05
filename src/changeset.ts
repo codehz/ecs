@@ -10,7 +10,7 @@ export class ComponentChangeset {
   /**
    * Add a component to the changeset
    */
-  addComponent<T>(componentType: EntityId<T>, component: T): void {
+  set<T>(componentType: EntityId<T>, component: T): void {
     this.adds.set(componentType, component);
     this.removes.delete(componentType); // Remove from removes if it was going to be removed
   }
@@ -18,7 +18,7 @@ export class ComponentChangeset {
   /**
    * Remove a component from the changeset
    */
-  removeComponent<T>(componentType: EntityId<T>): void {
+  delete<T>(componentType: EntityId<T>): void {
     this.removes.add(componentType);
     this.adds.delete(componentType); // Remove from adds if it was going to be added
   }

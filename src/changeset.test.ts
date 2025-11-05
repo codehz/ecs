@@ -17,7 +17,7 @@ describe("ComponentChangeset", () => {
 
     it("should add components", () => {
       const changeset = new ComponentChangeset();
-      changeset.addComponent(PositionId, { x: 10, y: 20 });
+      changeset.set(PositionId, { x: 10, y: 20 });
 
       expect(changeset.hasChanges()).toBe(true);
       expect(changeset.adds.get(PositionId)).toEqual({ x: 10, y: 20 });
@@ -26,7 +26,7 @@ describe("ComponentChangeset", () => {
 
     it("should remove components", () => {
       const changeset = new ComponentChangeset();
-      changeset.removeComponent(PositionId);
+      changeset.delete(PositionId);
 
       expect(changeset.hasChanges()).toBe(true);
       expect(changeset.adds.size).toBe(0);
@@ -35,8 +35,8 @@ describe("ComponentChangeset", () => {
 
     it("should clear all changes", () => {
       const changeset = new ComponentChangeset();
-      changeset.addComponent(PositionId, { x: 10, y: 20 });
-      changeset.removeComponent(VelocityId);
+      changeset.set(PositionId, { x: 10, y: 20 });
+      changeset.delete(VelocityId);
 
       expect(changeset.hasChanges()).toBe(true);
 
@@ -51,8 +51,8 @@ describe("ComponentChangeset", () => {
   describe("Conflict Resolution", () => {
     it("should remove from removes when adding a component that was going to be removed", () => {
       const changeset = new ComponentChangeset();
-      changeset.removeComponent(PositionId);
-      changeset.addComponent(PositionId, { x: 10, y: 20 });
+      changeset.delete(PositionId);
+      changeset.set(PositionId, { x: 10, y: 20 });
 
       expect(changeset.adds.get(PositionId)).toEqual({ x: 10, y: 20 });
       expect(changeset.removes.has(PositionId)).toBe(false);
@@ -60,8 +60,8 @@ describe("ComponentChangeset", () => {
 
     it("should remove from adds when removing a component that was going to be added", () => {
       const changeset = new ComponentChangeset();
-      changeset.addComponent(PositionId, { x: 10, y: 20 });
-      changeset.removeComponent(PositionId);
+      changeset.set(PositionId, { x: 10, y: 20 });
+      changeset.delete(PositionId);
 
       expect(changeset.adds.has(PositionId)).toBe(false);
       expect(changeset.removes.has(PositionId)).toBe(true);
@@ -71,8 +71,8 @@ describe("ComponentChangeset", () => {
   describe("Apply Changes", () => {
     it("should apply additions to existing components", () => {
       const changeset = new ComponentChangeset();
-      changeset.addComponent(PositionId, { x: 10, y: 20 });
-      changeset.addComponent(VelocityId, { x: 1, y: 2 });
+      changeset.set(PositionId, { x: 10, y: 20 });
+      changeset.set(VelocityId, { x: 1, y: 2 });
 
       const existing = new Map();
       existing.set(HealthId, 100);
@@ -86,7 +86,7 @@ describe("ComponentChangeset", () => {
 
     it("should apply removals to existing components", () => {
       const changeset = new ComponentChangeset();
-      changeset.removeComponent(PositionId);
+      changeset.delete(PositionId);
 
       const existing = new Map();
       existing.set(PositionId, { x: 10, y: 20 });
@@ -100,8 +100,8 @@ describe("ComponentChangeset", () => {
 
     it("should apply both additions and removals", () => {
       const changeset = new ComponentChangeset();
-      changeset.addComponent(PositionId, { x: 50, y: 60 });
-      changeset.removeComponent(VelocityId);
+      changeset.set(PositionId, { x: 50, y: 60 });
+      changeset.delete(VelocityId);
 
       const existing = new Map();
       existing.set(PositionId, { x: 10, y: 20 });
@@ -117,8 +117,8 @@ describe("ComponentChangeset", () => {
 
     it("should get final component types correctly", () => {
       const changeset = new ComponentChangeset();
-      changeset.addComponent(PositionId, { x: 10, y: 20 });
-      changeset.removeComponent(VelocityId);
+      changeset.set(PositionId, { x: 10, y: 20 });
+      changeset.delete(VelocityId);
 
       const existing = new Map();
       existing.set(VelocityId, { x: 1, y: 2 });
@@ -133,7 +133,7 @@ describe("ComponentChangeset", () => {
   describe("Direct Access", () => {
     it("should return direct references to internal maps for performance", () => {
       const changeset = new ComponentChangeset();
-      changeset.addComponent(PositionId, { x: 10, y: 20 });
+      changeset.set(PositionId, { x: 10, y: 20 });
 
       const adds = changeset.adds;
       const removes = changeset.removes;
@@ -151,8 +151,8 @@ describe("ComponentChangeset", () => {
     it("should merge additions into an empty changeset", () => {
       const changeset1 = new ComponentChangeset();
       const changeset2 = new ComponentChangeset();
-      changeset2.addComponent(PositionId, { x: 10, y: 20 });
-      changeset2.addComponent(VelocityId, { x: 1, y: 2 });
+      changeset2.set(PositionId, { x: 10, y: 20 });
+      changeset2.set(VelocityId, { x: 1, y: 2 });
 
       changeset1.merge(changeset2);
 
@@ -165,8 +165,8 @@ describe("ComponentChangeset", () => {
     it("should merge removals into an empty changeset", () => {
       const changeset1 = new ComponentChangeset();
       const changeset2 = new ComponentChangeset();
-      changeset2.removeComponent(PositionId);
-      changeset2.removeComponent(VelocityId);
+      changeset2.delete(PositionId);
+      changeset2.delete(VelocityId);
 
       changeset1.merge(changeset2);
 
@@ -179,8 +179,8 @@ describe("ComponentChangeset", () => {
     it("should merge additions and removals together", () => {
       const changeset1 = new ComponentChangeset();
       const changeset2 = new ComponentChangeset();
-      changeset2.addComponent(PositionId, { x: 10, y: 20 });
-      changeset2.removeComponent(VelocityId);
+      changeset2.set(PositionId, { x: 10, y: 20 });
+      changeset2.delete(VelocityId);
 
       changeset1.merge(changeset2);
 
@@ -191,10 +191,10 @@ describe("ComponentChangeset", () => {
 
     it("should override removal with addition when merging", () => {
       const changeset1 = new ComponentChangeset();
-      changeset1.removeComponent(PositionId); // Initially removing
+      changeset1.delete(PositionId); // Initially removing
 
       const changeset2 = new ComponentChangeset();
-      changeset2.addComponent(PositionId, { x: 10, y: 20 }); // Adding the same component
+      changeset2.set(PositionId, { x: 10, y: 20 }); // Adding the same component
 
       changeset1.merge(changeset2);
 
@@ -204,10 +204,10 @@ describe("ComponentChangeset", () => {
 
     it("should override addition with removal when merging", () => {
       const changeset1 = new ComponentChangeset();
-      changeset1.addComponent(PositionId, { x: 5, y: 5 }); // Initially adding
+      changeset1.set(PositionId, { x: 5, y: 5 }); // Initially adding
 
       const changeset2 = new ComponentChangeset();
-      changeset2.removeComponent(PositionId); // Removing the same component
+      changeset2.delete(PositionId); // Removing the same component
 
       changeset1.merge(changeset2);
 
@@ -217,15 +217,15 @@ describe("ComponentChangeset", () => {
 
     it("should merge multiple changesets sequentially", () => {
       const changeset1 = new ComponentChangeset();
-      changeset1.addComponent(PositionId, { x: 10, y: 20 });
+      changeset1.set(PositionId, { x: 10, y: 20 });
 
       const changeset2 = new ComponentChangeset();
-      changeset2.removeComponent(PositionId);
-      changeset2.addComponent(VelocityId, { x: 1, y: 2 });
+      changeset2.delete(PositionId);
+      changeset2.set(VelocityId, { x: 1, y: 2 });
 
       const changeset3 = new ComponentChangeset();
-      changeset3.removeComponent(VelocityId);
-      changeset3.addComponent(HealthId, 100);
+      changeset3.delete(VelocityId);
+      changeset3.set(HealthId, 100);
 
       changeset1.merge(changeset2);
       changeset1.merge(changeset3);
@@ -240,7 +240,7 @@ describe("ComponentChangeset", () => {
 
     it("should handle merging empty changeset", () => {
       const changeset1 = new ComponentChangeset();
-      changeset1.addComponent(PositionId, { x: 10, y: 20 });
+      changeset1.set(PositionId, { x: 10, y: 20 });
 
       const changeset2 = new ComponentChangeset(); // Empty
 

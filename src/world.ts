@@ -58,7 +58,7 @@ export class World<UpdateParams extends any[] = []> {
   /**
    * Create a new entity
    */
-  createEntity(): EntityId {
+  new(): EntityId {
     const entityId = this.entityIdManager.allocate();
     // Create empty archetype for entities with no components
     let emptyArchetype = this.getOrCreateArchetype([]);
@@ -86,7 +86,7 @@ export class World<UpdateParams extends any[] = []> {
         const currentComponents = new Map<EntityId<any>, any>();
         for (const compType of sourceArchetype.componentTypes) {
           if (compType !== componentType) {
-            const data = sourceArchetype.getComponent(sourceEntityId, compType);
+            const data = sourceArchetype.get(sourceEntityId, compType);
             if (data !== undefined) {
               currentComponents.set(compType, data);
             }
@@ -128,17 +128,17 @@ export class World<UpdateParams extends any[] = []> {
   /**
    * Check if an entity exists
    */
-  hasEntity(entityId: EntityId): boolean {
+  exists(entityId: EntityId): boolean {
     return this.entityToArchetype.has(entityId);
   }
 
   /**
    * Add a component to an entity (deferred)
    */
-  addComponent(entityId: EntityId, componentType: EntityId<void>): void;
-  addComponent<T>(entityId: EntityId, componentType: EntityId<T>, component: NoInfer<T>): void;
-  addComponent(entityId: EntityId, componentType: EntityId, component?: any): void {
-    if (!this.hasEntity(entityId)) {
+  set(entityId: EntityId, componentType: EntityId<void>): void;
+  set<T>(entityId: EntityId, componentType: EntityId<T>, component: NoInfer<T>): void;
+  set(entityId: EntityId, componentType: EntityId, component?: any): void {
+    if (!this.exists(entityId)) {
       throw new Error(`Entity ${entityId} does not exist`);
     }
 
@@ -151,14 +151,14 @@ export class World<UpdateParams extends any[] = []> {
       throw new Error(`Cannot directly add wildcard relation components: ${componentType}`);
     }
 
-    this.commandBuffer.addComponent(entityId, componentType, component);
+    this.commandBuffer.set(entityId, componentType, component);
   }
 
   /**
    * Remove a component from an entity (deferred)
    */
-  removeComponent<T>(entityId: EntityId, componentType: EntityId<T>): void {
-    if (!this.hasEntity(entityId)) {
+  delete<T>(entityId: EntityId, componentType: EntityId<T>): void {
+    if (!this.exists(entityId)) {
       throw new Error(`Entity ${entityId} does not exist`);
     }
 
@@ -168,20 +168,20 @@ export class World<UpdateParams extends any[] = []> {
       throw new Error(`Invalid component type: ${componentType}`);
     }
 
-    this.commandBuffer.removeComponent(entityId, componentType);
+    this.commandBuffer.delete(entityId, componentType);
   }
 
   /**
    * Destroy an entity and remove all its components (deferred)
    */
-  destroyEntity(entityId: EntityId): void {
-    this.commandBuffer.destroyEntity(entityId);
+  destroy(entityId: EntityId): void {
+    this.commandBuffer.destroy(entityId);
   }
 
   /**
    * Check if an entity has a specific component
    */
-  hasComponent<T>(entityId: EntityId, componentType: EntityId<T>): boolean {
+  has<T>(entityId: EntityId, componentType: EntityId<T>): boolean {
     const archetype = this.entityToArchetype.get(entityId);
     return archetype ? archetype.componentTypes.includes(componentType) : false;
   }
@@ -192,22 +192,19 @@ export class World<UpdateParams extends any[] = []> {
    * @param entityId The entity
    * @param componentType The wildcard relation type
    */
-  getComponent<T>(entityId: EntityId, componentType: WildcardRelationId<T>): [EntityId<unknown>, T][];
+  get<T>(entityId: EntityId, componentType: WildcardRelationId<T>): [EntityId<unknown>, T][];
   /**
    * Get component data for a specific entity and component type
    * @param entityId The entity
    * @param componentType The component type
    */
-  getComponent<T>(entityId: EntityId, componentType: EntityId<T>): T;
-  getComponent<T>(
-    entityId: EntityId,
-    componentType: EntityId<T> | WildcardRelationId<T>,
-  ): T | [EntityId<unknown>, any][] {
+  get<T>(entityId: EntityId, componentType: EntityId<T>): T;
+  get<T>(entityId: EntityId, componentType: EntityId<T> | WildcardRelationId<T>): T | [EntityId<unknown>, any][] {
     const archetype = this.entityToArchetype.get(entityId);
     if (!archetype) {
       throw new Error(`Entity ${entityId} does not exist`);
     }
-    return archetype.getComponent(entityId, componentType);
+    return archetype.get(entityId, componentType);
   }
 
   /**
@@ -262,7 +259,7 @@ export class World<UpdateParams extends any[] = []> {
   /**
    * Execute all deferred commands immediately without running systems
    */
-  flushCommands(): void {
+  sync(): void {
     this.commandBuffer.execute();
   }
 
@@ -459,7 +456,7 @@ export class World<UpdateParams extends any[] = []> {
     const changeset = new ComponentChangeset();
 
     // Check if entity should be destroyed
-    const hasDestroy = commands.some((cmd) => cmd.type === "destroyEntity");
+    const hasDestroy = commands.some((cmd) => cmd.type === "destroy");
     if (hasDestroy) {
       this._destroyEntity(entityId);
       return changeset;
@@ -473,14 +470,14 @@ export class World<UpdateParams extends any[] = []> {
     // Get current component data
     const currentComponents = new Map<EntityId<any>, any>();
     for (const componentType of currentArchetype.componentTypes) {
-      const data = currentArchetype.getComponent(entityId, componentType);
+      const data = currentArchetype.get(entityId, componentType);
       currentComponents.set(componentType, data);
     }
 
     // Process commands to determine final state
     for (const cmd of commands) {
       switch (cmd.type) {
-        case "addComponent":
+        case "set":
           if (cmd.componentType) {
             const detailedType = getDetailedIdType(cmd.componentType);
             // For exclusive relations, remove existing relations with the same base component
@@ -495,14 +492,14 @@ export class World<UpdateParams extends any[] = []> {
                     componentDetailedType.type === "component-relation") &&
                   componentDetailedType.componentId === detailedType.componentId
                 ) {
-                  changeset.removeComponent(componentType);
+                  changeset.delete(componentType);
                 }
               }
             }
-            changeset.addComponent(cmd.componentType, cmd.component);
+            changeset.set(cmd.componentType, cmd.component);
           }
           break;
-        case "removeComponent":
+        case "delete":
           if (cmd.componentType) {
             const detailedType = getDetailedIdType(cmd.componentType);
             if (detailedType.type === "wildcard-relation") {
@@ -515,12 +512,12 @@ export class World<UpdateParams extends any[] = []> {
                   componentDetailedType.type === "component-relation"
                 ) {
                   if (componentDetailedType.componentId === baseComponentId) {
-                    changeset.removeComponent(componentType);
+                    changeset.delete(componentType);
                   }
                 }
               }
             } else {
-              changeset.removeComponent(cmd.componentType);
+              changeset.delete(cmd.componentType);
             }
           }
           break;
@@ -552,7 +549,7 @@ export class World<UpdateParams extends any[] = []> {
     } else {
       // Same archetype, just update component data
       for (const [componentType, component] of changeset.adds) {
-        currentArchetype.setComponent(entityId, componentType, component);
+        currentArchetype.set(entityId, componentType, component);
       }
       // Removals are already handled by not including them in finalComponents
     }

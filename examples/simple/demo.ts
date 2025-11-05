@@ -43,36 +43,36 @@ function main() {
   world.registerSystem(new MovementSystem(world));
 
   // 创建实体1
-  const entity1 = world.createEntity();
-  world.addComponent(entity1, PositionId, { x: 0, y: 0 });
-  world.addComponent(entity1, VelocityId, { x: 1, y: 0.5 });
+  const entity1 = world.new();
+  world.set(entity1, PositionId, { x: 0, y: 0 });
+  world.set(entity1, VelocityId, { x: 1, y: 0.5 });
 
   // 创建实体2
-  const entity2 = world.createEntity();
-  world.addComponent(entity2, PositionId, { x: 10, y: 10 });
-  world.addComponent(entity2, VelocityId, { x: -0.5, y: 1 });
+  const entity2 = world.new();
+  world.set(entity2, PositionId, { x: 10, y: 10 });
+  world.set(entity2, VelocityId, { x: -0.5, y: 1 });
 
   // 演示Exclusive Relations
   console.log("\nExclusive Relations Demo:");
-  const parent1 = world.createEntity();
-  const parent2 = world.createEntity();
-  const child = world.createEntity();
+  const parent1 = world.new();
+  const parent2 = world.new();
+  const child = world.new();
 
   // 设置ChildOf为exclusive relation
   world.setExclusive(ChildOf);
 
   // 添加第一个parent relation
-  world.addComponent(child, relation(ChildOf, parent1));
-  world.flushCommands();
-  console.log(`Child has ChildOf(parent1): ${world.hasComponent(child, relation(ChildOf, parent1))}`);
-  console.log(`Child has ChildOf(parent2): ${world.hasComponent(child, relation(ChildOf, parent2))}`);
+  world.set(child, relation(ChildOf, parent1));
+  world.sync();
+  console.log(`Child has ChildOf(parent1): ${world.has(child, relation(ChildOf, parent1))}`);
+  console.log(`Child has ChildOf(parent2): ${world.has(child, relation(ChildOf, parent2))}`);
 
   // 添加第二个parent relation - 应该替换第一个
-  world.addComponent(child, relation(ChildOf, parent2));
-  world.flushCommands();
+  world.set(child, relation(ChildOf, parent2));
+  world.sync();
   console.log(`After adding ChildOf(parent2):`);
-  console.log(`Child has ChildOf(parent1): ${world.hasComponent(child, relation(ChildOf, parent1))}`);
-  console.log(`Child has ChildOf(parent2): ${world.hasComponent(child, relation(ChildOf, parent2))}`);
+  console.log(`Child has ChildOf(parent1): ${world.has(child, relation(ChildOf, parent1))}`);
+  console.log(`Child has ChildOf(parent2): ${world.has(child, relation(ChildOf, parent2))}`);
 
   // 注册组件钩子
   world.registerLifecycleHook(PositionId, {
@@ -90,7 +90,7 @@ function main() {
   });
 
   // 执行命令以应用组件添加
-  world.flushCommands();
+  world.sync();
 
   // 运行几个更新循环
   const deltaTime = 1.0; // 1秒
@@ -101,8 +101,8 @@ function main() {
 
   // 演示组件移除钩子
   console.log("\n移除组件演示:");
-  world.removeComponent(entity1, VelocityId);
-  world.flushCommands();
+  world.delete(entity1, VelocityId);
+  world.sync();
 
   console.log("\nDemo completed!");
 }

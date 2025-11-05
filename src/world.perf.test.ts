@@ -15,14 +15,14 @@ describe("World Performance", () => {
     const startTime = performance.now();
 
     for (let i = 0; i < 100; i++) {
-      const entity = world.createEntity();
+      const entity = world.new();
       // Add components in different combinations
-      world.addComponent(entity, component1, {});
-      if (i % 2 === 0) world.addComponent(entity, component2, {});
-      if (i % 3 === 0) world.addComponent(entity, component3, {});
+      world.set(entity, component1, {});
+      if (i % 2 === 0) world.set(entity, component2, {});
+      if (i % 3 === 0) world.set(entity, component3, {});
     }
 
-    world.flushCommands();
+    world.sync();
 
     const endTime = performance.now();
     const duration = endTime - startTime;
@@ -46,23 +46,23 @@ describe("World Performance", () => {
 
     // Create many entities
     for (let i = 0; i < 1000; i++) {
-      const entity = world.createEntity();
+      const entity = world.new();
 
       // Add position to all
-      world.addComponent(entity, positionComponent, { x: i, y: i });
+      world.set(entity, positionComponent, { x: i, y: i });
 
       // Add velocity to half
       if (i % 2 === 0) {
-        world.addComponent(entity, velocityComponent, { x: 1, y: 1 });
+        world.set(entity, velocityComponent, { x: 1, y: 1 });
       }
 
       // Add health to quarter
       if (i % 4 === 0) {
-        world.addComponent(entity, healthComponent, { value: 100 });
+        world.set(entity, healthComponent, { value: 100 });
       }
     }
 
-    world.flushCommands();
+    world.sync();
 
     // Test query performance
     const startTime = performance.now();

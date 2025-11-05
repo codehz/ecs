@@ -38,15 +38,15 @@ describe("Archetype", () => {
 
     archetype.addEntity(entity1, componentData1);
     expect(archetype.size).toBe(1);
-    expect(archetype.hasEntity(entity1)).toBe(true);
+    expect(archetype.exists(entity1)).toBe(true);
 
     archetype.addEntity(entity2, componentData2);
     expect(archetype.size).toBe(2);
-    expect(archetype.hasEntity(entity2)).toBe(true);
+    expect(archetype.exists(entity2)).toBe(true);
 
     const removedData = archetype.removeEntity(entity1);
     expect(archetype.size).toBe(1);
-    expect(archetype.hasEntity(entity1)).toBe(false);
+    expect(archetype.exists(entity1)).toBe(false);
     expect(removedData).toEqual(componentData1);
   });
 
@@ -57,12 +57,12 @@ describe("Archetype", () => {
 
     archetype.addEntity(entity, new Map([[positionComponent, initialPosition]]));
 
-    const retrieved = archetype.getComponent(entity, positionComponent);
+    const retrieved = archetype.get(entity, positionComponent);
     expect(retrieved).toEqual(initialPosition);
 
     const newPosition: Position = { x: 10, y: 10 };
-    archetype.setComponent(entity, positionComponent, newPosition);
-    const retrieved2 = archetype.getComponent(entity, positionComponent);
+    archetype.set(entity, positionComponent, newPosition);
+    const retrieved2 = archetype.get(entity, positionComponent);
     expect(retrieved2).toEqual(newPosition);
   });
 
@@ -89,7 +89,7 @@ describe("Archetype", () => {
     );
 
     // Get wildcard relations
-    const relations = archetype.getComponent(entity, wildcardPositionRelation);
+    const relations = archetype.get(entity, wildcardPositionRelation);
     expect(relations).toEqual([
       [target2, { distance: 20 }],
       [target1, { distance: 10 }],
@@ -97,7 +97,7 @@ describe("Archetype", () => {
 
     // Test with entity not in archetype
     const nonExistentEntity = createEntityId(9999);
-    expect(() => archetype.getComponent(nonExistentEntity, wildcardPositionRelation)).toThrow(
+    expect(() => archetype.get(nonExistentEntity, wildcardPositionRelation)).toThrow(
       "Entity 9999 is not in this archetype",
     );
   });
@@ -228,7 +228,7 @@ describe("Archetype", () => {
     ]);
 
     // Modify data
-    (archetype as any).setComponent(entity1, relation1, { distance: 100 });
+    (archetype as any).set(entity1, relation1, { distance: 100 });
 
     // Third call - should still use cache (data is computed dynamically)
     let results3: [EntityId<any>, any][][] = [];

@@ -14,20 +14,20 @@ const healthComponent = component<Health>();
 const world = new World();
 
 // 创建一些实体
-const player = world.createEntity();
-const enemy1 = world.createEntity();
-const enemy2 = world.createEntity();
+const player = world.new();
+const enemy1 = world.new();
+const enemy2 = world.new();
 
 // 添加组件
-world.addComponent(player, positionComponent, { x: 0, y: 0 });
-world.addComponent(player, velocityComponent, { x: 1, y: 1 });
-world.addComponent(player, healthComponent, { value: 100 });
+world.set(player, positionComponent, { x: 0, y: 0 });
+world.set(player, velocityComponent, { x: 1, y: 1 });
+world.set(player, healthComponent, { value: 100 });
 
-world.addComponent(enemy1, positionComponent, { x: 10, y: 10 });
-world.addComponent(enemy1, velocityComponent, { x: -0.5, y: -0.5 });
+world.set(enemy1, positionComponent, { x: 10, y: 10 });
+world.set(enemy1, velocityComponent, { x: -0.5, y: -0.5 });
 
-world.addComponent(enemy2, positionComponent, { x: 20, y: 20 });
-world.addComponent(enemy2, healthComponent, { value: 50 });
+world.set(enemy2, positionComponent, { x: 20, y: 20 });
+world.set(enemy2, healthComponent, { value: 50 });
 
 // 创建查询
 const movingEntitiesQuery = world.createQuery([positionComponent, velocityComponent]);

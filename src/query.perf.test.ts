@@ -21,17 +21,17 @@ function performanceTest() {
   const startCreate = performance.now();
 
   for (let i = 0; i < 1000; i++) {
-    const entity = world.createEntity();
+    const entity = world.new();
 
     // 添加位置组件
-    world.addComponent(entity, positionComponent, {
+    world.set(entity, positionComponent, {
       x: Math.random() * 100,
       y: Math.random() * 100,
     });
 
     // 50%的实体有速度组件
     if (i % 2 === 0) {
-      world.addComponent(entity, velocityComponent, {
+      world.set(entity, velocityComponent, {
         x: Math.random() - 0.5,
         y: Math.random() - 0.5,
       });
@@ -39,13 +39,13 @@ function performanceTest() {
 
     // 25%的实体有生命值组件
     if (i % 4 === 0) {
-      world.addComponent(entity, healthComponent, {
+      world.set(entity, healthComponent, {
         value: Math.floor(Math.random() * 100) + 1,
       });
     }
   }
 
-  world.flushCommands();
+  world.sync();
 
   const endCreate = performance.now();
   console.log(`Entity creation time: ${(endCreate - startCreate).toFixed(2)}ms`);

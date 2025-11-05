@@ -6,30 +6,30 @@ describe("World", () => {
   describe("Entity Management", () => {
     it("should create entities", () => {
       const world = new World();
-      const entity1 = world.createEntity();
-      const entity2 = world.createEntity();
+      const entity1 = world.new();
+      const entity2 = world.new();
 
-      expect(world.hasEntity(entity1)).toBe(true);
-      expect(world.hasEntity(entity2)).toBe(true);
+      expect(world.exists(entity1)).toBe(true);
+      expect(world.exists(entity2)).toBe(true);
       expect(entity1).not.toBe(entity2);
     });
 
     it("should destroy entities", () => {
       const world = new World();
-      const entity = world.createEntity();
-      expect(world.hasEntity(entity)).toBe(true);
+      const entity = world.new();
+      expect(world.exists(entity)).toBe(true);
 
-      world.destroyEntity(entity);
-      world.flushCommands();
-      expect(world.hasEntity(entity)).toBe(false);
+      world.destroy(entity);
+      world.sync();
+      expect(world.exists(entity)).toBe(false);
     });
 
     it("should handle destroying non-existent entities gracefully", () => {
       const world = new World();
       const fakeEntity = createEntityId(9999);
-      expect(world.hasEntity(fakeEntity)).toBe(false);
+      expect(world.exists(fakeEntity)).toBe(false);
       // Should not throw
-      world.destroyEntity(fakeEntity);
+      world.destroy(fakeEntity);
     });
   });
 
@@ -42,111 +42,111 @@ describe("World", () => {
 
     it("should add components to entities", () => {
       const world = new World();
-      const entity = world.createEntity();
+      const entity = world.new();
       const position: Position = { x: 10, y: 20 };
 
-      world.addComponent(entity, positionComponent, position);
-      world.flushCommands(); // Execute deferred commands
+      world.set(entity, positionComponent, position);
+      world.sync(); // Execute deferred commands
 
-      expect(world.hasComponent(entity, positionComponent)).toBe(true);
-      expect(world.getComponent(entity, positionComponent)).toEqual(position);
+      expect(world.has(entity, positionComponent)).toBe(true);
+      expect(world.get(entity, positionComponent)).toEqual(position);
     });
 
     it("should update existing components", () => {
       const world = new World();
-      const entity = world.createEntity();
+      const entity = world.new();
       const position1: Position = { x: 10, y: 20 };
       const position2: Position = { x: 30, y: 40 };
 
-      world.addComponent(entity, positionComponent, position1);
-      world.flushCommands();
-      expect(world.getComponent(entity, positionComponent)).toEqual(position1);
+      world.set(entity, positionComponent, position1);
+      world.sync();
+      expect(world.get(entity, positionComponent)).toEqual(position1);
 
-      world.addComponent(entity, positionComponent, position2);
-      world.flushCommands();
-      expect(world.getComponent(entity, positionComponent)).toEqual(position2);
+      world.set(entity, positionComponent, position2);
+      world.sync();
+      expect(world.get(entity, positionComponent)).toEqual(position2);
     });
 
     it("should remove components from entities", () => {
       const world = new World();
-      const entity = world.createEntity();
+      const entity = world.new();
       const position: Position = { x: 10, y: 20 };
 
-      world.addComponent(entity, positionComponent, position);
-      world.flushCommands();
-      expect(world.hasComponent(entity, positionComponent)).toBe(true);
+      world.set(entity, positionComponent, position);
+      world.sync();
+      expect(world.has(entity, positionComponent)).toBe(true);
 
-      world.removeComponent(entity, positionComponent);
-      world.flushCommands();
-      expect(world.hasComponent(entity, positionComponent)).toBe(false);
-      expect(world.getComponent(entity, positionComponent)).toBeUndefined();
+      world.delete(entity, positionComponent);
+      world.sync();
+      expect(world.has(entity, positionComponent)).toBe(false);
+      expect(world.get(entity, positionComponent)).toBeUndefined();
     });
 
     it("should throw error when removing invalid component type", () => {
       const world = new World();
-      const entity = world.createEntity();
+      const entity = world.new();
       const invalidComponentType = 0 as EntityId<any>; // Invalid component ID
 
-      expect(() => world.removeComponent(entity, invalidComponentType)).toThrow("Invalid component type: 0");
+      expect(() => world.delete(entity, invalidComponentType)).toThrow("Invalid component type: 0");
     });
 
     it("should allow removing wildcard relation components", () => {
       const world = new World();
-      const entity = world.createEntity();
+      const entity = world.new();
       const position: Position = { x: 10, y: 20 };
-      const targetEntity1 = world.createEntity();
-      const targetEntity2 = world.createEntity();
+      const targetEntity1 = world.new();
+      const targetEntity2 = world.new();
       const relationId1 = relation(positionComponent, targetEntity1);
       const relationId2 = relation(positionComponent, targetEntity2);
 
       // Add multiple relation components with the same base component
-      world.addComponent(entity, relationId1, position);
-      world.addComponent(entity, relationId2, { x: 20, y: 30 });
-      world.flushCommands();
-      expect(world.hasComponent(entity, relationId1)).toBe(true);
-      expect(world.hasComponent(entity, relationId2)).toBe(true);
+      world.set(entity, relationId1, position);
+      world.set(entity, relationId2, { x: 20, y: 30 });
+      world.sync();
+      expect(world.has(entity, relationId1)).toBe(true);
+      expect(world.has(entity, relationId2)).toBe(true);
 
       // Remove using wildcard relation should remove all matching components
       const wildcardRelation = relation(positionComponent, "*");
-      world.removeComponent(entity, wildcardRelation);
-      world.flushCommands();
-      expect(world.hasComponent(entity, relationId1)).toBe(false);
-      expect(world.hasComponent(entity, relationId2)).toBe(false);
+      world.delete(entity, wildcardRelation);
+      world.sync();
+      expect(world.has(entity, relationId1)).toBe(false);
+      expect(world.has(entity, relationId2)).toBe(false);
     });
 
     it("should get wildcard relation components", () => {
       const world = new World();
-      const entity = world.createEntity();
+      const entity = world.new();
       const position: Position = { x: 10, y: 20 };
-      const targetEntity1 = world.createEntity();
-      const targetEntity2 = world.createEntity();
+      const targetEntity1 = world.new();
+      const targetEntity2 = world.new();
       const relationId1 = relation(positionComponent, targetEntity1);
       const relationId2 = relation(positionComponent, targetEntity2);
 
       // Add multiple relation components with the same base component
-      world.addComponent(entity, relationId1, position);
-      world.addComponent(entity, relationId2, { x: 20, y: 30 });
-      world.flushCommands();
+      world.set(entity, relationId1, position);
+      world.set(entity, relationId2, { x: 20, y: 30 });
+      world.sync();
 
       // Get wildcard relations
       const wildcardRelation = relation(positionComponent, "*");
-      const relations = world.getComponent(entity, wildcardRelation);
+      const relations = world.get(entity, wildcardRelation);
       expect(relations).toEqual([
         [targetEntity2, { x: 20, y: 30 }],
         [targetEntity1, { x: 10, y: 20 }],
       ]);
 
       // Test with entity not having components
-      const otherEntity = world.createEntity();
-      const result = world.getComponent(otherEntity, wildcardRelation);
+      const otherEntity = world.new();
+      const result = world.get(otherEntity, wildcardRelation);
       expect(result).toEqual([]);
     });
 
     it("should handle exclusive relations", () => {
       const world = new World();
-      const entity = world.createEntity();
-      const parent1 = world.createEntity();
-      const parent2 = world.createEntity();
+      const entity = world.new();
+      const parent1 = world.new();
+      const parent2 = world.new();
 
       // Mark ChildOf as exclusive
       const ChildOf = component();
@@ -156,32 +156,32 @@ describe("World", () => {
       const childOfParent2 = relation(ChildOf, parent2);
 
       // Add first relation
-      world.addComponent(entity, childOfParent1);
-      world.flushCommands();
-      expect(world.hasComponent(entity, childOfParent1)).toBe(true);
-      expect(world.hasComponent(entity, childOfParent2)).toBe(false);
+      world.set(entity, childOfParent1);
+      world.sync();
+      expect(world.has(entity, childOfParent1)).toBe(true);
+      expect(world.has(entity, childOfParent2)).toBe(false);
 
       // Add second relation - should replace the first
-      world.addComponent(entity, childOfParent2);
-      world.flushCommands();
-      expect(world.hasComponent(entity, childOfParent1)).toBe(false);
-      expect(world.hasComponent(entity, childOfParent2)).toBe(true);
+      world.set(entity, childOfParent2);
+      world.sync();
+      expect(world.has(entity, childOfParent1)).toBe(false);
+      expect(world.has(entity, childOfParent2)).toBe(true);
     });
 
     it("should handle multiple components", () => {
       const world = new World();
-      const entity = world.createEntity();
+      const entity = world.new();
       const position: Position = { x: 10, y: 20 };
       const velocity: Velocity = { x: 1, y: 2 };
 
-      world.addComponent(entity, positionComponent, position);
-      world.addComponent(entity, velocityComponent, velocity);
-      world.flushCommands();
+      world.set(entity, positionComponent, position);
+      world.set(entity, velocityComponent, velocity);
+      world.sync();
 
-      expect(world.hasComponent(entity, positionComponent)).toBe(true);
-      expect(world.hasComponent(entity, velocityComponent)).toBe(true);
-      expect(world.getComponent(entity, positionComponent)).toEqual(position);
-      expect(world.getComponent(entity, velocityComponent)).toEqual(velocity);
+      expect(world.has(entity, positionComponent)).toBe(true);
+      expect(world.has(entity, velocityComponent)).toBe(true);
+      expect(world.get(entity, positionComponent)).toEqual(position);
+      expect(world.get(entity, velocityComponent)).toEqual(velocity);
     });
 
     it("should throw error when adding component to non-existent entity", () => {
@@ -189,25 +189,25 @@ describe("World", () => {
       const fakeEntity = createEntityId(9999);
       const position: Position = { x: 10, y: 20 };
 
-      expect(() => world.addComponent(fakeEntity, positionComponent, position)).toThrow("Entity 9999 does not exist");
+      expect(() => world.set(fakeEntity, positionComponent, position)).toThrow("Entity 9999 does not exist");
     });
 
     it("should throw error when adding invalid component type", () => {
       const world = new World();
-      const entity = world.createEntity();
+      const entity = world.new();
       const position: Position = { x: 10, y: 20 };
       const invalidComponentType = 0 as EntityId<any>; // Invalid component ID
 
-      expect(() => world.addComponent(entity, invalidComponentType, position)).toThrow("Invalid component type: 0");
+      expect(() => world.set(entity, invalidComponentType, position)).toThrow("Invalid component type: 0");
     });
 
     it("should throw error when adding wildcard relation component", () => {
       const world = new World();
-      const entity = world.createEntity();
+      const entity = world.new();
       const position: Position = { x: 10, y: 20 };
       const wildcardRelation = relation(positionComponent, "*");
 
-      expect(() => world.addComponent(entity, wildcardRelation, position)).toThrow(
+      expect(() => world.set(entity, wildcardRelation, position)).toThrow(
         "Cannot directly add wildcard relation components",
       );
     });
@@ -216,32 +216,32 @@ describe("World", () => {
       const world = new World();
       const fakeEntity = createEntityId(9999);
 
-      expect(() => world.getComponent(fakeEntity, positionComponent)).toThrow("Entity 9999 does not exist");
+      expect(() => world.get(fakeEntity, positionComponent)).toThrow("Entity 9999 does not exist");
     });
 
     it("should allow setting undefined as component data", () => {
       const world = new World();
-      const entity = world.createEntity();
+      const entity = world.new();
 
       const optionalPositionComponent = component<Position | undefined>();
 
       // Add component with undefined data
-      world.addComponent(entity, optionalPositionComponent, undefined);
-      world.flushCommands();
+      world.set(entity, optionalPositionComponent, undefined);
+      world.sync();
 
-      expect(world.hasComponent(entity, optionalPositionComponent)).toBe(true);
-      expect(world.getComponent(entity, optionalPositionComponent)).toBeUndefined();
+      expect(world.has(entity, optionalPositionComponent)).toBe(true);
+      expect(world.get(entity, optionalPositionComponent)).toBeUndefined();
 
       // Update to a defined value
       const position: Position = { x: 10, y: 20 };
-      world.addComponent(entity, optionalPositionComponent, position);
-      world.flushCommands();
-      expect(world.getComponent(entity, optionalPositionComponent)).toEqual(position);
+      world.set(entity, optionalPositionComponent, position);
+      world.sync();
+      expect(world.get(entity, optionalPositionComponent)).toEqual(position);
 
       // Update back to undefined
-      world.addComponent(entity, optionalPositionComponent, undefined);
-      world.flushCommands();
-      expect(world.getComponent(entity, optionalPositionComponent)).toBeUndefined();
+      world.set(entity, optionalPositionComponent, undefined);
+      world.sync();
+      expect(world.get(entity, optionalPositionComponent)).toBeUndefined();
     });
   });
 
@@ -307,18 +307,18 @@ describe("World", () => {
 
     it("should query entities with specific components", () => {
       const world = new World();
-      const entity1 = world.createEntity();
-      const entity2 = world.createEntity();
-      const entity3 = world.createEntity();
+      const entity1 = world.new();
+      const entity2 = world.new();
+      const entity3 = world.new();
 
-      world.addComponent(entity1, positionComponent, { x: 1, y: 2 });
-      world.addComponent(entity1, velocityComponent, { x: 0.1, y: 0.2 });
+      world.set(entity1, positionComponent, { x: 1, y: 2 });
+      world.set(entity1, velocityComponent, { x: 0.1, y: 0.2 });
 
-      world.addComponent(entity2, positionComponent, { x: 3, y: 4 });
+      world.set(entity2, positionComponent, { x: 3, y: 4 });
 
       // entity3 has no components
 
-      world.flushCommands(); // Execute deferred commands
+      world.sync(); // Execute deferred commands
 
       const positionEntities = world.queryEntities([positionComponent]);
       expect(positionEntities).toContain(entity1);
@@ -338,8 +338,8 @@ describe("World", () => {
 
     it("should return empty array for queries with no matches", () => {
       const world = new World();
-      const entity = world.createEntity();
-      world.addComponent(entity, positionComponent, { x: 1, y: 2 });
+      const entity = world.new();
+      world.set(entity, positionComponent, { x: 1, y: 2 });
 
       const result = world.queryEntities([velocityComponent]);
       expect(result).toEqual([]);
@@ -347,21 +347,21 @@ describe("World", () => {
 
     it("should query entities with wildcard relations", () => {
       const world = new World();
-      const entity1 = world.createEntity();
-      const entity2 = world.createEntity();
-      const entity3 = world.createEntity();
+      const entity1 = world.new();
+      const entity2 = world.new();
+      const entity3 = world.new();
 
       // Create a wildcard relation for position component
       const wildcardPositionRelation = relation(positionComponent, "*");
 
-      world.addComponent(entity1, positionComponent, { x: 1, y: 2 });
-      world.addComponent(entity1, velocityComponent, { x: 0.1, y: 0.2 });
+      world.set(entity1, positionComponent, { x: 1, y: 2 });
+      world.set(entity1, velocityComponent, { x: 0.1, y: 0.2 });
 
-      world.addComponent(entity2, positionComponent, { x: 3, y: 4 });
+      world.set(entity2, positionComponent, { x: 3, y: 4 });
 
       // entity3 has no position component
 
-      world.flushCommands(); // Execute deferred commands
+      world.sync(); // Execute deferred commands
 
       // Query with wildcard relation should find all entities with position component
       const wildcardEntities = world.queryEntities([wildcardPositionRelation]);
@@ -372,23 +372,23 @@ describe("World", () => {
 
     it("should query entities with mixed component and wildcard relation queries", () => {
       const world = new World();
-      const entity1 = world.createEntity();
-      const entity2 = world.createEntity();
-      const entity3 = world.createEntity();
+      const entity1 = world.new();
+      const entity2 = world.new();
+      const entity3 = world.new();
 
       // Create a wildcard relation for position component
       const wildcardPositionRelation = relation(positionComponent, "*");
 
-      world.addComponent(entity1, positionComponent, { x: 1, y: 2 });
-      world.addComponent(entity1, velocityComponent, { x: 0.1, y: 0.2 });
+      world.set(entity1, positionComponent, { x: 1, y: 2 });
+      world.set(entity1, velocityComponent, { x: 0.1, y: 0.2 });
 
-      world.addComponent(entity2, positionComponent, { x: 3, y: 4 });
+      world.set(entity2, positionComponent, { x: 3, y: 4 });
       // entity2 doesn't have velocity
 
-      world.addComponent(entity3, velocityComponent, { x: 0.5, y: 0.6 });
+      world.set(entity3, velocityComponent, { x: 0.5, y: 0.6 });
       // entity3 doesn't have position
 
-      world.flushCommands(); // Execute deferred commands
+      world.sync(); // Execute deferred commands
 
       // Query with both velocity component and wildcard position relation
       // Should only match entity1 (has both position and velocity)
@@ -406,23 +406,23 @@ describe("World", () => {
       const followsComponent = component<void>();
 
       // Create entities
-      const entity1 = world.createEntity(); // This will be followed
-      const entity2 = world.createEntity(); // This will follow entity1
-      const entity3 = world.createEntity(); // This will also follow entity1
+      const entity1 = world.new(); // This will be followed
+      const entity2 = world.new(); // This will follow entity1
+      const entity3 = world.new(); // This will also follow entity1
 
       // Add position to entity1
-      world.addComponent(entity1, positionComponent, { x: 10, y: 20 });
-      world.flushCommands();
+      world.set(entity1, positionComponent, { x: 10, y: 20 });
+      world.sync();
 
       // Create relation components (entity2 and entity3 follow entity1)
       const followsEntity1 = relation(followsComponent, entity1);
-      world.addComponent(entity2, followsEntity1);
-      world.addComponent(entity3, followsEntity1);
-      world.flushCommands();
+      world.set(entity2, followsEntity1);
+      world.set(entity3, followsEntity1);
+      world.sync();
 
       // Verify relations exist
-      expect(world.hasComponent(entity2, followsEntity1)).toBe(true);
-      expect(world.hasComponent(entity3, followsEntity1)).toBe(true);
+      expect(world.has(entity2, followsEntity1)).toBe(true);
+      expect(world.has(entity3, followsEntity1)).toBe(true);
 
       // Query entities that follow entity1
       const followers = world.queryEntities([followsEntity1]);
@@ -430,59 +430,59 @@ describe("World", () => {
       expect(followers).toContain(entity3);
 
       // Destroy entity1
-      world.destroyEntity(entity1);
-      world.flushCommands();
+      world.destroy(entity1);
+      world.sync();
 
       // Verify entity1 is destroyed
-      expect(world.hasEntity(entity1)).toBe(false);
+      expect(world.exists(entity1)).toBe(false);
 
       // Verify relation components are cleaned up
-      expect(world.hasComponent(entity2, followsEntity1)).toBe(false);
-      expect(world.hasComponent(entity3, followsEntity1)).toBe(false);
+      expect(world.has(entity2, followsEntity1)).toBe(false);
+      expect(world.has(entity3, followsEntity1)).toBe(false);
 
       // Query should now return empty
       const followersAfterDestroy = world.queryEntities([followsEntity1]);
       expect(followersAfterDestroy).toHaveLength(0);
 
       // entity2 and entity3 should still exist but without the relation components
-      expect(world.hasEntity(entity2)).toBe(true);
-      expect(world.hasEntity(entity3)).toBe(true);
+      expect(world.exists(entity2)).toBe(true);
+      expect(world.exists(entity3)).toBe(true);
     });
 
     it("should clean up components when entity is used directly as component type and destroyed", () => {
       const world = new World();
 
       // Create entities
-      const entity1 = world.createEntity(); // This will be used as component type
-      const entity2 = world.createEntity(); // This will have entity1 as component
+      const entity1 = world.new(); // This will be used as component type
+      const entity2 = world.new(); // This will have entity1 as component
 
       // Add entity1 directly as a component type to entity2
-      world.addComponent(entity2, entity1);
-      world.flushCommands();
+      world.set(entity2, entity1);
+      world.sync();
 
       // Verify the component exists
-      expect(world.hasComponent(entity2, entity1)).toBe(true);
+      expect(world.has(entity2, entity1)).toBe(true);
 
       // Query entities that have entity1 as component
       const entitiesWithComponent = world.queryEntities([entity1]);
       expect(entitiesWithComponent).toContain(entity2);
 
       // Destroy entity1
-      world.destroyEntity(entity1);
-      world.flushCommands();
+      world.destroy(entity1);
+      world.sync();
 
       // Verify entity1 is destroyed
-      expect(world.hasEntity(entity1)).toBe(false);
+      expect(world.exists(entity1)).toBe(false);
 
       // Verify the component is cleaned up
-      expect(world.hasComponent(entity2, entity1)).toBe(false);
+      expect(world.has(entity2, entity1)).toBe(false);
 
       // Query should now return empty
       const entitiesWithComponentAfterDestroy = world.queryEntities([entity1]);
       expect(entitiesWithComponentAfterDestroy).toHaveLength(0);
 
       // entity2 should still exist
-      expect(world.hasEntity(entity2)).toBe(true);
+      expect(world.exists(entity2)).toBe(true);
     });
   });
 
@@ -495,7 +495,7 @@ describe("World", () => {
 
     it("should trigger component added hooks", () => {
       const world = new World();
-      const entity = world.createEntity();
+      const entity = world.new();
       const position: Position = { x: 10, y: 20 };
 
       let hookCalled = false;
@@ -512,8 +512,8 @@ describe("World", () => {
         },
       });
 
-      world.addComponent(entity, positionComponent, position);
-      world.flushCommands();
+      world.set(entity, positionComponent, position);
+      world.sync();
 
       expect(hookCalled).toBe(true);
       expect(hookEntityId).toBe(entity);
@@ -523,11 +523,11 @@ describe("World", () => {
 
     it("should trigger component removed hooks", () => {
       const world = new World();
-      const entity = world.createEntity();
+      const entity = world.new();
       const position: Position = { x: 10, y: 20 };
 
-      world.addComponent(entity, positionComponent, position);
-      world.flushCommands();
+      world.set(entity, positionComponent, position);
+      world.sync();
 
       let hookCalled = false;
       let hookEntityId: EntityId | undefined;
@@ -541,8 +541,8 @@ describe("World", () => {
         },
       });
 
-      world.removeComponent(entity, positionComponent);
-      world.flushCommands();
+      world.delete(entity, positionComponent);
+      world.sync();
 
       expect(hookCalled).toBe(true);
       expect(hookEntityId).toBe(entity);
@@ -551,7 +551,7 @@ describe("World", () => {
 
     it("should handle multiple hooks for the same component type", () => {
       const world = new World();
-      const entity = world.createEntity();
+      const entity = world.new();
       const position: Position = { x: 10, y: 20 };
 
       let hook1Called = false;
@@ -569,8 +569,8 @@ describe("World", () => {
         },
       });
 
-      world.addComponent(entity, positionComponent, position);
-      world.flushCommands();
+      world.set(entity, positionComponent, position);
+      world.sync();
 
       expect(hook1Called).toBe(true);
       expect(hook2Called).toBe(true);
@@ -578,7 +578,7 @@ describe("World", () => {
 
     it("should support hooks with both onAdded and onRemoved", () => {
       const world = new World();
-      const entity = world.createEntity();
+      const entity = world.new();
       const position: Position = { x: 10, y: 20 };
 
       let addedCalled = false;
@@ -593,21 +593,21 @@ describe("World", () => {
         },
       });
 
-      world.addComponent(entity, positionComponent, position);
-      world.flushCommands();
+      world.set(entity, positionComponent, position);
+      world.sync();
 
       expect(addedCalled).toBe(true);
       expect(removedCalled).toBe(false);
 
-      world.removeComponent(entity, positionComponent);
-      world.flushCommands();
+      world.delete(entity, positionComponent);
+      world.sync();
 
       expect(removedCalled).toBe(true);
     });
 
     it("should support hooks with only onAdded", () => {
       const world = new World();
-      const entity = world.createEntity();
+      const entity = world.new();
       const position: Position = { x: 10, y: 20 };
 
       let addedCalled = false;
@@ -618,19 +618,19 @@ describe("World", () => {
         },
       });
 
-      world.addComponent(entity, positionComponent, position);
-      world.flushCommands();
+      world.set(entity, positionComponent, position);
+      world.sync();
 
       expect(addedCalled).toBe(true);
     });
 
     it("should support hooks with only onRemoved", () => {
       const world = new World();
-      const entity = world.createEntity();
+      const entity = world.new();
       const position: Position = { x: 10, y: 20 };
 
-      world.addComponent(entity, positionComponent, position);
-      world.flushCommands();
+      world.set(entity, positionComponent, position);
+      world.sync();
 
       let removedCalled = false;
 
@@ -640,8 +640,8 @@ describe("World", () => {
         },
       });
 
-      world.removeComponent(entity, positionComponent);
-      world.flushCommands();
+      world.delete(entity, positionComponent);
+      world.sync();
 
       expect(removedCalled).toBe(true);
     });
@@ -651,8 +651,8 @@ describe("World", () => {
     it("should trigger wildcard relation hooks for matching relation components", () => {
       const world = new World();
       const positionComponent = component<{ x: number; y: number }>();
-      const entity1 = world.createEntity();
-      const entity2 = world.createEntity();
+      const entity1 = world.new();
+      const entity2 = world.new();
 
       // Create a relation component (positionComponent -> entity2)
       const relationId = relation(positionComponent, entity2);
@@ -678,15 +678,15 @@ describe("World", () => {
       });
 
       // Add the relation component
-      world.addComponent(entity1, relationId, { x: 10, y: 20 });
-      world.flushCommands();
+      world.set(entity1, relationId, { x: 10, y: 20 });
+      world.sync();
 
       expect(addedCalled).toBe(true);
       expect(addedComponentType).toBe(relationId);
 
       // Remove the relation component
-      world.removeComponent(entity1, relationId);
-      world.flushCommands();
+      world.delete(entity1, relationId);
+      world.sync();
 
       expect(removedCalled).toBe(true);
       expect(removedComponentType).toBe(relationId);
@@ -696,8 +696,8 @@ describe("World", () => {
       const world = new World();
       const positionComponent = component<{ x: number; y: number }>();
       const velocityComponent = component<{ vx: number; vy: number }>();
-      const entity1 = world.createEntity();
-      const entity2 = world.createEntity();
+      const entity1 = world.new();
+      const entity2 = world.new();
 
       // Create a wildcard relation ID for positionComponent
       const wildcardRelationId = relation(positionComponent, "*");
@@ -712,8 +712,8 @@ describe("World", () => {
       });
 
       // Add a velocity component (not a position relation)
-      world.addComponent(entity1, velocityComponent, { vx: 1, vy: 2 });
-      world.flushCommands();
+      world.set(entity1, velocityComponent, { vx: 1, vy: 2 });
+      world.sync();
 
       expect(hookCalled).toBe(false);
     });

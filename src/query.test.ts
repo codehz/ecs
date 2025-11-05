@@ -17,15 +17,15 @@ describe("Query", () => {
       const world = new World();
       const query = world.createQuery([positionComponent]);
 
-      const entity1 = world.createEntity();
-      const entity2 = world.createEntity();
-      const entity3 = world.createEntity();
+      const entity1 = world.new();
+      const entity2 = world.new();
+      const entity3 = world.new();
 
-      world.addComponent(entity1, positionComponent, { x: 1, y: 2 });
-      world.addComponent(entity2, positionComponent, { x: 3, y: 4 });
+      world.set(entity1, positionComponent, { x: 1, y: 2 });
+      world.set(entity2, positionComponent, { x: 3, y: 4 });
       // entity3 has no components
 
-      world.flushCommands(); // Execute deferred commands
+      world.sync(); // Execute deferred commands
 
       const entities = query.getEntities();
       expect(entities).toContain(entity1);
@@ -37,29 +37,29 @@ describe("Query", () => {
       const world = new World();
       const query = world.createQuery([positionComponent, velocityComponent]);
 
-      const entity1 = world.createEntity();
-      world.addComponent(entity1, positionComponent, { x: 1, y: 2 });
-      world.addComponent(entity1, velocityComponent, { x: 0.1, y: 0.2 });
+      const entity1 = world.new();
+      world.set(entity1, positionComponent, { x: 1, y: 2 });
+      world.set(entity1, velocityComponent, { x: 0.1, y: 0.2 });
 
-      world.flushCommands();
+      world.sync();
 
       // Initially should have entity1
       expect(query.getEntities()).toEqual([entity1]);
 
       // Create entity2 with same components (should reuse archetype)
-      const entity2 = world.createEntity();
-      world.addComponent(entity2, positionComponent, { x: 3, y: 4 });
-      world.addComponent(entity2, velocityComponent, { x: 0.2, y: 0.3 });
+      const entity2 = world.new();
+      world.set(entity2, positionComponent, { x: 3, y: 4 });
+      world.set(entity2, velocityComponent, { x: 0.2, y: 0.3 });
 
-      world.flushCommands();
+      world.sync();
 
       // Should still work (archetype reused, no new archetype created)
       expect(query.getEntities()).toContain(entity1);
       expect(query.getEntities()).toContain(entity2);
 
       // Create entity3 with only position (creates new archetype)
-      const entity3 = world.createEntity();
-      world.addComponent(entity3, positionComponent, { x: 5, y: 6 });
+      const entity3 = world.new();
+      world.set(entity3, positionComponent, { x: 5, y: 6 });
 
       // Query should still only return entities with both components
       const entities = query.getEntities();
@@ -72,8 +72,8 @@ describe("Query", () => {
       const world = new World();
       const query = world.createQuery([velocityComponent]);
 
-      const entity = world.createEntity();
-      world.addComponent(entity, positionComponent, { x: 1, y: 2 });
+      const entity = world.new();
+      world.set(entity, positionComponent, { x: 1, y: 2 });
 
       const entities = query.getEntities();
       expect(entities).toEqual([]);
@@ -83,10 +83,10 @@ describe("Query", () => {
       const world = new World();
       const query = world.createQuery([positionComponent]);
 
-      const entity = world.createEntity();
-      world.addComponent(entity, positionComponent, { x: 1, y: 2 });
+      const entity = world.new();
+      world.set(entity, positionComponent, { x: 1, y: 2 });
 
-      world.flushCommands();
+      world.sync();
 
       expect(query.disposed).toBe(false);
       expect(query.getEntities()).toEqual([entity]);
@@ -104,15 +104,15 @@ describe("Query", () => {
       const velocityQuery = world.createQuery([velocityComponent]);
       const bothQuery = world.createQuery([positionComponent, velocityComponent]);
 
-      const entity1 = world.createEntity();
-      const entity2 = world.createEntity();
+      const entity1 = world.new();
+      const entity2 = world.new();
 
-      world.addComponent(entity1, positionComponent, { x: 1, y: 2 });
-      world.addComponent(entity1, velocityComponent, { x: 0.1, y: 0.2 });
+      world.set(entity1, positionComponent, { x: 1, y: 2 });
+      world.set(entity1, velocityComponent, { x: 0.1, y: 0.2 });
 
-      world.addComponent(entity2, positionComponent, { x: 3, y: 4 });
+      world.set(entity2, positionComponent, { x: 3, y: 4 });
 
-      world.flushCommands();
+      world.sync();
 
       const positionEntities = positionQuery.getEntities();
       expect(positionEntities).toContain(entity1);
@@ -127,11 +127,11 @@ describe("Query", () => {
       const query1 = world.createQuery([positionComponent]);
       const query2 = world.createQuery([velocityComponent]);
 
-      const entity = world.createEntity();
-      world.addComponent(entity, positionComponent, { x: 1, y: 2 });
-      world.addComponent(entity, velocityComponent, { x: 0.1, y: 0.2 });
+      const entity = world.new();
+      world.set(entity, positionComponent, { x: 1, y: 2 });
+      world.set(entity, velocityComponent, { x: 0.1, y: 0.2 });
 
-      world.flushCommands();
+      world.sync();
 
       expect(query1.getEntities()).toEqual([entity]);
       expect(query2.getEntities()).toEqual([entity]);
@@ -151,20 +151,20 @@ describe("Query", () => {
       const world = new World();
       const query = world.createQuery([positionComponent, velocityComponent]);
 
-      const entity1 = world.createEntity();
-      const entity2 = world.createEntity();
+      const entity1 = world.new();
+      const entity2 = world.new();
 
       const pos1: Position = { x: 1, y: 2 };
       const vel1: Velocity = { x: 0.1, y: 0.2 };
       const pos2: Position = { x: 3, y: 4 };
       const vel2: Velocity = { x: 0.3, y: 0.4 };
 
-      world.addComponent(entity1, positionComponent, pos1);
-      world.addComponent(entity1, velocityComponent, vel1);
-      world.addComponent(entity2, positionComponent, pos2);
-      world.addComponent(entity2, velocityComponent, vel2);
+      world.set(entity1, positionComponent, pos1);
+      world.set(entity1, velocityComponent, vel1);
+      world.set(entity2, positionComponent, pos2);
+      world.set(entity2, velocityComponent, vel2);
 
-      world.flushCommands();
+      world.sync();
 
       const results = query.getEntitiesWithComponents([positionComponent, velocityComponent]);
 
@@ -187,16 +187,16 @@ describe("Query", () => {
       const world = new World();
       const query = world.createQuery([positionComponent]);
 
-      const entity1 = world.createEntity();
-      const entity2 = world.createEntity();
+      const entity1 = world.new();
+      const entity2 = world.new();
 
       const pos1: Position = { x: 1, y: 2 };
       const pos2: Position = { x: 3, y: 4 };
 
-      world.addComponent(entity1, positionComponent, pos1);
-      world.addComponent(entity2, positionComponent, pos2);
+      world.set(entity1, positionComponent, pos1);
+      world.set(entity2, positionComponent, pos2);
 
-      world.flushCommands();
+      world.sync();
 
       const visitedEntities: EntityId[] = [];
       const visitedPositions: Position[] = [];
@@ -218,16 +218,16 @@ describe("Query", () => {
       const world = new World();
       const query = world.createQuery([positionComponent]);
 
-      const entity1 = world.createEntity();
-      const entity2 = world.createEntity();
+      const entity1 = world.new();
+      const entity2 = world.new();
 
       const pos1: Position = { x: 1, y: 2 };
       const pos2: Position = { x: 3, y: 4 };
 
-      world.addComponent(entity1, positionComponent, pos1);
-      world.addComponent(entity2, positionComponent, pos2);
+      world.set(entity1, positionComponent, pos1);
+      world.set(entity2, positionComponent, pos2);
 
-      world.flushCommands();
+      world.sync();
 
       const positions = query.getComponentData(positionComponent);
 
@@ -240,16 +240,16 @@ describe("Query", () => {
       const world = new World();
       const query = world.createQuery([positionComponent], { negativeComponentTypes: [healthComponent] });
 
-      const entity1 = world.createEntity();
-      const entity2 = world.createEntity();
-      const entity3 = world.createEntity();
+      const entity1 = world.new();
+      const entity2 = world.new();
+      const entity3 = world.new();
 
-      world.addComponent(entity1, positionComponent, { x: 1, y: 2 });
-      world.addComponent(entity2, positionComponent, { x: 3, y: 4 });
-      world.addComponent(entity2, healthComponent, { value: 100 }); // entity2 has health, should be excluded
-      world.addComponent(entity3, healthComponent, { value: 50 }); // entity3 has no position, already excluded
+      world.set(entity1, positionComponent, { x: 1, y: 2 });
+      world.set(entity2, positionComponent, { x: 3, y: 4 });
+      world.set(entity2, healthComponent, { value: 100 }); // entity2 has health, should be excluded
+      world.set(entity3, healthComponent, { value: 50 }); // entity3 has no position, already excluded
 
-      world.flushCommands();
+      world.sync();
 
       const entities = query.getEntities();
       expect(entities).toContain(entity1);
@@ -264,18 +264,18 @@ describe("Query", () => {
       const wildcardPositionRelation = relation(positionComponent, "*");
       const query = world.createQuery([wildcardPositionRelation]);
 
-      const entity1 = world.createEntity();
-      const entity2 = world.createEntity();
-      const entity3 = world.createEntity();
+      const entity1 = world.new();
+      const entity2 = world.new();
+      const entity3 = world.new();
 
-      world.addComponent(entity1, positionComponent, { x: 1, y: 2 });
-      world.addComponent(entity1, velocityComponent, { x: 0.1, y: 0.2 });
+      world.set(entity1, positionComponent, { x: 1, y: 2 });
+      world.set(entity1, velocityComponent, { x: 0.1, y: 0.2 });
 
-      world.addComponent(entity2, positionComponent, { x: 3, y: 4 });
+      world.set(entity2, positionComponent, { x: 3, y: 4 });
 
       // entity3 has no position component
 
-      world.flushCommands();
+      world.sync();
 
       const entities = query.getEntities();
       expect(entities).toContain(entity1);
@@ -290,20 +290,20 @@ describe("Query", () => {
       const wildcardPositionRelation = relation(positionComponent, "*");
       const query = world.createQuery([velocityComponent, wildcardPositionRelation]);
 
-      const entity1 = world.createEntity();
-      const entity2 = world.createEntity();
-      const entity3 = world.createEntity();
+      const entity1 = world.new();
+      const entity2 = world.new();
+      const entity3 = world.new();
 
-      world.addComponent(entity1, positionComponent, { x: 1, y: 2 });
-      world.addComponent(entity1, velocityComponent, { x: 0.1, y: 0.2 });
+      world.set(entity1, positionComponent, { x: 1, y: 2 });
+      world.set(entity1, velocityComponent, { x: 0.1, y: 0.2 });
 
-      world.addComponent(entity2, positionComponent, { x: 3, y: 4 });
+      world.set(entity2, positionComponent, { x: 3, y: 4 });
       // entity2 doesn't have velocity
 
-      world.addComponent(entity3, velocityComponent, { x: 0.5, y: 0.6 });
+      world.set(entity3, velocityComponent, { x: 0.5, y: 0.6 });
       // entity3 doesn't have position
 
-      world.flushCommands();
+      world.sync();
     });
   });
 

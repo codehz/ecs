@@ -19,9 +19,9 @@ describe("CommandBuffer", () => {
     const componentType2 = 200 as EntityId<any>;
 
     // Add commands
-    buffer.addComponent(entity1, componentType1, { x: 1 });
-    buffer.addComponent(entity1, componentType2, { y: 2 });
-    buffer.removeComponent(entity2, componentType1);
+    buffer.set(entity1, componentType1, { x: 1 });
+    buffer.set(entity1, componentType2, { y: 2 });
+    buffer.delete(entity2, componentType1);
 
     // Execute
     buffer.execute();
@@ -34,8 +34,8 @@ describe("CommandBuffer", () => {
     expect(entity1Execution).toBeDefined();
     if (entity1Execution) {
       expect(entity1Execution.commands).toHaveLength(2);
-      expect(entity1Execution.commands[0]!.type).toBe("addComponent");
-      expect(entity1Execution.commands[1]!.type).toBe("addComponent");
+      expect(entity1Execution.commands[0]!.type).toBe("set");
+      expect(entity1Execution.commands[1]!.type).toBe("set");
     }
 
     // Check entity2 commands
@@ -43,7 +43,7 @@ describe("CommandBuffer", () => {
     expect(entity2Execution).toBeDefined();
     if (entity2Execution) {
       expect(entity2Execution.commands).toHaveLength(1);
-      expect(entity2Execution.commands[0]!.type).toBe("removeComponent");
+      expect(entity2Execution.commands[0]!.type).toBe("delete");
     }
 
     // Verify buffer is cleared
@@ -63,8 +63,8 @@ describe("CommandBuffer", () => {
     const componentType = 100 as EntityId<any>;
 
     // Add commands including destroy
-    buffer.addComponent(entity, componentType, { x: 1 });
-    buffer.destroyEntity(entity);
+    buffer.set(entity, componentType, { x: 1 });
+    buffer.destroy(entity);
 
     buffer.execute();
 
@@ -82,7 +82,7 @@ describe("CommandBuffer", () => {
     const entity = 1 as EntityId;
     const componentType = 100 as EntityId<any>;
 
-    buffer.addComponent(entity, componentType, { x: 1 });
+    buffer.set(entity, componentType, { x: 1 });
     expect(buffer.getCommands()).toHaveLength(1);
 
     buffer.execute();
@@ -96,7 +96,7 @@ describe("CommandBuffer", () => {
     const entity = 1 as EntityId;
     const componentType = 100 as EntityId<any>;
 
-    buffer.addComponent(entity, componentType, { x: 1 });
+    buffer.set(entity, componentType, { x: 1 });
     expect(buffer.getCommands()).toHaveLength(1);
 
     buffer.clear();
@@ -114,7 +114,7 @@ describe("CommandBuffer", () => {
       if (executedCommands.length === 1) {
         const newEntity = 3 as EntityId;
         const newComponentType = 300 as EntityId<any>;
-        bufferRef.addComponent(newEntity, newComponentType, { z: 3 });
+        bufferRef.set(newEntity, newComponentType, { z: 3 });
       }
     };
 
@@ -127,8 +127,8 @@ describe("CommandBuffer", () => {
     const componentType2 = 200 as EntityId<any>;
 
     // Add initial commands
-    buffer.addComponent(entity1, componentType1, { x: 1 });
-    buffer.addComponent(entity2, componentType2, { y: 2 });
+    buffer.set(entity1, componentType1, { x: 1 });
+    buffer.set(entity2, componentType2, { y: 2 });
 
     // Execute
     buffer.execute();
@@ -141,7 +141,7 @@ describe("CommandBuffer", () => {
     expect(entity1Execution).toBeDefined();
     if (entity1Execution) {
       expect(entity1Execution.commands).toHaveLength(1);
-      expect(entity1Execution.commands[0]!.type).toBe("addComponent");
+      expect(entity1Execution.commands[0]!.type).toBe("set");
     }
 
     // Second execution: entity2
@@ -149,7 +149,7 @@ describe("CommandBuffer", () => {
     expect(entity2Execution).toBeDefined();
     if (entity2Execution) {
       expect(entity2Execution.commands).toHaveLength(1);
-      expect(entity2Execution.commands[0]!.type).toBe("addComponent");
+      expect(entity2Execution.commands[0]!.type).toBe("set");
     }
 
     // Third execution: new entity
@@ -157,7 +157,7 @@ describe("CommandBuffer", () => {
     expect(entity3Execution).toBeDefined();
     if (entity3Execution) {
       expect(entity3Execution.commands).toHaveLength(1);
-      expect(entity3Execution.commands[0]!.type).toBe("addComponent");
+      expect(entity3Execution.commands[0]!.type).toBe("set");
     }
 
     // Buffer should be empty
@@ -174,7 +174,7 @@ describe("CommandBuffer", () => {
       // Always add more commands to create infinite loop
       const newEntity = (entityId + 1) as EntityId;
       const newComponentType = 100 as EntityId<any>;
-      bufferRef.addComponent(newEntity, newComponentType, { value: entityId });
+      bufferRef.set(newEntity, newComponentType, { value: entityId });
     };
 
     const buffer = new CommandBuffer(mockExecutor);
@@ -184,7 +184,7 @@ describe("CommandBuffer", () => {
     const componentType = 100 as EntityId<any>;
 
     // Add initial command
-    buffer.addComponent(entity, componentType, { x: 1 });
+    buffer.set(entity, componentType, { x: 1 });
 
     // Execute should throw error due to infinite loop
     expect(() => buffer.execute()).toThrow("Command execution exceeded maximum iterations, possible infinite loop");

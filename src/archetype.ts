@@ -130,7 +130,7 @@ export class Archetype {
    * Check if an entity is in this archetype
    * @param entityId The entity to check
    */
-  hasEntity(entityId: EntityId): boolean {
+  exists(entityId: EntityId): boolean {
     return this.entityToIndex.has(entityId);
   }
 
@@ -140,17 +140,14 @@ export class Archetype {
    * @param entityId The entity
    * @param componentType The wildcard relation type
    */
-  getComponent<T>(entityId: EntityId, componentType: WildcardRelationId<T>): [EntityId<unknown>, any][];
+  get<T>(entityId: EntityId, componentType: WildcardRelationId<T>): [EntityId<unknown>, any][];
   /**
    * Get component data for a specific entity and component type
    * @param entityId The entity
    * @param componentType The component type
    */
-  getComponent<T>(entityId: EntityId, componentType: EntityId<T>): T;
-  getComponent<T>(
-    entityId: EntityId,
-    componentType: EntityId<T> | WildcardRelationId<T>,
-  ): T | [EntityId<unknown>, any][] {
+  get<T>(entityId: EntityId, componentType: EntityId<T>): T;
+  get<T>(entityId: EntityId, componentType: EntityId<T> | WildcardRelationId<T>): T | [EntityId<unknown>, any][] {
     const index = this.entityToIndex.get(entityId);
     if (index === undefined) {
       throw new Error(`Entity ${entityId} is not in this archetype`);
@@ -188,7 +185,7 @@ export class Archetype {
    * @param componentType The component type
    * @param data The component data
    */
-  setComponent<T>(entityId: EntityId, componentType: EntityId<T>, data: T): void {
+  set<T>(entityId: EntityId, componentType: EntityId<T>, data: T): void {
     if (!this.componentData.has(componentType)) {
       throw new Error(`Component type ${componentType} is not in this archetype`);
     }

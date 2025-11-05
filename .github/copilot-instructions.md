@@ -42,12 +42,12 @@ const PositionId = component<Position>(1);
 const VelocityId = component<Velocity>(2);
 ```
 
-**Deferred Operations** (always call `world.flushCommands()` after):
+**Deferred Operations** (always call `world.sync()` after):
 
 ```typescript
-world.addComponent(entity, PositionId, { x: 0, y: 0 });
-world.removeComponent(entity, VelocityId);
-world.flushCommands(); // Execute queued changes
+world.set(entity, PositionId, { x: 0, y: 0 });
+world.delete(entity, VelocityId);
+world.sync(); // Execute queued changes
 ```
 
 **Query Usage**:
@@ -82,7 +82,7 @@ class MovementSystem implements System {
 ```typescript
 // Direct relation: Position component targeting entity2
 const positionRelation = relation(PositionId, entity2);
-world.addComponent(entity1, positionRelation, { x: 10, y: 20 });
+world.set(entity1, positionRelation, { x: 10, y: 20 });
 
 // Wildcard relation: Listen to all Position relations
 const wildcardPosition = relation(PositionId, "*");

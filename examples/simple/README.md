@@ -29,7 +29,7 @@ bun run examples/simple/demo.ts
 为了提高性能和代码简洁性，demo使用了以下优化：
 
 - **预先缓存Query**: 在系统初始化时创建查询并缓存，而不是在每次update中重新创建。这避免了重复的查询创建开销。
-- **使用forEach接口**: 使用Query的`forEach`方法直接获取组件数据，避免手动调用`world.getComponent()`，减少函数调用开销并提高代码可读性。
+- **使用forEach接口**: 使用Query的`forEach`方法直接获取组件数据，避免手动调用`world.get()`，减少函数调用开销并提高代码可读性。
 
 ## 输出示例
 

@@ -38,12 +38,12 @@ const VelocityId = component<Velocity>(2);
 const world = new World();
 
 // 创建实体
-const entity = world.createEntity();
-world.addComponent(entity, PositionId, { x: 0, y: 0 });
-world.addComponent(entity, VelocityId, { x: 1, y: 0.5 });
+const entity = world.new();
+world.set(entity, PositionId, { x: 0, y: 0 });
+world.set(entity, VelocityId, { x: 1, y: 0.5 });
 
 // 应用更改
-world.flushCommands();
+world.sync();
 
 // 创建查询并更新
 const query = world.createQuery([PositionId, VelocityId]);
@@ -77,8 +77,8 @@ world.registerLifecycleHook(VelocityId, {
 });
 
 // 添加组件时会触发钩子
-world.addComponent(entity, PositionId, { x: 0, y: 0 });
-world.flushCommands(); // 钩子在这里被调用
+world.set(entity, PositionId, { x: 0, y: 0 });
+world.sync(); // 钩子在这里被调用
 ```
 
 ### 通配符关系生命周期钩子
@@ -98,7 +98,7 @@ const PositionId = component<Position>(1);
 const world = new World();
 
 // 创建实体
-const entity = world.createEntity();
+const entity = world.new();
 
 // 创建通配符关系ID，用于监听所有 Position 相关的关系
 const wildcardPositionRelation = relation(PositionId, "*");
@@ -114,10 +114,10 @@ world.registerLifecycleHook(wildcardPositionRelation, {
 });
 
 // 创建实体间的关系
-const entity2 = world.createEntity();
+const entity2 = world.new();
 const positionRelation = relation(PositionId, entity2);
-world.addComponent(entity, positionRelation, { x: 10, y: 20 });
-world.flushCommands(); // 通配符钩子会被触发
+world.set(entity, positionRelation, { x: 10, y: 20 });
+world.sync(); // 通配符钩子会被触发
 ```
 
 ### Exclusive Relations
@@ -137,20 +137,20 @@ const world = new World();
 world.setExclusive(ChildOf);
 
 // 创建实体
-const child = world.createEntity();
-const parent1 = world.createEntity();
-const parent2 = world.createEntity();
+const child = world.new();
+const parent1 = world.new();
+const parent2 = world.new();
 
 // 添加第一个关系
-world.addComponent(child, relation(ChildOf, parent1));
-world.flushCommands();
-console.log(world.hasComponent(child, relation(ChildOf, parent1))); // true
+world.set(child, relation(ChildOf, parent1));
+world.sync();
+console.log(world.has(child, relation(ChildOf, parent1))); // true
 
 // 添加第二个关系 - 会自动移除第一个
-world.addComponent(child, relation(ChildOf, parent2));
-world.flushCommands();
-console.log(world.hasComponent(child, relation(ChildOf, parent1))); // false
-console.log(world.hasComponent(child, relation(ChildOf, parent2))); // true
+world.set(child, relation(ChildOf, parent2));
+world.sync();
+console.log(world.has(child, relation(ChildOf, parent1))); // false
+console.log(world.has(child, relation(ChildOf, parent2))); // true
 ```
 
 ### 运行示例
@@ -169,16 +169,16 @@ bun run examples/simple/demo.ts
 
 ### World
 
-- `createEntity()`: 创建新实体
-- `addComponent(entity, componentId, data)`: 向实体添加组件
-- `removeComponent(entity, componentId)`: 从实体移除组件
+- `new()`: 创建新实体
+- `set(entity, componentId, data)`: 向实体添加组件
+- `delete(entity, componentId)`: 从实体移除组件
 - `setExclusive(componentId)`: 将组件标记为独占关系
 - `createQuery(componentIds)`: 创建查询
 - `registerSystem(system)`: 注册系统
 - `registerLifecycleHook(componentId, hook)`: 注册组件或通配符关系生命周期钩子
 - `unregisterLifecycleHook(componentId, hook)`: 注销组件或通配符关系生命周期钩子
 - `update(...params)`: 更新世界（参数取决于泛型配置）
-- `flushCommands()`: 应用命令缓冲区
+- `sync()`: 应用命令缓冲区
 
 ### Entity
 
