@@ -431,7 +431,7 @@ describe("World", () => {
       let hookComponentType: EntityId<Position> | undefined;
       let hookComponent: Position | undefined;
 
-      world.registerComponentLifecycleHook(positionComponent, {
+      world.registerLifecycleHook(positionComponent, {
         onAdded: (entityId, componentType, component) => {
           hookCalled = true;
           hookEntityId = entityId;
@@ -461,7 +461,7 @@ describe("World", () => {
       let hookEntityId: EntityId | undefined;
       let hookComponentType: EntityId<Position> | undefined;
 
-      world.registerComponentLifecycleHook(positionComponent, {
+      world.registerLifecycleHook(positionComponent, {
         onRemoved: (entityId, componentType) => {
           hookCalled = true;
           hookEntityId = entityId;
@@ -485,13 +485,13 @@ describe("World", () => {
       let hook1Called = false;
       let hook2Called = false;
 
-      world.registerComponentLifecycleHook(positionComponent, {
+      world.registerLifecycleHook(positionComponent, {
         onAdded: () => {
           hook1Called = true;
         },
       });
 
-      world.registerComponentLifecycleHook(positionComponent, {
+      world.registerLifecycleHook(positionComponent, {
         onAdded: () => {
           hook2Called = true;
         },
@@ -512,7 +512,7 @@ describe("World", () => {
       let addedCalled = false;
       let removedCalled = false;
 
-      world.registerComponentLifecycleHook(positionComponent, {
+      world.registerLifecycleHook(positionComponent, {
         onAdded: () => {
           addedCalled = true;
         },
@@ -540,7 +540,7 @@ describe("World", () => {
 
       let addedCalled = false;
 
-      world.registerComponentLifecycleHook(positionComponent, {
+      world.registerLifecycleHook(positionComponent, {
         onAdded: () => {
           addedCalled = true;
         },
@@ -562,7 +562,7 @@ describe("World", () => {
 
       let removedCalled = false;
 
-      world.registerComponentLifecycleHook(positionComponent, {
+      world.registerLifecycleHook(positionComponent, {
         onRemoved: () => {
           removedCalled = true;
         },
@@ -585,13 +585,16 @@ describe("World", () => {
       // Create a relation component (positionComponent -> entity2)
       const relationId = createRelationId(positionComponent, entity2);
 
+      // Create a wildcard relation ID for positionComponent
+      const wildcardRelationId = createRelationId(positionComponent, "*");
+
       let addedCalled = false;
       let removedCalled = false;
       let addedComponentType: EntityId<{ x: number; y: number }> | undefined;
       let removedComponentType: EntityId<{ x: number; y: number }> | undefined;
 
       // Register a wildcard relation hook for positionComponent
-      world.registerWildcardRelationLifecycleHook(positionComponent, {
+      world.registerLifecycleHook(wildcardRelationId, {
         onAdded: (entityId, componentType, component) => {
           addedCalled = true;
           addedComponentType = componentType;
@@ -624,10 +627,13 @@ describe("World", () => {
       const entity1 = world.createEntity();
       const entity2 = world.createEntity();
 
+      // Create a wildcard relation ID for positionComponent
+      const wildcardRelationId = createRelationId(positionComponent, "*");
+
       let hookCalled = false;
 
       // Register a wildcard relation hook for positionComponent
-      world.registerWildcardRelationLifecycleHook(positionComponent, {
+      world.registerLifecycleHook(wildcardRelationId, {
         onAdded: () => {
           hookCalled = true;
         },

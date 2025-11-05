@@ -1,7 +1,7 @@
 import { Archetype } from "./archetype";
 import { CommandBuffer, type Command } from "./command-buffer";
 import type { EntityId, WildcardRelationId } from "./entity";
-import { EntityIdManager, getDetailedIdType, getIdType } from "./entity";
+import { EntityIdManager, createRelationId, getDetailedIdType, getIdType, isWildcardRelationId } from "./entity";
 import { Query } from "./query";
 import type { QueryFilter } from "./query-filter";
 import type { System } from "./system";
@@ -23,15 +23,9 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
   private componentToArchetypes = new Map<EntityId<any>, Archetype[]>();
 
   /**
-   * Hook storage for component lifecycle events
+   * Hook storage for component and wildcard relation lifecycle events
    */
-  private componentLifecycleHooks = new Map<EntityId<any>, Set<LifecycleHook<any>>>();
-
-  /**
-   * Hook storage for wildcard relation lifecycle events
-   * Maps base component type to set of wildcard relation hooks
-   */
-  private wildcardRelationLifecycleHooks = new Map<EntityId<any>, Set<LifecycleHook>>();
+  private lifecycleHooks = new Map<EntityId<any>, Set<LifecycleHook<any>>>();
 
   /**
    * Reverse index tracking which entities use each entity as a component type
@@ -221,48 +215,24 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
   }
 
   /**
-   * Register a lifecycle hook for component events
+   * Register a lifecycle hook for component or wildcard relation events
    */
-  registerComponentLifecycleHook<T>(componentType: EntityId<T>, hook: LifecycleHook<T>): void {
-    if (!this.componentLifecycleHooks.has(componentType)) {
-      this.componentLifecycleHooks.set(componentType, new Set());
+  registerLifecycleHook<T>(componentType: EntityId<T>, hook: LifecycleHook<T>): void {
+    if (!this.lifecycleHooks.has(componentType)) {
+      this.lifecycleHooks.set(componentType, new Set());
     }
-    this.componentLifecycleHooks.get(componentType)!.add(hook);
+    this.lifecycleHooks.get(componentType)!.add(hook);
   }
 
   /**
-   * Unregister a lifecycle hook for component events
+   * Unregister a lifecycle hook for component or wildcard relation events
    */
-  unregisterComponentLifecycleHook<T>(componentType: EntityId<T>, hook: LifecycleHook<T>): void {
-    const hooks = this.componentLifecycleHooks.get(componentType);
+  unregisterLifecycleHook<T>(componentType: EntityId<T>, hook: LifecycleHook<T>): void {
+    const hooks = this.lifecycleHooks.get(componentType);
     if (hooks) {
       hooks.delete(hook);
       if (hooks.size === 0) {
-        this.componentLifecycleHooks.delete(componentType);
-      }
-    }
-  }
-
-  /**
-   * Register a lifecycle hook for wildcard relation events
-   * The hook will be triggered for any component that matches the wildcard relation pattern
-   */
-  registerWildcardRelationLifecycleHook<T>(baseComponentType: EntityId<T>, hook: LifecycleHook<T>): void {
-    if (!this.wildcardRelationLifecycleHooks.has(baseComponentType)) {
-      this.wildcardRelationLifecycleHooks.set(baseComponentType, new Set());
-    }
-    this.wildcardRelationLifecycleHooks.get(baseComponentType)!.add(hook as LifecycleHook<any>);
-  }
-
-  /**
-   * Unregister a lifecycle hook for wildcard relation events
-   */
-  unregisterWildcardRelationLifecycleHook<T>(baseComponentType: EntityId<T>, hook: LifecycleHook<T>): void {
-    const hooks = this.wildcardRelationLifecycleHooks.get(baseComponentType);
-    if (hooks) {
-      hooks.delete(hook as LifecycleHook<any>);
-      if (hooks.size === 0) {
-        this.wildcardRelationLifecycleHooks.delete(baseComponentType);
+        this.lifecycleHooks.delete(componentType);
       }
     }
   }
@@ -674,9 +644,10 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
   ): void {
     // Trigger component added hooks
     for (const [componentType, component] of addedComponents) {
-      const hooks = this.componentLifecycleHooks.get(componentType);
-      if (hooks) {
-        for (const hook of hooks) {
+      // Trigger direct component hooks
+      const directHooks = this.lifecycleHooks.get(componentType);
+      if (directHooks) {
+        for (const hook of directHooks) {
           if (hook.onAdded) {
             hook.onAdded(entityId, componentType, component);
           }
@@ -690,7 +661,8 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
         detailedType.type === "component-relation" ||
         detailedType.type === "wildcard-relation"
       ) {
-        const wildcardHooks = this.wildcardRelationLifecycleHooks.get(detailedType.componentId!);
+        const wildcardRelationId = createRelationId(detailedType.componentId!, "*");
+        const wildcardHooks = this.lifecycleHooks.get(wildcardRelationId);
         if (wildcardHooks) {
           for (const hook of wildcardHooks) {
             if (hook.onAdded) {
@@ -703,9 +675,10 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
 
     // Trigger component removed hooks
     for (const componentType of removedComponents) {
-      const hooks = this.componentLifecycleHooks.get(componentType);
-      if (hooks) {
-        for (const hook of hooks) {
+      // Trigger direct component hooks
+      const directHooks = this.lifecycleHooks.get(componentType);
+      if (directHooks) {
+        for (const hook of directHooks) {
           if (hook.onRemoved) {
             hook.onRemoved(entityId, componentType);
           }
@@ -719,7 +692,8 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
         detailedType.type === "component-relation" ||
         detailedType.type === "wildcard-relation"
       ) {
-        const wildcardHooks = this.wildcardRelationLifecycleHooks.get(detailedType.componentId!);
+        const wildcardRelationId = createRelationId(detailedType.componentId!, "*");
+        const wildcardHooks = this.lifecycleHooks.get(wildcardRelationId);
         if (wildcardHooks) {
           for (const hook of wildcardHooks) {
             if (hook.onRemoved) {

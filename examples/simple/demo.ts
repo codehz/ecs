@@ -52,7 +52,7 @@ function main() {
   world.addComponent(entity2, VelocityId, { x: -0.5, y: 1 });
 
   // 注册组件钩子
-  world.registerComponentLifecycleHook(PositionId, {
+  world.registerLifecycleHook(PositionId, {
     onAdded: (entityId, componentType, component) => {
       console.log(
         `组件添加钩子触发: 实体 ${entityId} 添加了 ${componentType} 组件，值为 (${component.x}, ${component.y})`,
@@ -60,7 +60,7 @@ function main() {
     },
   });
 
-  world.registerComponentLifecycleHook(VelocityId, {
+  world.registerLifecycleHook(VelocityId, {
     onRemoved: (entityId, componentType) => {
       console.log(`组件移除钩子触发: 实体 ${entityId} 移除了 ${componentType} 组件`);
     },
