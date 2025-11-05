@@ -38,6 +38,12 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
    */
   private entityReverseIndex = new Map<EntityId, Set<{ sourceEntityId: EntityId; componentType: EntityId }>>();
 
+  /**
+   * Set of component IDs that are marked as exclusive relations
+   * For exclusive relations, an entity can have at most one relation per base component
+   */
+  private exclusiveComponents = new Set<EntityId>();
+
   constructor() {
     this.commandBuffer = new CommandBuffer((entityId, commands) => this.executeEntityCommands(entityId, commands));
   }
@@ -227,6 +233,14 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
         this.lifecycleHooks.delete(componentType);
       }
     }
+  }
+
+  /**
+   * Mark a component as exclusive relation
+   * For exclusive relations, an entity can have at most one relation per base component
+   */
+  setExclusive(componentId: EntityId): void {
+    this.exclusiveComponents.add(componentId);
   }
 
   /**
@@ -463,6 +477,23 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
       switch (cmd.type) {
         case "addComponent":
           if (cmd.componentType) {
+            const detailedType = getDetailedIdType(cmd.componentType);
+            // For exclusive relations, remove existing relations with the same base component
+            if (
+              (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
+              this.exclusiveComponents.has(detailedType.componentId!)
+            ) {
+              for (const componentType of currentArchetype.componentTypes) {
+                const componentDetailedType = getDetailedIdType(componentType);
+                if (
+                  (componentDetailedType.type === "entity-relation" ||
+                    componentDetailedType.type === "component-relation") &&
+                  componentDetailedType.componentId === detailedType.componentId
+                ) {
+                  changeset.removeComponent(componentType);
+                }
+              }
+            }
             changeset.addComponent(cmd.componentType, cmd.component);
           }
           break;

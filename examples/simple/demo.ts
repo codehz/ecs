@@ -1,4 +1,4 @@
-import { component } from "../../src/entity";
+import { component, relation } from "../../src/entity";
 import type { Query } from "../../src/query";
 import type { System } from "../../src/system";
 import { World } from "../../src/world";
@@ -10,6 +10,7 @@ type Velocity = { x: number; y: number };
 // 定义组件ID
 const PositionId = component<Position>();
 const VelocityId = component<Velocity>();
+const ChildOf = component(); // Exclusive relation component
 
 // 移动系统
 class MovementSystem implements System {
@@ -50,6 +51,28 @@ function main() {
   const entity2 = world.createEntity();
   world.addComponent(entity2, PositionId, { x: 10, y: 10 });
   world.addComponent(entity2, VelocityId, { x: -0.5, y: 1 });
+
+  // 演示Exclusive Relations
+  console.log("\nExclusive Relations Demo:");
+  const parent1 = world.createEntity();
+  const parent2 = world.createEntity();
+  const child = world.createEntity();
+
+  // 设置ChildOf为exclusive relation
+  world.setExclusive(ChildOf);
+
+  // 添加第一个parent relation
+  world.addComponent(child, relation(ChildOf, parent1));
+  world.flushCommands();
+  console.log(`Child has ChildOf(parent1): ${world.hasComponent(child, relation(ChildOf, parent1))}`);
+  console.log(`Child has ChildOf(parent2): ${world.hasComponent(child, relation(ChildOf, parent2))}`);
+
+  // 添加第二个parent relation - 应该替换第一个
+  world.addComponent(child, relation(ChildOf, parent2));
+  world.flushCommands();
+  console.log(`After adding ChildOf(parent2):`);
+  console.log(`Child has ChildOf(parent1): ${world.hasComponent(child, relation(ChildOf, parent1))}`);
+  console.log(`Child has ChildOf(parent2): ${world.hasComponent(child, relation(ChildOf, parent2))}`);
 
   // 注册组件钩子
   world.registerLifecycleHook(PositionId, {

@@ -142,6 +142,32 @@ describe("World", () => {
       expect(result).toEqual([]);
     });
 
+    it("should handle exclusive relations", () => {
+      const world = new World();
+      const entity = world.createEntity();
+      const parent1 = world.createEntity();
+      const parent2 = world.createEntity();
+
+      // Mark ChildOf as exclusive
+      const ChildOf = component();
+      world.setExclusive(ChildOf);
+
+      const childOfParent1 = relation(ChildOf, parent1);
+      const childOfParent2 = relation(ChildOf, parent2);
+
+      // Add first relation
+      world.addComponent(entity, childOfParent1);
+      world.flushCommands();
+      expect(world.hasComponent(entity, childOfParent1)).toBe(true);
+      expect(world.hasComponent(entity, childOfParent2)).toBe(false);
+
+      // Add second relation - should replace the first
+      world.addComponent(entity, childOfParent2);
+      world.flushCommands();
+      expect(world.hasComponent(entity, childOfParent1)).toBe(false);
+      expect(world.hasComponent(entity, childOfParent2)).toBe(true);
+    });
+
     it("should handle multiple components", () => {
       const world = new World();
       const entity = world.createEntity();
