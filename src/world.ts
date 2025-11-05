@@ -187,11 +187,16 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
   }
 
   /**
-   * Get wildcard relations from an entity
+   * Get component data for a specific entity and wildcard relation type
+   * Returns an array of all matching relation instances
+   * @param entityId The entity
+   * @param componentType The wildcard relation type
    */
-  getComponent<T>(entityId: EntityId, componentType: WildcardRelationId<T>): [EntityId<unknown>, any][];
+  getComponent<T>(entityId: EntityId, componentType: WildcardRelationId<T>): [EntityId<unknown>, T][];
   /**
-   * Get a component from an entity
+   * Get component data for a specific entity and component type
+   * @param entityId The entity
+   * @param componentType The component type
    */
   getComponent<T>(entityId: EntityId, componentType: EntityId<T>): T;
   getComponent<T>(
