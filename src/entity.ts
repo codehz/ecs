@@ -402,6 +402,6 @@ const globalComponentIdAllocator = new ComponentIdAllocator();
 /**
  * Allocate a new component ID from the global allocator
  */
-export function component<T>(): ComponentId<T> {
+export function component<T = void>(): ComponentId<T> {
   return globalComponentIdAllocator.allocate<T>();
 }
