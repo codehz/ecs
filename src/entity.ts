@@ -398,6 +398,10 @@ export class ComponentIdAllocator {
 }
 
 const globalComponentIdAllocator = new ComponentIdAllocator();
+
+/**
+ * Allocate a new component ID from the global allocator
+ */
 export function component<T>(): ComponentId<T> {
   return globalComponentIdAllocator.allocate<T>();
 }
