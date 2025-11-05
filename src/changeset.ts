@@ -39,6 +39,22 @@ export class ComponentChangeset {
   }
 
   /**
+   * Merge another changeset into this one
+   */
+  merge(other: ComponentChangeset): void {
+    // Merge additions
+    for (const [componentType, component] of other.adds) {
+      this.adds.set(componentType, component);
+      this.removes.delete(componentType);
+    }
+    // Merge removals
+    for (const componentType of other.removes) {
+      this.removes.add(componentType);
+      this.adds.delete(componentType);
+    }
+  }
+
+  /**
    * Apply the changeset to existing components and return the final state
    */
   applyTo(existingComponents: Map<EntityId<any>, any>): Map<EntityId<any>, any> {

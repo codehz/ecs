@@ -146,4 +146,109 @@ describe("ComponentChangeset", () => {
       expect(changeset.removes.size).toBe(1);
     });
   });
+
+  describe("Merge Changesets", () => {
+    it("should merge additions into an empty changeset", () => {
+      const changeset1 = new ComponentChangeset();
+      const changeset2 = new ComponentChangeset();
+      changeset2.addComponent(PositionId, { x: 10, y: 20 });
+      changeset2.addComponent(VelocityId, { x: 1, y: 2 });
+
+      changeset1.merge(changeset2);
+
+      expect(changeset1.adds.get(PositionId)).toEqual({ x: 10, y: 20 });
+      expect(changeset1.adds.get(VelocityId)).toEqual({ x: 1, y: 2 });
+      expect(changeset1.removes.size).toBe(0);
+      expect(changeset1.hasChanges()).toBe(true);
+    });
+
+    it("should merge removals into an empty changeset", () => {
+      const changeset1 = new ComponentChangeset();
+      const changeset2 = new ComponentChangeset();
+      changeset2.removeComponent(PositionId);
+      changeset2.removeComponent(VelocityId);
+
+      changeset1.merge(changeset2);
+
+      expect(changeset1.removes.has(PositionId)).toBe(true);
+      expect(changeset1.removes.has(VelocityId)).toBe(true);
+      expect(changeset1.adds.size).toBe(0);
+      expect(changeset1.hasChanges()).toBe(true);
+    });
+
+    it("should merge additions and removals together", () => {
+      const changeset1 = new ComponentChangeset();
+      const changeset2 = new ComponentChangeset();
+      changeset2.addComponent(PositionId, { x: 10, y: 20 });
+      changeset2.removeComponent(VelocityId);
+
+      changeset1.merge(changeset2);
+
+      expect(changeset1.adds.get(PositionId)).toEqual({ x: 10, y: 20 });
+      expect(changeset1.removes.has(VelocityId)).toBe(true);
+      expect(changeset1.hasChanges()).toBe(true);
+    });
+
+    it("should override removal with addition when merging", () => {
+      const changeset1 = new ComponentChangeset();
+      changeset1.removeComponent(PositionId); // Initially removing
+
+      const changeset2 = new ComponentChangeset();
+      changeset2.addComponent(PositionId, { x: 10, y: 20 }); // Adding the same component
+
+      changeset1.merge(changeset2);
+
+      expect(changeset1.adds.get(PositionId)).toEqual({ x: 10, y: 20 });
+      expect(changeset1.removes.has(PositionId)).toBe(false);
+    });
+
+    it("should override addition with removal when merging", () => {
+      const changeset1 = new ComponentChangeset();
+      changeset1.addComponent(PositionId, { x: 5, y: 5 }); // Initially adding
+
+      const changeset2 = new ComponentChangeset();
+      changeset2.removeComponent(PositionId); // Removing the same component
+
+      changeset1.merge(changeset2);
+
+      expect(changeset1.adds.has(PositionId)).toBe(false);
+      expect(changeset1.removes.has(PositionId)).toBe(true);
+    });
+
+    it("should merge multiple changesets sequentially", () => {
+      const changeset1 = new ComponentChangeset();
+      changeset1.addComponent(PositionId, { x: 10, y: 20 });
+
+      const changeset2 = new ComponentChangeset();
+      changeset2.removeComponent(PositionId);
+      changeset2.addComponent(VelocityId, { x: 1, y: 2 });
+
+      const changeset3 = new ComponentChangeset();
+      changeset3.removeComponent(VelocityId);
+      changeset3.addComponent(HealthId, 100);
+
+      changeset1.merge(changeset2);
+      changeset1.merge(changeset3);
+
+      expect(changeset1.adds.has(PositionId)).toBe(false); // Removed by changeset2
+      expect(changeset1.removes.has(PositionId)).toBe(true);
+      expect(changeset1.adds.has(VelocityId)).toBe(false); // Removed by changeset3
+      expect(changeset1.removes.has(VelocityId)).toBe(true);
+      expect(changeset1.adds.get(HealthId)).toBe(100);
+      expect(changeset1.hasChanges()).toBe(true);
+    });
+
+    it("should handle merging empty changeset", () => {
+      const changeset1 = new ComponentChangeset();
+      changeset1.addComponent(PositionId, { x: 10, y: 20 });
+
+      const changeset2 = new ComponentChangeset(); // Empty
+
+      changeset1.merge(changeset2);
+
+      expect(changeset1.adds.get(PositionId)).toEqual({ x: 10, y: 20 });
+      expect(changeset1.removes.size).toBe(0);
+      expect(changeset1.hasChanges()).toBe(true);
+    });
+  });
 });
