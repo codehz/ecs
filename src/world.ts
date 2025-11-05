@@ -1,6 +1,6 @@
 import { Archetype } from "./archetype";
-import { CommandBuffer, type Command } from "./command-buffer";
 import { ComponentChangeset } from "./changeset";
+import { CommandBuffer, type Command } from "./command-buffer";
 import type { EntityId, WildcardRelationId } from "./entity";
 import { EntityIdManager, getDetailedIdType, getIdType, relation } from "./entity";
 import { Query } from "./query";
@@ -437,17 +437,20 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
   /**
    * @internal Execute commands for a single entity (for internal use by CommandBuffer)
    */
-  executeEntityCommands(entityId: EntityId, commands: Command[]): void {
+  executeEntityCommands(entityId: EntityId, commands: Command[]): ComponentChangeset {
+    // Track component changes using ComponentChangeset
+    const changeset = new ComponentChangeset();
+
     // Check if entity should be destroyed
     const hasDestroy = commands.some((cmd) => cmd.type === "destroyEntity");
     if (hasDestroy) {
       this._destroyEntity(entityId);
-      return;
+      return changeset;
     }
 
     const currentArchetype = this.entityToArchetype.get(entityId);
     if (!currentArchetype) {
-      return; // Entity doesn't exist, nothing to do
+      return changeset; // Entity doesn't exist, nothing to do
     }
 
     // Get current component data
@@ -458,9 +461,6 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
         currentComponents.set(componentType, data);
       }
     }
-
-    // Track component changes using ComponentChangeset
-    const changeset = new ComponentChangeset();
 
     // Process commands to determine final state
     for (const cmd of commands) {
@@ -553,6 +553,8 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
 
     // Trigger component lifecycle hooks
     this.executeComponentLifecycleHooks(entityId, changeset.adds, changeset.removes);
+
+    return changeset;
   }
 
   /**
