@@ -15,6 +15,8 @@ const HealthId = component<Health>();
 
 // 输入系统 - 处理用户输入
 class InputSystem implements System {
+  readonly dependencies: readonly System[] = [];
+
   update(world: World, deltaTime: number): void {
     console.log(`[InputSystem] Processing input at ${Date.now()}`);
     // 这里可以处理键盘/鼠标输入等
@@ -23,9 +25,11 @@ class InputSystem implements System {
 
 // 移动系统 - 依赖输入系统
 class MovementSystem implements System {
+  readonly dependencies: readonly System[];
   private query: Query;
 
-  constructor(world: World) {
+  constructor(world: World, inputSystem: InputSystem) {
+    this.dependencies = [inputSystem];
     this.query = world.createQuery([PositionId, VelocityId]);
   }
 
@@ -42,9 +46,11 @@ class MovementSystem implements System {
 
 // 伤害系统 - 依赖移动系统
 class DamageSystem implements System {
+  readonly dependencies: readonly System[];
   private query: Query;
 
-  constructor(world: World) {
+  constructor(world: World, movementSystem: MovementSystem) {
+    this.dependencies = [movementSystem];
     this.query = world.createQuery([PositionId, HealthId]);
   }
 
@@ -62,9 +68,11 @@ class DamageSystem implements System {
 
 // 渲染系统 - 依赖所有其他系统最后执行
 class RenderSystem implements System {
+  readonly dependencies: readonly System[];
   private query: Query;
 
-  constructor(world: World) {
+  constructor(world: World, damageSystem: DamageSystem) {
+    this.dependencies = [damageSystem];
     this.query = world.createQuery([PositionId]);
   }
 
@@ -85,22 +93,22 @@ function main() {
 
   // 创建系统实例
   const inputSystem = new InputSystem();
-  const movementSystem = new MovementSystem(world);
-  const damageSystem = new DamageSystem(world);
-  const renderSystem = new RenderSystem(world);
+  const movementSystem = new MovementSystem(world, inputSystem);
+  const damageSystem = new DamageSystem(world, movementSystem);
+  const renderSystem = new RenderSystem(world, damageSystem);
 
   // 注册系统并指定依赖关系
   // 输入系统没有依赖
   world.registerSystem(inputSystem);
 
   // 移动系统依赖输入系统
-  world.registerSystem(movementSystem, [inputSystem]);
+  world.registerSystem(movementSystem);
 
   // 伤害系统依赖移动系统
-  world.registerSystem(damageSystem, [movementSystem]);
+  world.registerSystem(damageSystem);
 
   // 渲染系统依赖伤害系统（确保所有更新都完成后才渲染）
-  world.registerSystem(renderSystem, [damageSystem]);
+  world.registerSystem(renderSystem);
 
   // 创建一些实体
   const entity1 = world.createEntity();

@@ -140,7 +140,7 @@ bun run examples/simple/demo.ts
 - `addComponent(entity, componentId, data)`: 向实体添加组件
 - `removeComponent(entity, componentId)`: 从实体移除组件
 - `createQuery(componentIds)`: 创建查询
-- `registerSystem(system, dependencies?)`: 注册系统，可选指定依赖系统列表
+- `registerSystem(system)`: 注册系统
 - `registerLifecycleHook(componentId, hook)`: 注册组件或通配符关系生命周期钩子
 - `unregisterLifecycleHook(componentId, hook)`: 注销组件或通配符关系生命周期钩子
 - `update(deltaTime)`: 更新世界

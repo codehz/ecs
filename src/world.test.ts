@@ -195,16 +195,12 @@ describe("World", () => {
   });
 
   describe("System Management", () => {
-    it("should register and unregister systems", () => {
+    it("should register systems", () => {
       const world = new World();
       const system = { update: () => {} };
 
       world.registerSystem(system);
       // Update should not throw
-      world.update(0.016);
-
-      world.unregisterSystem(system);
-      // Update should still not throw
       world.update(0.016);
     });
 
@@ -234,15 +230,17 @@ describe("World", () => {
       };
       const systemB = {
         update: () => executionOrder.push("B"),
+        dependencies: [systemA],
       };
       const systemC = {
         update: () => executionOrder.push("C"),
+        dependencies: [systemB],
       };
 
       // C depends on B, B depends on A
       world.registerSystem(systemA);
-      world.registerSystem(systemB, [systemA]);
-      world.registerSystem(systemC, [systemB]);
+      world.registerSystem(systemB);
+      world.registerSystem(systemC);
 
       world.update(0.016);
 

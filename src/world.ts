@@ -203,15 +203,8 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
   /**
    * Register a system with optional dependencies
    */
-  registerSystem(system: System<ExtraParams>, dependencies: System<ExtraParams>[] = []): void {
-    this.systemScheduler.addSystem(system, dependencies);
-  }
-
-  /**
-   * Unregister a system
-   */
-  unregisterSystem(system: System<ExtraParams>): void {
-    this.systemScheduler.removeSystem(system);
+  registerSystem(system: System<ExtraParams>): void {
+    this.systemScheduler.addSystem(system);
   }
 
   /**
