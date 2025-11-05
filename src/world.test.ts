@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { component, createEntityId, relation, type ComponentId, type EntityId } from "./entity";
+import { component, createEntityId, relation, type EntityId } from "./entity";
 import { World } from "./world";
 
 describe("World", () => {
@@ -79,7 +79,7 @@ describe("World", () => {
       world.delete(entity, positionComponent);
       world.sync();
       expect(world.has(entity, positionComponent)).toBe(false);
-      expect(world.get(entity, positionComponent)).toBeUndefined();
+      expect(() => world.get(entity, positionComponent)).toThrow(`Component type 22 is not in this archetype`);
     });
 
     it("should throw error when removing invalid component type", () => {

@@ -91,7 +91,7 @@ export class Archetype {
     // Add component data
     for (const componentType of this.componentTypes) {
       const data = componentData.get(componentType);
-      this.componentData.get(componentType)!.push(data === undefined ? MISSING_COMPONENT : data);
+      this.getComponentData(componentType).push(data === undefined ? MISSING_COMPONENT : data);
     }
   }
 
@@ -113,7 +113,7 @@ export class Archetype {
     // Extract component data
     const removedData = new Map<EntityId<any>, any>();
     for (const componentType of this.componentTypes) {
-      const dataArray = this.componentData.get(componentType)!;
+      const dataArray = this.getComponentData(componentType);
       removedData.set(componentType, dataArray[index]);
       dataArray.splice(index, 1);
     }
@@ -164,7 +164,7 @@ export class Archetype {
           (relDetailed.type === "entity-relation" || relDetailed.type === "component-relation") &&
           relDetailed.componentId === componentId
         ) {
-          const dataArray = this.componentData.get(relType);
+          const dataArray = this.getComponentData(relType);
           if (dataArray && dataArray[index] !== undefined) {
             const data = dataArray[index];
             relations.push([relDetailed.targetId, data === MISSING_COMPONENT ? undefined : data]);
@@ -174,7 +174,7 @@ export class Archetype {
 
       return relations;
     } else {
-      const data = this.componentData.get(componentType)?.[index];
+      const data = this.getComponentData(componentType)[index]!;
       return data === MISSING_COMPONENT ? (undefined as T) : data;
     }
   }
@@ -193,7 +193,7 @@ export class Archetype {
     if (index === undefined) {
       throw new Error(`Entity ${entityId} is not in this archetype`);
     }
-    const dataArray = this.componentData.get(componentType)!;
+    const dataArray = this.getComponentData(componentType);
     dataArray[index] = data;
   }
 
@@ -201,7 +201,7 @@ export class Archetype {
    * Get all entities in this archetype
    */
   getEntities(): EntityId[] {
-    return [...this.entities];
+    return this.entities;
   }
 
   /**
@@ -209,7 +209,11 @@ export class Archetype {
    * @param componentType The component type
    */
   getComponentData<T>(componentType: EntityId<T>): T[] {
-    return [...(this.componentData.get(componentType) || [])];
+    const data = this.componentData.get(componentType);
+    if (!data) {
+      throw new Error(`Component type ${componentType} is not in this archetype`);
+    }
+    return data;
   }
 
   /**
@@ -268,7 +272,7 @@ export class Archetype {
 
           return matchingRelations;
         } else {
-          return this.componentData.get(compType)!; // Always exists for regular components
+          return this.getComponentData(compType);
         }
       });
     });
@@ -284,12 +288,10 @@ export class Archetype {
           const matchingRelations = dataSource as EntityId<any>[];
           const relations: [EntityId<unknown>, any][] = [];
           for (const relType of matchingRelations) {
-            const dataArray = this.componentData.get(relType);
-            if (dataArray && dataArray[entityIndex] !== undefined) {
-              const data = dataArray[entityIndex];
-              const decodedRel = decodeRelationId(relType as RelationId<any>);
-              relations.push([decodedRel.targetId, data === MISSING_COMPONENT ? undefined : data]);
-            }
+            const dataArray = this.getComponentData(relType);
+            const data = dataArray[entityIndex];
+            const decodedRel = decodeRelationId(relType as RelationId<any>);
+            relations.push([decodedRel.targetId, data === MISSING_COMPONENT ? undefined : data]);
           }
           return relations;
         } else {
@@ -311,7 +313,7 @@ export class Archetype {
     for (let i = 0; i < this.entities.length; i++) {
       const components = new Map<EntityId<any>, any>();
       for (const componentType of this.componentTypes) {
-        const data = this.componentData.get(componentType)![i];
+        const data = this.getComponentData(componentType)[i];
         components.set(componentType, data === MISSING_COMPONENT ? undefined : data);
       }
       callback(this.entities[i]!, components);
