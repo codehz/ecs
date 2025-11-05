@@ -120,6 +120,39 @@ world.addComponent(entity, positionRelation, { x: 10, y: 20 });
 world.flushCommands(); // 通配符钩子会被触发
 ```
 
+### Exclusive Relations
+
+ECS 支持 Exclusive Relations，确保实体对于指定的组件类型最多只能有一个关系。当添加新的关系时，会自动移除之前的所有同类型关系：
+
+```typescript
+import { World, component, relation } from "@codehz/ecs";
+
+// 定义组件ID
+const ChildOf = component(); // 空组件，用于关系
+
+// 创建世界
+const world = new World();
+
+// 设置 ChildOf 为独占关系
+world.setExclusive(ChildOf);
+
+// 创建实体
+const child = world.createEntity();
+const parent1 = world.createEntity();
+const parent2 = world.createEntity();
+
+// 添加第一个关系
+world.addComponent(child, relation(ChildOf, parent1));
+world.flushCommands();
+console.log(world.hasComponent(child, relation(ChildOf, parent1))); // true
+
+// 添加第二个关系 - 会自动移除第一个
+world.addComponent(child, relation(ChildOf, parent2));
+world.flushCommands();
+console.log(world.hasComponent(child, relation(ChildOf, parent1))); // false
+console.log(world.hasComponent(child, relation(ChildOf, parent2))); // true
+```
+
 ### 运行示例
 
 ```bash
@@ -139,6 +172,7 @@ bun run examples/simple/demo.ts
 - `createEntity()`: 创建新实体
 - `addComponent(entity, componentId, data)`: 向实体添加组件
 - `removeComponent(entity, componentId)`: 从实体移除组件
+- `setExclusive(componentId)`: 将组件标记为独占关系
 - `createQuery(componentIds)`: 创建查询
 - `registerSystem(system)`: 注册系统
 - `registerLifecycleHook(componentId, hook)`: 注册组件或通配符关系生命周期钩子
