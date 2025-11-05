@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { ComponentId, EntityId } from "./entity";
 import {
   COMPONENT_ID_MAX,
-  ComponentIdManager,
+  ComponentIdAllocator,
   createComponentId,
   createEntityId,
   relation,
@@ -373,14 +373,14 @@ describe("EntityIdManager", () => {
 describe("ComponentIdManager", () => {
   describe("Allocation", () => {
     it("should allocate sequential component IDs starting from 1", () => {
-      const manager = new ComponentIdManager();
+      const manager = new ComponentIdAllocator();
       expect(manager.allocate()).toBe(createComponentId(1));
       expect(manager.allocate()).toBe(createComponentId(2));
       expect(manager.allocate()).toBe(createComponentId(3));
     });
 
     it("should allocate up to COMPONENT_ID_MAX", () => {
-      const manager = new ComponentIdManager();
+      const manager = new ComponentIdAllocator();
       for (let i = 1; i <= COMPONENT_ID_MAX; i++) {
         expect(manager.allocate()).toBe(createComponentId(i));
       }
@@ -388,7 +388,7 @@ describe("ComponentIdManager", () => {
     });
 
     it("should throw error when exceeding maximum component IDs", () => {
-      const manager = new ComponentIdManager();
+      const manager = new ComponentIdAllocator();
       // Allocate all available IDs
       for (let i = 1; i <= COMPONENT_ID_MAX; i++) {
         manager.allocate();
@@ -399,7 +399,7 @@ describe("ComponentIdManager", () => {
 
   describe("State Queries", () => {
     it("should report correct next ID", () => {
-      const manager = new ComponentIdManager();
+      const manager = new ComponentIdAllocator();
       expect(manager.getNextId()).toBe(1);
       manager.allocate();
       expect(manager.getNextId()).toBe(2);
@@ -408,7 +408,7 @@ describe("ComponentIdManager", () => {
     });
 
     it("should correctly report available IDs", () => {
-      const manager = new ComponentIdManager();
+      const manager = new ComponentIdAllocator();
       expect(manager.hasAvailableIds()).toBe(true);
 
       // Allocate all but one

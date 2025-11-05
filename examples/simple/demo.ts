@@ -1,4 +1,4 @@
-import { createComponentId } from "../../src/entity";
+import { component } from "../../src/entity";
 import type { Query } from "../../src/query";
 import type { System } from "../../src/system";
 import { World } from "../../src/world";
@@ -8,8 +8,8 @@ type Position = { x: number; y: number };
 type Velocity = { x: number; y: number };
 
 // 定义组件ID
-const PositionId = createComponentId<Position>(1);
-const VelocityId = createComponentId<Velocity>(2);
+const PositionId = component<Position>();
+const VelocityId = component<Velocity>();
 
 // 移动系统
 class MovementSystem implements System {

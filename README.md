@@ -23,15 +23,15 @@ bun install
 
 ```typescript
 import { World } from "@codehz/ecs";
-import { createComponentId } from "@codehz/ecs";
+import { component } from "@codehz/ecs";
 
 // 定义组件类型
 type Position = { x: number; y: number };
 type Velocity = { x: number; y: number };
 
 // 定义组件ID
-const PositionId = createComponentId<Position>(1);
-const VelocityId = createComponentId<Velocity>(2);
+const PositionId = component<Position>(1);
+const VelocityId = component<Velocity>(2);
 
 // 创建世界
 const world = new World();
@@ -85,13 +85,13 @@ world.flushCommands(); // 钩子在这里被调用
 ECS 还支持通配符关系生命周期钩子，可以监听特定组件的所有关系变化：
 
 ```typescript
-import { World, createComponentId, relation } from "@codehz/ecs";
+import { World, component, relation } from "@codehz/ecs";
 
 // 定义组件类型
 type Position = { x: number; y: number };
 
 // 定义组件ID
-const PositionId = createComponentId<Position>(1);
+const PositionId = component<Position>(1);
 
 // 创建世界
 const world = new World();
@@ -147,7 +147,7 @@ bun run examples/simple/demo.ts
 
 ### Entity
 
-- `createComponentId<T>(id)`: 创建类型安全的组件ID
+- `component<T>(id)`: 分配类型安全的组件ID（上限：1022个）
 
 ### Query
 

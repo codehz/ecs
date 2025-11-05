@@ -42,6 +42,7 @@ export const WILDCARD_TARGET_ID = 0;
 /**
  * Create a component ID
  * @param id Component identifier (1-1023)
+ * @see component
  */
 export function createComponentId<T = void>(id: number): ComponentId<T> {
   if (id < 1 || id > COMPONENT_ID_MAX) {
@@ -365,7 +366,7 @@ export class EntityIdManager {
  * Component ID Manager for automatic allocation
  * Components are typically registered once and not recycled
  */
-export class ComponentIdManager {
+export class ComponentIdAllocator {
   private nextId: number = 1;
 
   /**
@@ -394,4 +395,9 @@ export class ComponentIdManager {
   hasAvailableIds(): boolean {
     return this.nextId <= COMPONENT_ID_MAX;
   }
+}
+
+const globalComponentIdAllocator = new ComponentIdAllocator();
+export function component<T>(): ComponentId<T> {
+  return globalComponentIdAllocator.allocate<T>();
 }
