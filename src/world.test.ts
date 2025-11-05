@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { component, createEntityId, relation, type EntityId } from "./entity";
+import { component, createEntityId, relation, type ComponentId, type EntityId } from "./entity";
 import { World } from "./world";
 
 describe("World", () => {
@@ -192,6 +192,31 @@ describe("World", () => {
 
       expect(() => world.getComponent(fakeEntity, positionComponent)).toThrow("Entity 9999 does not exist");
     });
+
+    it("should allow setting undefined as component data", () => {
+      const world = new World();
+      const entity = world.createEntity();
+
+      const optionalPositionComponent = component<Position | undefined>();
+
+      // Add component with undefined data
+      world.addComponent(entity, optionalPositionComponent, undefined);
+      world.flushCommands();
+
+      expect(world.hasComponent(entity, optionalPositionComponent)).toBe(true);
+      expect(world.getComponent(entity, optionalPositionComponent)).toBeUndefined();
+
+      // Update to a defined value
+      const position: Position = { x: 10, y: 20 };
+      world.addComponent(entity, optionalPositionComponent, position);
+      world.flushCommands();
+      expect(world.getComponent(entity, optionalPositionComponent)).toEqual(position);
+
+      // Update back to undefined
+      world.addComponent(entity, optionalPositionComponent, undefined);
+      world.flushCommands();
+      expect(world.getComponent(entity, optionalPositionComponent)).toBeUndefined();
+    });
   });
 
   describe("System Management", () => {
@@ -366,8 +391,8 @@ describe("World", () => {
 
       // Create relation components (entity2 and entity3 follow entity1)
       const followsEntity1 = relation(followsComponent, entity1);
-      world.addComponent(entity2, followsEntity1, null);
-      world.addComponent(entity3, followsEntity1, null);
+      world.addComponent(entity2, followsEntity1);
+      world.addComponent(entity3, followsEntity1);
       world.flushCommands();
 
       // Verify relations exist
@@ -407,7 +432,7 @@ describe("World", () => {
       const entity2 = world.createEntity(); // This will have entity1 as component
 
       // Add entity1 directly as a component type to entity2
-      world.addComponent(entity2, entity1, null);
+      world.addComponent(entity2, entity1);
       world.flushCommands();
 
       // Verify the component exists

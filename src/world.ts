@@ -2,7 +2,7 @@ import { Archetype } from "./archetype";
 import { ComponentChangeset } from "./changeset";
 import { CommandBuffer, type Command } from "./command-buffer";
 import type { EntityId, WildcardRelationId } from "./entity";
-import { EntityIdManager, getDetailedIdType, getIdType, relation } from "./entity";
+import { EntityIdManager, getDetailedIdType, relation } from "./entity";
 import { Query } from "./query";
 import { serializeQueryFilter, type QueryFilter } from "./query-filter";
 import type { System } from "./system";
@@ -129,7 +129,9 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
   /**
    * Add a component to an entity (deferred)
    */
-  addComponent<T>(entityId: EntityId, componentType: EntityId<T>, component: T): void {
+  addComponent(entityId: EntityId, componentType: EntityId<void>): void;
+  addComponent<T>(entityId: EntityId, componentType: EntityId<T>, component: NoInfer<T>): void;
+  addComponent(entityId: EntityId, componentType: EntityId, component?: any): void {
     if (!this.hasEntity(entityId)) {
       throw new Error(`Entity ${entityId} does not exist`);
     }
@@ -453,16 +455,14 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
     const currentComponents = new Map<EntityId<any>, any>();
     for (const componentType of currentArchetype.componentTypes) {
       const data = currentArchetype.getComponent(entityId, componentType);
-      if (data !== undefined) {
-        currentComponents.set(componentType, data);
-      }
+      currentComponents.set(componentType, data);
     }
 
     // Process commands to determine final state
     for (const cmd of commands) {
       switch (cmd.type) {
         case "addComponent":
-          if (cmd.componentType && cmd.component !== undefined) {
+          if (cmd.componentType) {
             changeset.addComponent(cmd.componentType, cmd.component);
           }
           break;

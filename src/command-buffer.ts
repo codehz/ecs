@@ -27,7 +27,9 @@ export class CommandBuffer {
   /**
    * Add a component to an entity (deferred)
    */
-  addComponent<T>(entityId: EntityId, componentType: EntityId<T>, component: T): void {
+  addComponent(entityId: EntityId, componentType: EntityId<void>): void;
+  addComponent<T>(entityId: EntityId, componentType: EntityId<T>, component: NoInfer<T>): void;
+  addComponent(entityId: EntityId, componentType: EntityId, component?: any): void {
     this.commands.push({ type: "addComponent", entityId, componentType, component });
   }
 
