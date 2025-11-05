@@ -79,7 +79,7 @@ describe("World", () => {
       world.delete(entity, positionComponent);
       world.sync();
       expect(world.has(entity, positionComponent)).toBe(false);
-      expect(() => world.get(entity, positionComponent)).toThrow(`Component type 22 is not in this archetype`);
+      expect(() => world.get(entity, positionComponent)).toThrow(/^Component type \d+ is not in this archetype$/);
     });
 
     it("should throw error when removing invalid component type", () => {
