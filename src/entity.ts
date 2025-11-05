@@ -64,9 +64,9 @@ type RelationIdType<T, U> = U extends void ? EntityId<T> : T extends void ? Enti
  * @param componentId The component ID (0-1023)
  * @param targetId The target ID (entity, component, or '*' for wildcard)
  */
-export function createRelationId<T>(componentId: EntityId<T>, targetId: "*"): WildcardRelationId<T>;
-export function createRelationId<T, U>(componentId: EntityId<T>, targetId: EntityId<U>): RelationIdType<T, U>;
-export function createRelationId<T>(componentId: EntityId<T>, targetId: EntityId<any> | "*"): EntityId<any> {
+export function relation<T>(componentId: EntityId<T>, targetId: "*"): WildcardRelationId<T>;
+export function relation<T, U>(componentId: EntityId<T>, targetId: EntityId<U>): RelationIdType<T, U>;
+export function relation<T>(componentId: EntityId<T>, targetId: EntityId<any> | "*"): EntityId<any> {
   if (!isComponentId(componentId)) {
     throw new Error("First argument must be a valid component ID");
   }

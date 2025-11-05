@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { Archetype } from "./archetype";
 import type { EntityId } from "./entity";
-import { createRelationId } from "./entity";
+import { relation } from "./entity";
 import { matchesComponentTypes, matchesFilter, type QueryFilter } from "./query-filter";
 
 // Mock component IDs for testing
@@ -69,22 +69,22 @@ describe("Query Filter Functions", () => {
     });
 
     it("should return false when archetype contains a negative wildcard relation component", () => {
-      const wildcardRelation = createRelationId(relationComponent, "*");
+      const wildcardRelation = relation(relationComponent, "*");
       const archetype = new Archetype([positionComponent, wildcardRelation]);
       const filter: QueryFilter = { negativeComponentTypes: [wildcardRelation] };
       expect(matchesFilter(archetype, filter)).toBe(false);
     });
 
     it("should return false when archetype contains a specific relation matching negative wildcard filter", () => {
-      const wildcardRelation = createRelationId(relationComponent, "*");
-      const otherRelation = createRelationId(relationComponent, 1025 as EntityId);
+      const wildcardRelation = relation(relationComponent, "*");
+      const otherRelation = relation(relationComponent, 1025 as EntityId);
       const archetype = new Archetype([positionComponent, otherRelation]);
       const filter: QueryFilter = { negativeComponentTypes: [wildcardRelation] };
       expect(matchesFilter(archetype, filter)).toBe(false);
     });
 
     it("should return true when archetype does not contain any relations with the wildcard component", () => {
-      const wildcardRelation = createRelationId(relationComponent, "*");
+      const wildcardRelation = relation(relationComponent, "*");
       const otherComponent = 5 as EntityId<{ other: number }>;
       const archetype = new Archetype([positionComponent, otherComponent]);
       const filter: QueryFilter = { negativeComponentTypes: [wildcardRelation] };
@@ -92,8 +92,8 @@ describe("Query Filter Functions", () => {
     });
 
     it("should return false when archetype contains wildcard relation matching negative filter", () => {
-      const wildcardRelation = createRelationId(relationComponent, "*");
-      const matchingRelation = createRelationId(relationComponent, 1026 as EntityId);
+      const wildcardRelation = relation(relationComponent, "*");
+      const matchingRelation = relation(relationComponent, 1026 as EntityId);
       const archetype = new Archetype([positionComponent, matchingRelation]);
       const filter: QueryFilter = { negativeComponentTypes: [wildcardRelation] };
       expect(matchesFilter(archetype, filter)).toBe(false);

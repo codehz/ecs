@@ -85,7 +85,7 @@ world.flushCommands(); // 钩子在这里被调用
 ECS 还支持通配符关系生命周期钩子，可以监听特定组件的所有关系变化：
 
 ```typescript
-import { World, createComponentId, createRelationId } from "@codehz/ecs";
+import { World, createComponentId, relation } from "@codehz/ecs";
 
 // 定义组件类型
 type Position = { x: number; y: number };
@@ -100,7 +100,7 @@ const world = new World();
 const entity = world.createEntity();
 
 // 创建通配符关系ID，用于监听所有 Position 相关的关系
-const wildcardPositionRelation = createRelationId(PositionId, "*");
+const wildcardPositionRelation = relation(PositionId, "*");
 
 // 注册通配符关系钩子
 world.registerLifecycleHook(wildcardPositionRelation, {
@@ -114,7 +114,7 @@ world.registerLifecycleHook(wildcardPositionRelation, {
 
 // 创建实体间的关系
 const entity2 = world.createEntity();
-const positionRelation = createRelationId(PositionId, entity2);
+const positionRelation = relation(PositionId, entity2);
 world.addComponent(entity, positionRelation, { x: 10, y: 20 });
 world.flushCommands(); // 通配符钩子会被触发
 ```

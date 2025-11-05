@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { Archetype, createComponentId, createEntityId, createRelationId, type EntityId } from "./index";
+import { Archetype, createComponentId, createEntityId, relation, type EntityId } from "./index";
 
 describe("Archetype", () => {
   type Position = { x: number; y: number };
@@ -70,9 +70,9 @@ describe("Archetype", () => {
     // Create relation component types
     const target1 = createEntityId(1027);
     const target2 = createEntityId(1028);
-    const relation1 = createRelationId(positionComponent, target1);
-    const relation2 = createRelationId(positionComponent, target2);
-    const wildcardPositionRelation = createRelationId(positionComponent, "*");
+    const relation1 = relation(positionComponent, target1);
+    const relation2 = relation(positionComponent, target2);
+    const wildcardPositionRelation = relation(positionComponent, "*");
 
     const entity = createEntityId(1024);
 
@@ -133,8 +133,8 @@ describe("Archetype", () => {
 
   it("should handle wildcard relations in forEachWithComponents", () => {
     // Create a relation component type: position relation from entity to entity
-    const positionRelation = createRelationId(positionComponent, createEntityId(1026)); // Dummy target for type
-    const wildcardPositionRelation = createRelationId(positionComponent, "*");
+    const positionRelation = relation(positionComponent, createEntityId(1026)); // Dummy target for type
+    const wildcardPositionRelation = relation(positionComponent, "*");
 
     const entity1 = createEntityId(1024);
     const entity2 = createEntityId(1025);
@@ -142,9 +142,9 @@ describe("Archetype", () => {
     const target2 = createEntityId(1028);
 
     // Create specific relations for entity1 and entity2
-    const relation1 = createRelationId(positionComponent, target1);
-    const relation2 = createRelationId(positionComponent, target2);
-    const relation3 = createRelationId(positionComponent, createEntityId(1029)); // For entity2
+    const relation1 = relation(positionComponent, target1);
+    const relation2 = relation(positionComponent, target2);
+    const relation3 = relation(positionComponent, createEntityId(1029)); // For entity2
 
     // Archetype with multiple relations
     const archetype1 = new Archetype([relation1, relation2]);
@@ -190,9 +190,9 @@ describe("Archetype", () => {
     // Test with wildcard relations to check cache invalidation
     const target1 = createEntityId(1027);
     const target2 = createEntityId(1028);
-    const relation1 = createRelationId(positionComponent, target1);
-    const relation2 = createRelationId(positionComponent, target2);
-    const wildcardPositionRelation = createRelationId(positionComponent, "*");
+    const relation1 = relation(positionComponent, target1);
+    const relation2 = relation(positionComponent, target2);
+    const wildcardPositionRelation = relation(positionComponent, "*");
 
     const archetype = new Archetype([relation1, relation2]);
 

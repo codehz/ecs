@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { createComponentId, createEntityId, createRelationId, type EntityId } from "./entity";
+import { createComponentId, createEntityId, relation, type EntityId } from "./entity";
 import { World } from "./world";
 
 describe("World", () => {
@@ -96,8 +96,8 @@ describe("World", () => {
       const position: Position = { x: 10, y: 20 };
       const targetEntity1 = world.createEntity();
       const targetEntity2 = world.createEntity();
-      const relationId1 = createRelationId(positionComponent, targetEntity1);
-      const relationId2 = createRelationId(positionComponent, targetEntity2);
+      const relationId1 = relation(positionComponent, targetEntity1);
+      const relationId2 = relation(positionComponent, targetEntity2);
 
       // Add multiple relation components with the same base component
       world.addComponent(entity, relationId1, position);
@@ -107,7 +107,7 @@ describe("World", () => {
       expect(world.hasComponent(entity, relationId2)).toBe(true);
 
       // Remove using wildcard relation should remove all matching components
-      const wildcardRelation = createRelationId(positionComponent, "*");
+      const wildcardRelation = relation(positionComponent, "*");
       world.removeComponent(entity, wildcardRelation);
       world.flushCommands();
       expect(world.hasComponent(entity, relationId1)).toBe(false);
@@ -120,8 +120,8 @@ describe("World", () => {
       const position: Position = { x: 10, y: 20 };
       const targetEntity1 = world.createEntity();
       const targetEntity2 = world.createEntity();
-      const relationId1 = createRelationId(positionComponent, targetEntity1);
-      const relationId2 = createRelationId(positionComponent, targetEntity2);
+      const relationId1 = relation(positionComponent, targetEntity1);
+      const relationId2 = relation(positionComponent, targetEntity2);
 
       // Add multiple relation components with the same base component
       world.addComponent(entity, relationId1, position);
@@ -129,7 +129,7 @@ describe("World", () => {
       world.flushCommands();
 
       // Get wildcard relations
-      const wildcardRelation = createRelationId(positionComponent, "*");
+      const wildcardRelation = relation(positionComponent, "*");
       const relations = world.getComponent(entity, wildcardRelation);
       expect(relations).toEqual([
         [targetEntity2, { x: 20, y: 30 }],
@@ -179,7 +179,7 @@ describe("World", () => {
       const world = new World();
       const entity = world.createEntity();
       const position: Position = { x: 10, y: 20 };
-      const wildcardRelation = createRelationId(positionComponent, "*");
+      const wildcardRelation = relation(positionComponent, "*");
 
       expect(() => world.addComponent(entity, wildcardRelation, position)).toThrow(
         "Cannot directly add wildcard relation components",
@@ -280,7 +280,7 @@ describe("World", () => {
       const entity3 = world.createEntity();
 
       // Create a wildcard relation for position component
-      const wildcardPositionRelation = createRelationId(positionComponent, "*");
+      const wildcardPositionRelation = relation(positionComponent, "*");
 
       world.addComponent(entity1, positionComponent, { x: 1, y: 2 });
       world.addComponent(entity1, velocityComponent, { x: 0.1, y: 0.2 });
@@ -305,7 +305,7 @@ describe("World", () => {
       const entity3 = world.createEntity();
 
       // Create a wildcard relation for position component
-      const wildcardPositionRelation = createRelationId(positionComponent, "*");
+      const wildcardPositionRelation = relation(positionComponent, "*");
 
       world.addComponent(entity1, positionComponent, { x: 1, y: 2 });
       world.addComponent(entity1, velocityComponent, { x: 0.1, y: 0.2 });
@@ -343,7 +343,7 @@ describe("World", () => {
       world.flushCommands();
 
       // Create relation components (entity2 and entity3 follow entity1)
-      const followsEntity1 = createRelationId(followsComponent, entity1);
+      const followsEntity1 = relation(followsComponent, entity1);
       world.addComponent(entity2, followsEntity1, null);
       world.addComponent(entity3, followsEntity1, null);
       world.flushCommands();
@@ -583,10 +583,10 @@ describe("World", () => {
       const entity2 = world.createEntity();
 
       // Create a relation component (positionComponent -> entity2)
-      const relationId = createRelationId(positionComponent, entity2);
+      const relationId = relation(positionComponent, entity2);
 
       // Create a wildcard relation ID for positionComponent
-      const wildcardRelationId = createRelationId(positionComponent, "*");
+      const wildcardRelationId = relation(positionComponent, "*");
 
       let addedCalled = false;
       let removedCalled = false;
@@ -628,7 +628,7 @@ describe("World", () => {
       const entity2 = world.createEntity();
 
       // Create a wildcard relation ID for positionComponent
-      const wildcardRelationId = createRelationId(positionComponent, "*");
+      const wildcardRelationId = relation(positionComponent, "*");
 
       let hookCalled = false;
 

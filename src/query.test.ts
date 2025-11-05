@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { World } from "./world";
 import { Query } from "./query";
-import { createComponentId, createRelationId, type EntityId } from "./entity";
+import { createComponentId, relation, type EntityId } from "./entity";
 
 describe("Query", () => {
   describe("Query Creation and Basic Functionality", () => {
@@ -261,7 +261,7 @@ describe("Query", () => {
       const world = new World();
 
       // Create a wildcard relation for position component
-      const wildcardPositionRelation = createRelationId(positionComponent, "*");
+      const wildcardPositionRelation = relation(positionComponent, "*");
       const query = world.createQuery([wildcardPositionRelation]);
 
       const entity1 = world.createEntity();
@@ -287,7 +287,7 @@ describe("Query", () => {
       const world = new World();
 
       // Create a wildcard relation for position component
-      const wildcardPositionRelation = createRelationId(positionComponent, "*");
+      const wildcardPositionRelation = relation(positionComponent, "*");
       const query = world.createQuery([velocityComponent, wildcardPositionRelation]);
 
       const entity1 = world.createEntity();

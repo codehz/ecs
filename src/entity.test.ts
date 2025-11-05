@@ -5,7 +5,7 @@ import {
   ComponentIdManager,
   createComponentId,
   createEntityId,
-  createRelationId,
+  relation,
   decodeRelationId,
   ENTITY_ID_START,
   EntityIdManager,
@@ -38,7 +38,7 @@ describe("Entity ID System", () => {
       expect(isComponentId(createComponentId(2))).toBe(true);
       expect(isComponentId(createComponentId(COMPONENT_ID_MAX))).toBe(true);
       expect(isComponentId(createEntityId(ENTITY_ID_START))).toBe(false);
-      expect(isComponentId(createRelationId(createComponentId(1), createEntityId(ENTITY_ID_START)))).toBe(false);
+      expect(isComponentId(relation(createComponentId(1), createEntityId(ENTITY_ID_START)))).toBe(false);
     });
   });
 
@@ -58,7 +58,7 @@ describe("Entity ID System", () => {
       expect(isEntityId(createEntityId(ENTITY_ID_START))).toBe(true);
       expect(isEntityId(createEntityId(10000))).toBe(true);
       expect(isEntityId(createComponentId(1))).toBe(false);
-      expect(isEntityId(createRelationId(createComponentId(1), createEntityId(ENTITY_ID_START)))).toBe(false);
+      expect(isEntityId(relation(createComponentId(1), createEntityId(ENTITY_ID_START)))).toBe(false);
     });
   });
 
@@ -66,7 +66,7 @@ describe("Entity ID System", () => {
     it("should create valid relation IDs with entities", () => {
       const compId = createComponentId(5);
       const entId = createEntityId(ENTITY_ID_START + 10);
-      const relationId = createRelationId(compId, entId);
+      const relationId = relation(compId, entId);
 
       expect(relationId).toBeLessThan(0);
       expect(isRelationId(relationId)).toBe(true);
@@ -75,7 +75,7 @@ describe("Entity ID System", () => {
     it("should create valid relation IDs with components", () => {
       const compId1 = createComponentId(5);
       const compId2 = createComponentId(10);
-      const relationId = createRelationId(compId1, compId2);
+      const relationId = relation(compId1, compId2);
 
       expect(relationId).toBeLessThan(0);
       expect(isRelationId(relationId)).toBe(true);
@@ -83,17 +83,15 @@ describe("Entity ID System", () => {
 
     it("should reject invalid relation creation", () => {
       const entId = createEntityId(ENTITY_ID_START);
-      expect(() => createRelationId(1024 as EntityId, entId)).toThrow(); // invalid component id
-      expect(() => createRelationId(createComponentId(5), -1 as EntityId)).toThrow(); // invalid target id
-      expect(() =>
-        createRelationId(createComponentId(5), createRelationId(createComponentId(1), createEntityId(1025))),
-      ).toThrow(); // relation as target
+      expect(() => relation(1024 as EntityId, entId)).toThrow(); // invalid component id
+      expect(() => relation(createComponentId(5), -1 as EntityId)).toThrow(); // invalid target id
+      expect(() => relation(createComponentId(5), relation(createComponentId(1), createEntityId(1025)))).toThrow(); // relation as target
     });
 
     it("should decode relation IDs with entities correctly", () => {
       const compId = createComponentId(42);
       const entId = createEntityId(ENTITY_ID_START + 123);
-      const relationId = createRelationId(compId, entId);
+      const relationId = relation(compId, entId);
 
       const decoded = decodeRelationId(relationId);
       expect(decoded.componentId).toBe(compId);
@@ -104,7 +102,7 @@ describe("Entity ID System", () => {
     it("should decode relation IDs with components correctly", () => {
       const compId1 = createComponentId(42);
       const compId2 = createComponentId(100);
-      const relationId = createRelationId(compId1, compId2);
+      const relationId = relation(compId1, compId2);
 
       const decoded = decodeRelationId(relationId);
       expect(decoded.componentId).toBe(compId1);
@@ -114,7 +112,7 @@ describe("Entity ID System", () => {
 
     it("should create valid wildcard relation IDs", () => {
       const compId = createComponentId(5);
-      const relationId = createRelationId(compId, "*");
+      const relationId = relation(compId, "*");
 
       expect(relationId).toBeLessThan(0);
       expect(isRelationId(relationId)).toBe(true);
@@ -122,9 +120,9 @@ describe("Entity ID System", () => {
 
     it("should identify wildcard relation IDs correctly", () => {
       const compId = createComponentId(5);
-      const wildcardRelationId = createRelationId(compId, "*");
-      const entityRelationId = createRelationId(compId, createEntityId(ENTITY_ID_START));
-      const componentRelationId = createRelationId(compId, createComponentId(10));
+      const wildcardRelationId = relation(compId, "*");
+      const entityRelationId = relation(compId, createEntityId(ENTITY_ID_START));
+      const componentRelationId = relation(compId, createComponentId(10));
       const entityId = createEntityId(ENTITY_ID_START);
       const componentId = createComponentId(1);
 
@@ -137,7 +135,7 @@ describe("Entity ID System", () => {
 
     it("should decode wildcard relation IDs correctly", () => {
       const compId = createComponentId(42);
-      const relationId = createRelationId(compId, "*");
+      const relationId = relation(compId, "*");
 
       const decoded = decodeRelationId(relationId);
       expect(decoded.componentId).toBe(compId);
@@ -152,11 +150,9 @@ describe("Entity ID System", () => {
       expect(getIdType(createComponentId(500))).toBe("component");
       expect(getIdType(createEntityId(ENTITY_ID_START))).toBe("entity");
       expect(getIdType(createEntityId(10000))).toBe("entity");
-      expect(getIdType(createRelationId(createComponentId(1), createEntityId(ENTITY_ID_START)))).toBe(
-        "entity-relation",
-      );
-      expect(getIdType(createRelationId(createComponentId(1), createComponentId(2)))).toBe("component-relation");
-      expect(getIdType(createRelationId(createComponentId(1), "*"))).toBe("wildcard-relation");
+      expect(getIdType(relation(createComponentId(1), createEntityId(ENTITY_ID_START)))).toBe("entity-relation");
+      expect(getIdType(relation(createComponentId(1), createComponentId(2)))).toBe("component-relation");
+      expect(getIdType(relation(createComponentId(1), "*"))).toBe("wildcard-relation");
 
       // Invalid IDs
       expect(getIdType(INVALID_COMPONENT_ID as EntityId)).toBe("invalid");
@@ -177,21 +173,21 @@ describe("Entity ID System", () => {
       expect(entityResult.targetId).toBeUndefined();
 
       // Entity relation
-      const entityRelationId = createRelationId(createComponentId(5), createEntityId(ENTITY_ID_START + 200));
+      const entityRelationId = relation(createComponentId(5), createEntityId(ENTITY_ID_START + 200));
       const entityRelationResult = getDetailedIdType(entityRelationId);
       expect(entityRelationResult.type).toBe("entity-relation");
       expect(entityRelationResult.componentId).toBe(createComponentId(5));
       expect(entityRelationResult.targetId).toBe(createEntityId(ENTITY_ID_START + 200));
 
       // Component relation
-      const compRelationId = createRelationId(createComponentId(10), createComponentId(20));
+      const compRelationId = relation(createComponentId(10), createComponentId(20));
       const compRelationResult = getDetailedIdType(compRelationId);
       expect(compRelationResult.type).toBe("component-relation");
       expect(compRelationResult.componentId).toBe(createComponentId(10));
       expect(compRelationResult.targetId).toBe(createComponentId(20));
 
       // Wildcard relation
-      const wildcardRelationId = createRelationId(createComponentId(15), "*");
+      const wildcardRelationId = relation(createComponentId(15), "*");
       const wildcardRelationResult = getDetailedIdType(wildcardRelationId);
       expect(wildcardRelationResult.type).toBe("wildcard-relation");
       expect(wildcardRelationResult.componentId).toBe(createComponentId(15));
@@ -229,7 +225,7 @@ describe("Entity ID System", () => {
     it("should inspect relation IDs with entities", () => {
       const compId = createComponentId(5);
       const entId = createEntityId(ENTITY_ID_START + 10);
-      const relationId = createRelationId(compId, entId);
+      const relationId = relation(compId, entId);
 
       expect(inspectEntityId(relationId)).toBe("Relation ID: Component ID (5) -> Entity ID (1034)");
     });
@@ -237,7 +233,7 @@ describe("Entity ID System", () => {
     it("should inspect relation IDs with components", () => {
       const compId1 = createComponentId(10);
       const compId2 = createComponentId(20);
-      const relationId = createRelationId(compId1, compId2);
+      const relationId = relation(compId1, compId2);
 
       expect(inspectEntityId(relationId)).toBe("Relation ID: Component ID (10) -> Component ID (20)");
     });
@@ -250,7 +246,7 @@ describe("Entity ID System", () => {
 
     it("should inspect wildcard relation IDs", () => {
       const compId = createComponentId(15);
-      const relationId = createRelationId(compId, "*");
+      const relationId = relation(compId, "*");
 
       expect(inspectEntityId(relationId)).toBe("Relation ID: Component ID (15) -> Wildcard (*)");
     });
@@ -263,7 +259,7 @@ describe("Entity ID System", () => {
       expect(Number.isSafeInteger(largeEntityId)).toBe(true);
 
       const compId = createComponentId(1023);
-      const relationId = createRelationId(compId, largeEntityId as EntityId);
+      const relationId = relation(compId, largeEntityId as EntityId);
       expect(Number.isSafeInteger(relationId)).toBe(true);
 
       const decoded = decodeRelationId(relationId);
@@ -309,7 +305,7 @@ describe("EntityIdManager", () => {
       const manager = new EntityIdManager();
       expect(() => manager.deallocate(1000 as EntityId)).toThrow(); // Below ENTITY_ID_START
       expect(() => manager.deallocate(createComponentId(5))).toThrow(); // Component ID
-      expect(() => manager.deallocate(createRelationId(createComponentId(1), createEntityId(1025)))).toThrow(); // Relation ID
+      expect(() => manager.deallocate(relation(createComponentId(1), createEntityId(1025)))).toThrow(); // Relation ID
     });
 
     it("should reject deallocation of unallocated IDs", () => {

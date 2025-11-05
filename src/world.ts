@@ -1,7 +1,7 @@
 import { Archetype } from "./archetype";
 import { CommandBuffer, type Command } from "./command-buffer";
 import type { EntityId, WildcardRelationId } from "./entity";
-import { EntityIdManager, createRelationId, getDetailedIdType, getIdType, isWildcardRelationId } from "./entity";
+import { EntityIdManager, relation, getDetailedIdType, getIdType, isWildcardRelationId } from "./entity";
 import { Query } from "./query";
 import type { QueryFilter } from "./query-filter";
 import type { System } from "./system";
@@ -661,7 +661,7 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
         detailedType.type === "component-relation" ||
         detailedType.type === "wildcard-relation"
       ) {
-        const wildcardRelationId = createRelationId(detailedType.componentId!, "*");
+        const wildcardRelationId = relation(detailedType.componentId!, "*");
         const wildcardHooks = this.lifecycleHooks.get(wildcardRelationId);
         if (wildcardHooks) {
           for (const hook of wildcardHooks) {
@@ -692,7 +692,7 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
         detailedType.type === "component-relation" ||
         detailedType.type === "wildcard-relation"
       ) {
-        const wildcardRelationId = createRelationId(detailedType.componentId!, "*");
+        const wildcardRelationId = relation(detailedType.componentId!, "*");
         const wildcardHooks = this.lifecycleHooks.get(wildcardRelationId);
         if (wildcardHooks) {
           for (const hook of wildcardHooks) {
