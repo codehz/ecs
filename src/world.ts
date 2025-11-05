@@ -1,5 +1,6 @@
 import { Archetype } from "./archetype";
 import { CommandBuffer, type Command } from "./command-buffer";
+import { ComponentChangeset } from "./changeset";
 import type { EntityId, WildcardRelationId } from "./entity";
 import { EntityIdManager, getDetailedIdType, getIdType, relation } from "./entity";
 import { Query } from "./query";
@@ -458,17 +459,15 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
       }
     }
 
-    // Track component changes using Map and Set for better performance
-    const adds = new Map<EntityId<any>, any>();
-    const removes = new Set<EntityId<any>>();
+    // Track component changes using ComponentChangeset
+    const changeset = new ComponentChangeset();
 
     // Process commands to determine final state
     for (const cmd of commands) {
       switch (cmd.type) {
         case "addComponent":
           if (cmd.componentType && cmd.component !== undefined) {
-            adds.set(cmd.componentType, cmd.component);
-            removes.delete(cmd.componentType); // Remove from removes if it was going to be removed
+            changeset.addComponent(cmd.componentType, cmd.component);
           }
           break;
         case "removeComponent":
@@ -484,14 +483,12 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
                   componentDetailedType.type === "component-relation"
                 ) {
                   if (componentDetailedType.componentId === baseComponentId) {
-                    removes.add(componentType);
-                    adds.delete(componentType); // Remove from adds if it was going to be added
+                    changeset.removeComponent(componentType);
                   }
                 }
               }
             } else {
-              removes.add(cmd.componentType);
-              adds.delete(cmd.componentType); // Remove from adds if it was going to be added
+              changeset.removeComponent(cmd.componentType);
             }
           }
           break;
@@ -499,20 +496,10 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
     }
 
     // Apply changes to current components to get final state
-    const finalComponents = new Map(currentComponents);
-
-    // Apply removals
-    for (const componentType of removes) {
-      finalComponents.delete(componentType);
-    }
-
-    // Apply additions/updates
-    for (const [componentType, component] of adds) {
-      finalComponents.set(componentType, component);
-    }
+    const finalComponents = changeset.applyTo(currentComponents);
 
     // Calculate final component types
-    const finalComponentTypes = Array.from(finalComponents.keys()).sort((a, b) => a - b);
+    const finalComponentTypes = changeset.getFinalComponentTypes(currentComponents);
 
     // Check if we need to move to a different archetype
     const currentComponentTypes = currentArchetype.componentTypes.sort((a, b) => a - b);
@@ -532,14 +519,14 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
       this.entityToArchetype.set(entityId, newArchetype);
     } else {
       // Same archetype, just update component data
-      for (const [componentType, component] of adds) {
+      for (const [componentType, component] of changeset.adds) {
         currentArchetype.setComponent(entityId, componentType, component);
       }
       // Removals are already handled by not including them in finalComponents
     }
 
     // Update component reverse index for removed components
-    for (const componentType of removes) {
+    for (const componentType of changeset.removes) {
       const detailedType = getDetailedIdType(componentType);
       if (detailedType.type === "entity-relation") {
         // For relation components, track the target entity
@@ -552,7 +539,7 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
     }
 
     // Update component reverse index for added components
-    for (const [componentType, component] of adds) {
+    for (const [componentType, component] of changeset.adds) {
       const detailedType = getDetailedIdType(componentType);
       if (detailedType.type === "entity-relation") {
         // For relation components, track the target entity
@@ -565,7 +552,7 @@ export class World<ExtraParams extends any[] = [deltaTime: number]> {
     }
 
     // Trigger component lifecycle hooks
-    this.executeComponentLifecycleHooks(entityId, adds, removes);
+    this.executeComponentLifecycleHooks(entityId, changeset.adds, changeset.removes);
   }
 
   /**
