@@ -1,4 +1,4 @@
-import { World, createComponentId } from "./index";
+import { World, component } from "./index";
 
 // 定义组件类型
 type Position = { x: number; y: number };
@@ -6,9 +6,9 @@ type Velocity = { x: number; y: number };
 type Health = { value: number };
 
 // 创建组件ID
-const positionComponent = createComponentId<Position>(1);
-const velocityComponent = createComponentId<Velocity>(2);
-const healthComponent = createComponentId<Health>(3);
+const positionComponent = component<Position>();
+const velocityComponent = component<Velocity>();
+const healthComponent = component<Health>();
 
 // 性能测试函数
 function performanceTest() {

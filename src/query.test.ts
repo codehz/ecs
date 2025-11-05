@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { World } from "./world";
 import { Query } from "./query";
-import { createComponentId, relation, type EntityId } from "./entity";
+import { component, relation, type EntityId } from "./entity";
 
 describe("Query", () => {
   describe("Query Creation and Basic Functionality", () => {
@@ -9,9 +9,9 @@ describe("Query", () => {
     type Velocity = { x: number; y: number };
     type Health = { value: number };
 
-    const positionComponent = createComponentId<Position>(1);
-    const velocityComponent = createComponentId<Velocity>(2);
-    const healthComponent = createComponentId<Health>(3);
+    const positionComponent = component<Position>();
+    const velocityComponent = component<Velocity>();
+    const healthComponent = component<Health>();
 
     it("should create a query and return matching entities", () => {
       const world = new World();

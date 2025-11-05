@@ -1,15 +1,15 @@
 import { describe, it, expect } from "bun:test";
 import { World } from "./world";
-import { createComponentId } from "./entity";
+import { component } from "./entity";
 
 describe("World Performance", () => {
   it("should handle archetype creation efficiently", () => {
     const world = new World();
 
     // Create multiple component types
-    const component1 = createComponentId<{}>(1);
-    const component2 = createComponentId<{}>(2);
-    const component3 = createComponentId<{}>(3);
+    const component1 = component<{}>();
+    const component2 = component<{}>();
+    const component3 = component<{}>();
 
     // Create entities with different component combinations
     const startTime = performance.now();
@@ -40,9 +40,9 @@ describe("World Performance", () => {
     type Velocity = { x: number; y: number };
     type Health = { value: number };
 
-    const positionComponent = createComponentId<Position>(1);
-    const velocityComponent = createComponentId<Velocity>(2);
-    const healthComponent = createComponentId<Health>(3);
+    const positionComponent = component<Position>();
+    const velocityComponent = component<Velocity>();
+    const healthComponent = component<Health>();
 
     // Create many entities
     for (let i = 0; i < 1000; i++) {

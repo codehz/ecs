@@ -1,12 +1,12 @@
 import { describe, expect, it } from "bun:test";
-import { Archetype, createComponentId, createEntityId, relation, type EntityId } from "./index";
+import { Archetype, component, createEntityId, relation, type EntityId } from "./index";
 
 describe("Archetype", () => {
   type Position = { x: number; y: number };
   type Velocity = { x: number; y: number };
 
-  const positionComponent = createComponentId<Position>(1);
-  const velocityComponent = createComponentId<Velocity>(2);
+  const positionComponent = component<Position>();
+  const velocityComponent = component<Velocity>();
 
   it("should create an archetype with component types", () => {
     const archetype = new Archetype([positionComponent, velocityComponent]);

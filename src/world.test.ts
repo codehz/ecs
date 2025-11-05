@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { createComponentId, createEntityId, relation, type EntityId } from "./entity";
+import { component, createEntityId, relation, type EntityId } from "./entity";
 import { World } from "./world";
 
 describe("World", () => {
@@ -37,8 +37,8 @@ describe("World", () => {
     type Position = { x: number; y: number };
     type Velocity = { x: number; y: number };
 
-    const positionComponent = createComponentId<Position>(1);
-    const velocityComponent = createComponentId<Velocity>(2);
+    const positionComponent = component<Position>();
+    const velocityComponent = component<Velocity>();
 
     it("should add components to entities", () => {
       const world = new World();
@@ -230,8 +230,8 @@ describe("World", () => {
     type Position = { x: number; y: number };
     type Velocity = { x: number; y: number };
 
-    const positionComponent = createComponentId<Position>(1);
-    const velocityComponent = createComponentId<Velocity>(2);
+    const positionComponent = component<Position>();
+    const velocityComponent = component<Velocity>();
 
     it("should query entities with specific components", () => {
       const world = new World();
@@ -330,8 +330,8 @@ describe("World", () => {
       const world = new World();
 
       // Create component IDs
-      const positionComponent = createComponentId<{ x: number; y: number }>(1);
-      const followsComponent = createComponentId<void>(2);
+      const positionComponent = component<{ x: number; y: number }>();
+      const followsComponent = component<void>();
 
       // Create entities
       const entity1 = world.createEntity(); // This will be followed
@@ -418,8 +418,8 @@ describe("World", () => {
     type Position = { x: number; y: number };
     type Velocity = { x: number; y: number };
 
-    const positionComponent = createComponentId<Position>(1);
-    const velocityComponent = createComponentId<Velocity>(2);
+    const positionComponent = component<Position>();
+    const velocityComponent = component<Velocity>();
 
     it("should trigger component added hooks", () => {
       const world = new World();
@@ -578,7 +578,7 @@ describe("World", () => {
   describe("Wildcard Relation Hooks", () => {
     it("should trigger wildcard relation hooks for matching relation components", () => {
       const world = new World();
-      const positionComponent = createComponentId<{ x: number; y: number }>(1);
+      const positionComponent = component<{ x: number; y: number }>();
       const entity1 = world.createEntity();
       const entity2 = world.createEntity();
 
@@ -622,8 +622,8 @@ describe("World", () => {
 
     it("should not trigger wildcard relation hooks for non-matching components", () => {
       const world = new World();
-      const positionComponent = createComponentId<{ x: number; y: number }>(1);
-      const velocityComponent = createComponentId<{ vx: number; vy: number }>(2);
+      const positionComponent = component<{ x: number; y: number }>();
+      const velocityComponent = component<{ vx: number; vy: number }>();
       const entity1 = world.createEntity();
       const entity2 = world.createEntity();
 
