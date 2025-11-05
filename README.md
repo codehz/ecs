@@ -9,6 +9,7 @@
 - 🏗️ 模块化：清晰的架构，支持自定义系统和组件
 - 📦 轻量级：零依赖，易于集成
 - ⚡ 内存高效：连续内存布局，优化的迭代性能
+- 🎣 生命周期钩子：支持组件和通配符关系的事件监听
 
 ## 安装
 
@@ -58,7 +59,7 @@ ECS 支持在组件添加或移除时执行回调函数：
 
 ```typescript
 // 注册组件生命周期钩子
-world.registerComponentLifecycleHook(PositionId, {
+world.registerLifecycleHook(PositionId, {
   onAdded: (entityId, componentType, component) => {
     console.log(`组件 ${componentType} 被添加到实体 ${entityId}`);
   },
@@ -68,7 +69,7 @@ world.registerComponentLifecycleHook(PositionId, {
 });
 
 // 你也可以只注册其中一个钩子
-world.registerComponentLifecycleHook(VelocityId, {
+world.registerLifecycleHook(VelocityId, {
   onRemoved: (entityId, componentType) => {
     console.log(`组件 ${componentType} 被从实体 ${entityId} 移除`);
   },
@@ -77,6 +78,45 @@ world.registerComponentLifecycleHook(VelocityId, {
 // 添加组件时会触发钩子
 world.addComponent(entity, PositionId, { x: 0, y: 0 });
 world.flushCommands(); // 钩子在这里被调用
+```
+
+### 通配符关系生命周期钩子
+
+ECS 还支持通配符关系生命周期钩子，可以监听特定组件的所有关系变化：
+
+```typescript
+import { World, createComponentId, createRelationId } from "@codehz/ecs";
+
+// 定义组件类型
+type Position = { x: number; y: number };
+
+// 定义组件ID
+const PositionId = createComponentId<Position>(1);
+
+// 创建世界
+const world = new World();
+
+// 创建实体
+const entity = world.createEntity();
+
+// 创建通配符关系ID，用于监听所有 Position 相关的关系
+const wildcardPositionRelation = createRelationId(PositionId, "*");
+
+// 注册通配符关系钩子
+world.registerLifecycleHook(wildcardPositionRelation, {
+  onAdded: (entityId, componentType, component) => {
+    console.log(`关系组件 ${componentType} 被添加到实体 ${entityId}`);
+  },
+  onRemoved: (entityId, componentType) => {
+    console.log(`关系组件 ${componentType} 被从实体 ${entityId} 移除`);
+  },
+});
+
+// 创建实体间的关系
+const entity2 = world.createEntity();
+const positionRelation = createRelationId(PositionId, entity2);
+world.addComponent(entity, positionRelation, { x: 10, y: 20 });
+world.flushCommands(); // 通配符钩子会被触发
 ```
 
 ### 运行示例
@@ -100,8 +140,8 @@ bun run examples/simple/demo.ts
 - `removeComponent(entity, componentId)`: 从实体移除组件
 - `createQuery(componentIds)`: 创建查询
 - `registerSystem(system)`: 注册系统
-- `registerComponentLifecycleHook(componentId, hook)`: 注册组件生命周期钩子
-- `unregisterComponentLifecycleHook(componentId, hook)`: 注销组件生命周期钩子
+- `registerLifecycleHook(componentId, hook)`: 注册组件或通配符关系生命周期钩子
+- `unregisterLifecycleHook(componentId, hook)`: 注销组件或通配符关系生命周期钩子
 - `update(deltaTime)`: 更新世界
 - `flushCommands()`: 应用命令缓冲区
 
