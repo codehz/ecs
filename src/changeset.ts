@@ -58,26 +58,16 @@ export class ComponentChangeset {
    * Apply the changeset to existing components and return the final state
    */
   applyTo(existingComponents: Map<EntityId<any>, any>): Map<EntityId<any>, any> {
-    const finalComponents = new Map(existingComponents);
-
     // Apply removals
     for (const componentType of this.removes) {
-      finalComponents.delete(componentType);
+      existingComponents.delete(componentType);
     }
 
     // Apply additions/updates
     for (const [componentType, component] of this.adds) {
-      finalComponents.set(componentType, component);
+      existingComponents.set(componentType, component);
     }
 
-    return finalComponents;
-  }
-
-  /**
-   * Get the final component types after applying changes
-   */
-  getFinalComponentTypes(existingComponents: Map<EntityId<any>, any>): EntityId<any>[] {
-    const finalComponents = this.applyTo(existingComponents);
-    return Array.from(finalComponents.keys()).sort((a, b) => a - b);
+    return existingComponents;
   }
 }

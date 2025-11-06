@@ -152,8 +152,7 @@ export class World<UpdateParams extends any[] = []> {
           }
         }
 
-        const newComponentTypes = Array.from(currentComponents.keys()).sort((a, b) => a - b);
-        const newArchetype = this.ensureArchetype(newComponentTypes);
+        const newArchetype = this.ensureArchetype(currentComponents.keys());
 
         // Remove from current archetype
         sourceArchetype.removeEntity(sourceEntityId);
@@ -604,18 +603,15 @@ export class World<UpdateParams extends any[] = []> {
     // Apply changes to current components to get final state
     const finalComponents = changeset.applyTo(currentComponents);
 
-    // Calculate final component types
-    const finalComponentTypes = changeset.getFinalComponentTypes(currentComponents);
-
     // Check if we need to move to a different archetype
-    const currentComponentTypes = currentArchetype.componentTypes.sort((a, b) => a - b);
+    const currentComponentTypes = currentArchetype.componentTypes;
     const needsArchetypeChange =
-      finalComponentTypes.length !== currentComponentTypes.length ||
-      !finalComponentTypes.every((type, index) => type === currentComponentTypes[index]);
+      finalComponents.size !== currentComponentTypes.length ||
+      !currentComponentTypes.every((type) => finalComponents.has(type));
 
     if (needsArchetypeChange) {
       // Move to new archetype with final component state
-      const newArchetype = this.ensureArchetype(finalComponentTypes);
+      const newArchetype = this.ensureArchetype(finalComponents.keys());
 
       // Remove from current archetype
       currentArchetype.removeEntity(entityId);
@@ -667,8 +663,8 @@ export class World<UpdateParams extends any[] = []> {
    * Get or create an archetype for the given component types
    * @returns The archetype for the given component types
    */
-  private ensureArchetype(componentTypes: EntityId<any>[]): Archetype {
-    const sortedTypes = [...componentTypes].sort((a, b) => a - b);
+  private ensureArchetype(componentTypes: Iterable<EntityId<any>>): Archetype {
+    const sortedTypes = Array.from(componentTypes).sort((a, b) => a - b);
     const hashKey = this.createArchetypeSignature(sortedTypes);
 
     return getOrCreateWithSideEffect(this.archetypeBySignature, hashKey, () => {
