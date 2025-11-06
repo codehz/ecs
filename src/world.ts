@@ -321,11 +321,8 @@ export class World<UpdateParams extends any[] = []> {
   /**
    * Update the world (run all systems in dependency order)
    */
-  update(...params: UpdateParams): void {
-    const systems = this.systemScheduler.getExecutionOrder();
-    for (const system of systems) {
-      system.update(...params);
-    }
+  async update(...params: UpdateParams): Promise<void> {
+    await this.systemScheduler.update(...params);
     this.commandBuffer.execute();
   }
 

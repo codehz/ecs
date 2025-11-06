@@ -3,7 +3,7 @@ import type { System } from "./system";
 /**
  * System Scheduler for managing system dependencies and execution order
  */
-export class SystemScheduler<UpdateParams extends any[] = [deltaTime: number]> {
+export class SystemScheduler<UpdateParams extends any[] = []> {
   private systems = new Set<System<UpdateParams>>();
   private systemDependencies = new Map<System<UpdateParams>, Set<System<UpdateParams>>>();
   private cachedExecutionOrder: System<UpdateParams>[] | null = null;
@@ -27,7 +27,7 @@ export class SystemScheduler<UpdateParams extends any[] = [deltaTime: number]> {
    * Get the execution order of systems based on dependencies
    * Uses topological sort
    */
-  getExecutionOrder(): System<UpdateParams>[] {
+  private getExecutionOrder(): System<UpdateParams>[] {
     if (this.cachedExecutionOrder !== null) {
       return this.cachedExecutionOrder;
     }
@@ -61,6 +61,13 @@ export class SystemScheduler<UpdateParams extends any[] = [deltaTime: number]> {
 
     this.cachedExecutionOrder = result;
     return result;
+  }
+
+  async update(...params: UpdateParams): Promise<void> {
+    const executionOrder = this.getExecutionOrder();
+    for (const system of executionOrder) {
+      await system.update(...params);
+    }
   }
 
   /**
