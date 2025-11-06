@@ -143,11 +143,11 @@ export class World<UpdateParams extends any[] = []> {
       if (sourceArchetype) {
         // Remove from current archetype and move to new archetype without this component
         const currentComponents = new Map<EntityId<any>, any>();
-        for (const compType of sourceArchetype.componentTypes) {
-          if (compType !== componentType) {
-            const data = sourceArchetype.get(sourceEntityId, compType);
-            if (data !== undefined) {
-              currentComponents.set(compType, data);
+        for (const componentType of sourceArchetype.componentTypes) {
+          if (componentType !== componentType) {
+            const componentData = sourceArchetype.get(sourceEntityId, componentType);
+            if (componentData !== undefined) {
+              currentComponents.set(componentType, componentData);
             }
           }
         }
@@ -405,15 +405,15 @@ export class World<UpdateParams extends any[] = []> {
     const regularComponents: EntityId<any>[] = [];
     const wildcardRelations: { componentId: EntityId<any>; relationId: EntityId<any> }[] = [];
 
-    for (const type of componentTypes) {
-      const detailedType = getDetailedIdType(type);
+    for (const componentType of componentTypes) {
+      const detailedType = getDetailedIdType(componentType);
       if (detailedType.type === "wildcard-relation") {
         wildcardRelations.push({
           componentId: detailedType.componentId!,
-          relationId: type,
+          relationId: componentType,
         });
       } else {
-        regularComponents.push(type);
+        regularComponents.push(componentType);
       }
     }
 
@@ -435,8 +435,8 @@ export class World<UpdateParams extends any[] = []> {
         // Find archetypes that contain all required components
         for (const archetype of firstList) {
           let hasAllComponents = true;
-          for (let i = 1; i < archetypeLists.length; i++) {
-            const otherList = archetypeLists[i]!;
+          for (let listIndex = 1; listIndex < archetypeLists.length; listIndex++) {
+            const otherList = archetypeLists[listIndex]!;
             if (!otherList.includes(archetype)) {
               hasAllComponents = false;
               break;
@@ -529,16 +529,16 @@ export class World<UpdateParams extends any[] = []> {
     // Get current component data
     const currentComponents = new Map<EntityId<any>, any>();
     for (const componentType of currentArchetype.componentTypes) {
-      const data = currentArchetype.get(entityId, componentType);
-      currentComponents.set(componentType, data);
+      const componentData = currentArchetype.get(entityId, componentType);
+      currentComponents.set(componentType, componentData);
     }
 
     // Process commands to determine final state
-    for (const cmd of commands) {
-      switch (cmd.type) {
+    for (const command of commands) {
+      switch (command.type) {
         case "set":
-          if (cmd.componentType) {
-            const detailedType = getDetailedIdType(cmd.componentType);
+          if (command.componentType) {
+            const detailedType = getDetailedIdType(command.componentType);
             // For exclusive relations, remove existing relations with the same base component
             if (
               (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
@@ -555,12 +555,12 @@ export class World<UpdateParams extends any[] = []> {
                 }
               }
             }
-            changeset.set(cmd.componentType, cmd.component);
+            changeset.set(command.componentType, command.component);
           }
           break;
         case "delete":
-          if (cmd.componentType) {
-            const detailedType = getDetailedIdType(cmd.componentType);
+          if (command.componentType) {
+            const detailedType = getDetailedIdType(command.componentType);
             if (detailedType.type === "wildcard-relation") {
               // For wildcard relation removal, find all matching relation components
               const baseComponentId = detailedType.componentId!;
@@ -576,7 +576,7 @@ export class World<UpdateParams extends any[] = []> {
                 }
               }
             } else {
-              changeset.delete(cmd.componentType);
+              changeset.delete(command.componentType);
             }
           }
           break;
@@ -695,9 +695,9 @@ export class World<UpdateParams extends any[] = []> {
   private untrackEntityReference(sourceEntityId: EntityId, componentType: EntityId, targetEntityId: EntityId): void {
     const references = this.entityReferences.get(targetEntityId);
     if (references) {
-      references.forEach((ref) => {
-        if (ref.sourceEntityId === sourceEntityId && ref.componentType === componentType) {
-          references.delete(ref);
+      references.forEach((reference) => {
+        if (reference.sourceEntityId === sourceEntityId && reference.componentType === componentType) {
+          references.delete(reference);
         }
       });
       if (references.size === 0) {
@@ -763,9 +763,9 @@ export class World<UpdateParams extends any[] = []> {
       // Trigger direct component hooks
       const directHooks = this.lifecycleHooks.get(componentType);
       if (directHooks) {
-        for (const hook of directHooks) {
-          if (hook.onAdded) {
-            hook.onAdded(entityId, componentType, component);
+        for (const lifecycleHook of directHooks) {
+          if (lifecycleHook.onAdded) {
+            lifecycleHook.onAdded(entityId, componentType, component);
           }
         }
       }
@@ -780,9 +780,9 @@ export class World<UpdateParams extends any[] = []> {
         const wildcardRelationId = relation(detailedType.componentId!, "*");
         const wildcardHooks = this.lifecycleHooks.get(wildcardRelationId);
         if (wildcardHooks) {
-          for (const hook of wildcardHooks) {
-            if (hook.onAdded) {
-              (hook as any).onAdded(entityId, componentType, component);
+          for (const lifecycleHook of wildcardHooks) {
+            if (lifecycleHook.onAdded) {
+              (lifecycleHook as any).onAdded(entityId, componentType, component);
             }
           }
         }
@@ -794,9 +794,9 @@ export class World<UpdateParams extends any[] = []> {
       // Trigger direct component hooks
       const directHooks = this.lifecycleHooks.get(componentType);
       if (directHooks) {
-        for (const hook of directHooks) {
-          if (hook.onRemoved) {
-            hook.onRemoved(entityId, componentType);
+        for (const lifecycleHook of directHooks) {
+          if (lifecycleHook.onRemoved) {
+            lifecycleHook.onRemoved(entityId, componentType);
           }
         }
       }
@@ -821,10 +821,6 @@ export class World<UpdateParams extends any[] = []> {
     }
   }
 
-  /**
-   * Convert the world into a plain JSON-serializable object.
-   * Note: component values must be JSON-serializable by the caller.
-   */
   /**
    * Convert the world into a plain snapshot object.
    * This returns an in-memory structure and does not perform JSON stringification.
