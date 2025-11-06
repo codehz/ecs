@@ -35,8 +35,8 @@ describe("World serialization", () => {
     // Serialize (returns an in-memory snapshot, not a JSON string)
     const snapshot = world.serialize();
 
-    // Deserialize from snapshot
-    const restored = World.deserialize(snapshot);
+    // Restore by constructing World with snapshot
+    const restored = new World(snapshot);
 
     // Basic existence
     expect(restored.exists(e1)).toBe(true);
@@ -74,7 +74,7 @@ describe("World serialization", () => {
     world.sync();
 
     const snapshot = world.serialize();
-    const restored = World.deserialize(snapshot);
+    const restored = new World(snapshot);
 
     // Next allocated id after restore should be >= the max existing id + 1
     const c = restored.new();

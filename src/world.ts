@@ -23,7 +23,7 @@ export class World<UpdateParams extends any[] = []> {
   private queries: Query[] = [];
   // Cache for queries keyed by component types + filter signature
   private queryCache = new Map<string, { query: Query; refCount: number }>();
-  private commandBuffer: CommandBuffer;
+  private commandBuffer = new CommandBuffer((entityId, commands) => this.executeEntityCommands(entityId, commands));
   private componentToArchetypes = new Map<EntityId<any>, Archetype[]>();
 
   /**
@@ -44,9 +44,55 @@ export class World<UpdateParams extends any[] = []> {
    */
   private exclusiveComponents = new Set<EntityId>();
 
-  constructor(entityIdManager?: EntityIdManager) {
-    this.entityIdManager = entityIdManager || new EntityIdManager();
-    this.commandBuffer = new CommandBuffer((entityId, commands) => this.executeEntityCommands(entityId, commands));
+  /**
+   * Create a new World.
+   * If an optional snapshot object is provided (previously produced by `World.serialize()`),
+   * the world will be restored from that snapshot. The snapshot may contain non-JSON values.
+   */
+  constructor(snapshot?: any) {
+    // If snapshot provided, restore world state
+    if (snapshot && typeof snapshot === "object") {
+      if (snapshot.entityManager) {
+        this.entityIdManager.deserializeState(snapshot.entityManager);
+      }
+      // Restore exclusive components
+      if (Array.isArray(snapshot.exclusiveComponents)) {
+        for (const id of snapshot.exclusiveComponents) {
+          this.exclusiveComponents.add(id);
+        }
+      }
+
+      // Restore entities and their components
+      if (Array.isArray(snapshot.entities)) {
+        for (const entry of snapshot.entities) {
+          const entityId = entry.id as EntityId;
+          const componentsArray: Array<{ type: number; value: any }> = entry.components || [];
+
+          const componentMap = new Map<EntityId<any>, any>();
+          const componentTypes: EntityId<any>[] = [];
+
+          for (const c of componentsArray) {
+            componentMap.set(c.type as EntityId<any>, c.value);
+            componentTypes.push(c.type as EntityId<any>);
+          }
+
+          const archetype = this.getOrCreateArchetype(componentTypes);
+          archetype.addEntity(entityId, componentMap);
+          this.entityToArchetype.set(entityId, archetype);
+
+          // Update reverse index based on component types
+          for (const compType of componentTypes) {
+            const detailedType = getDetailedIdType(compType);
+            if (detailedType.type === "entity-relation") {
+              const targetEntityId = detailedType.targetId!;
+              this.addComponentReference(entityId, compType, targetEntityId);
+            } else if (detailedType.type === "entity") {
+              this.addComponentReference(entityId, compType, compType);
+            }
+          }
+        }
+      }
+    }
   }
 
   /**
@@ -792,63 +838,5 @@ export class World<UpdateParams extends any[] = []> {
       exclusiveComponents: Array.from(this.exclusiveComponents),
       entities,
     };
-  }
-
-  /**
-   * Deserialize a world from a previously-created snapshot object.
-   * The snapshot must have been produced by `world.serialize()` and may contain
-   * non-JSON values (they will be copied by reference).
-   */
-  static deserialize<T extends any[] = []>(obj: any): World<T> {
-    if (!obj || typeof obj !== "object") {
-      throw new Error("World.deserialize expects a snapshot object (not a JSON string)");
-    }
-
-    const entityManager = new EntityIdManager();
-    if (obj && obj.entityManager) {
-      entityManager.deserializeState(obj.entityManager);
-    }
-
-    const world = new World<T>(entityManager);
-
-    // Restore exclusive components
-    if (obj && Array.isArray(obj.exclusiveComponents)) {
-      for (const id of obj.exclusiveComponents) {
-        world.exclusiveComponents.add(id);
-      }
-    }
-
-    // Restore entities and their components
-    if (obj && Array.isArray(obj.entities)) {
-      for (const entry of obj.entities) {
-        const entityId = entry.id as EntityId;
-        const componentsArray: Array<{ type: number; value: any }> = entry.components || [];
-
-        const componentMap = new Map<EntityId<any>, any>();
-        const componentTypes: EntityId<any>[] = [];
-
-        for (const c of componentsArray) {
-          componentMap.set(c.type as EntityId<any>, c.value);
-          componentTypes.push(c.type as EntityId<any>);
-        }
-
-        const archetype = world.getOrCreateArchetype(componentTypes);
-        archetype.addEntity(entityId, componentMap);
-        world.entityToArchetype.set(entityId, archetype);
-
-        // Update reverse index based on component types
-        for (const compType of componentTypes) {
-          const detailedType = getDetailedIdType(compType);
-          if (detailedType.type === "entity-relation") {
-            const targetEntityId = detailedType.targetId!;
-            world.addComponentReference(entityId, compType, targetEntityId);
-          } else if (detailedType.type === "entity") {
-            world.addComponentReference(entityId, compType, compType);
-          }
-        }
-      }
-    }
-
-    return world;
   }
 }
