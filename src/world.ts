@@ -17,14 +17,14 @@ import { getOrCreateWithSideEffect } from "./utils";
 export class World<UpdateParams extends any[] = []> {
   private entityIdManager = new EntityIdManager();
   private archetypes: Archetype[] = [];
-  private archetypeMap = new Map<string, Archetype>();
+  private archetypeBySignature = new Map<string, Archetype>();
   private entityToArchetype = new Map<EntityId, Archetype>();
   private systemScheduler = new SystemScheduler<UpdateParams>();
   private queries: Query[] = [];
   // Cache for queries keyed by component types + filter signature
   private queryCache = new Map<string, { query: Query; refCount: number }>();
   private commandBuffer = new CommandBuffer((entityId, commands) => this.executeEntityCommands(entityId, commands));
-  private componentToArchetypes = new Map<EntityId<any>, Archetype[]>();
+  private archetypesByComponent = new Map<EntityId<any>, Archetype[]>();
 
   /**
    * Hook storage for component and wildcard relation lifecycle events
@@ -36,7 +36,7 @@ export class World<UpdateParams extends any[] = []> {
    * Maps entity ID to set of {sourceEntityId, componentType} pairs where componentType uses this entity
    * This includes both relation components and direct usage of entities as component types
    */
-  private entityReverseIndex = new Map<EntityId, Set<{ sourceEntityId: EntityId; componentType: EntityId }>>();
+  private entityReferences = new Map<EntityId, Set<{ sourceEntityId: EntityId; componentType: EntityId }>>();
 
   /**
    * Set of component IDs that are marked as exclusive relations
@@ -162,7 +162,7 @@ export class World<UpdateParams extends any[] = []> {
     }
 
     // Clean up the reverse index for this entity
-    this.entityReverseIndex.delete(entityId);
+    this.entityReferences.delete(entityId);
 
     archetype.removeEntity(entityId);
     if (archetype.getEntities().length === 0) {
@@ -413,10 +413,10 @@ export class World<UpdateParams extends any[] = []> {
 
       if (sortedRegularTypes.length === 1) {
         const componentType = sortedRegularTypes[0]!;
-        matchingArchetypes = this.componentToArchetypes.get(componentType) || [];
+        matchingArchetypes = this.archetypesByComponent.get(componentType) || [];
       } else {
         // Multi-component query - find intersection of archetypes
-        const archetypeLists = sortedRegularTypes.map((type) => this.componentToArchetypes.get(type) || []);
+        const archetypeLists = sortedRegularTypes.map((type) => this.archetypesByComponent.get(type) || []);
         const firstList = archetypeLists[0] || [];
         const intersection = new Set<Archetype>();
 
@@ -444,7 +444,7 @@ export class World<UpdateParams extends any[] = []> {
 
     // Filter by wildcard relations
     for (const wildcard of wildcardRelations) {
-      const componentArchetypes = this.componentToArchetypes.get(wildcard.componentId) || [];
+      const componentArchetypes = this.archetypesByComponent.get(wildcard.componentId) || [];
       // Keep only archetypes that have the component
       matchingArchetypes = matchingArchetypes.filter((archetype) => componentArchetypes.includes(archetype));
     }
@@ -640,16 +640,16 @@ export class World<UpdateParams extends any[] = []> {
     const sortedTypes = [...componentTypes].sort((a, b) => a - b);
     const hashKey = this.getComponentTypesHash(sortedTypes);
 
-    return getOrCreateWithSideEffect(this.archetypeMap, hashKey, () => {
+    return getOrCreateWithSideEffect(this.archetypeBySignature, hashKey, () => {
       // Create new archetype
       const newArchetype = new Archetype(sortedTypes);
       this.archetypes.push(newArchetype);
 
       // Update reverse index for each component type
       for (const componentType of sortedTypes) {
-        const archetypes = this.componentToArchetypes.get(componentType) || [];
+        const archetypes = this.archetypesByComponent.get(componentType) || [];
         archetypes.push(newArchetype);
-        this.componentToArchetypes.set(componentType, archetypes);
+        this.archetypesByComponent.set(componentType, archetypes);
       }
 
       // Notify all queries to check the new archetype
@@ -668,10 +668,10 @@ export class World<UpdateParams extends any[] = []> {
    * @param targetEntityId The entity being used as component type
    */
   private addComponentReference(sourceEntityId: EntityId, componentType: EntityId, targetEntityId: EntityId): void {
-    if (!this.entityReverseIndex.has(targetEntityId)) {
-      this.entityReverseIndex.set(targetEntityId, new Set());
+    if (!this.entityReferences.has(targetEntityId)) {
+      this.entityReferences.set(targetEntityId, new Set());
     }
-    this.entityReverseIndex.get(targetEntityId)!.add({ sourceEntityId, componentType });
+    this.entityReferences.get(targetEntityId)!.add({ sourceEntityId, componentType });
   }
 
   /**
@@ -681,7 +681,7 @@ export class World<UpdateParams extends any[] = []> {
    * @param targetEntityId The entity being used as component type
    */
   private removeComponentReference(sourceEntityId: EntityId, componentType: EntityId, targetEntityId: EntityId): void {
-    const references = this.entityReverseIndex.get(targetEntityId);
+    const references = this.entityReferences.get(targetEntityId);
     if (references) {
       references.forEach((ref) => {
         if (ref.sourceEntityId === sourceEntityId && ref.componentType === componentType) {
@@ -689,7 +689,7 @@ export class World<UpdateParams extends any[] = []> {
         }
       });
       if (references.size === 0) {
-        this.entityReverseIndex.delete(targetEntityId);
+        this.entityReferences.delete(targetEntityId);
       }
     }
   }
@@ -702,7 +702,7 @@ export class World<UpdateParams extends any[] = []> {
   private getComponentReferences(
     targetEntityId: EntityId,
   ): Array<{ sourceEntityId: EntityId; componentType: EntityId }> {
-    const references = this.entityReverseIndex.get(targetEntityId);
+    const references = this.entityReferences.get(targetEntityId);
     return references ? Array.from(references) : [];
   }
 
@@ -723,17 +723,17 @@ export class World<UpdateParams extends any[] = []> {
 
     // Remove from archetypeMap
     const hashKey = this.getComponentTypesHash(archetype.componentTypes);
-    this.archetypeMap.delete(hashKey);
+    this.archetypeBySignature.delete(hashKey);
 
-    // Remove from componentToArchetypes
+    // Remove from archetypesByComponent
     for (const componentType of archetype.componentTypes) {
-      const archetypes = this.componentToArchetypes.get(componentType);
+      const archetypes = this.archetypesByComponent.get(componentType);
       if (archetypes) {
         const compIndex = archetypes.indexOf(archetype);
         if (compIndex !== -1) {
           archetypes.splice(compIndex, 1);
           if (archetypes.length === 0) {
-            this.componentToArchetypes.delete(componentType);
+            this.archetypesByComponent.delete(componentType);
           }
         }
       }
