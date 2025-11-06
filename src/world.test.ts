@@ -320,17 +320,17 @@ describe("World", () => {
 
       world.sync(); // Execute deferred commands
 
-      const positionEntities = world.queryEntities([positionComponent]);
+      const positionEntities = world.query([positionComponent]);
       expect(positionEntities).toContain(entity1);
       expect(positionEntities).toContain(entity2);
       expect(positionEntities).not.toContain(entity3);
 
-      const velocityEntities = world.queryEntities([velocityComponent]);
+      const velocityEntities = world.query([velocityComponent]);
       expect(velocityEntities).toContain(entity1);
       expect(velocityEntities).not.toContain(entity2);
       expect(velocityEntities).not.toContain(entity3);
 
-      const bothEntities = world.queryEntities([positionComponent, velocityComponent]);
+      const bothEntities = world.query([positionComponent, velocityComponent]);
       expect(bothEntities).toContain(entity1);
       expect(bothEntities).not.toContain(entity2);
       expect(bothEntities).not.toContain(entity3);
@@ -341,7 +341,7 @@ describe("World", () => {
       const entity = world.new();
       world.set(entity, positionComponent, { x: 1, y: 2 });
 
-      const result = world.queryEntities([velocityComponent]);
+      const result = world.query([velocityComponent]);
       expect(result).toEqual([]);
     });
 
@@ -364,7 +364,7 @@ describe("World", () => {
       world.sync(); // Execute deferred commands
 
       // Query with wildcard relation should find all entities with position component
-      const wildcardEntities = world.queryEntities([wildcardPositionRelation]);
+      const wildcardEntities = world.query([wildcardPositionRelation]);
       expect(wildcardEntities).toContain(entity1);
       expect(wildcardEntities).toContain(entity2);
       expect(wildcardEntities).not.toContain(entity3);
@@ -392,7 +392,7 @@ describe("World", () => {
 
       // Query with both velocity component and wildcard position relation
       // Should only match entity1 (has both position and velocity)
-      const mixedEntities = world.queryEntities([velocityComponent, wildcardPositionRelation]);
+      const mixedEntities = world.query([velocityComponent, wildcardPositionRelation]);
       expect(mixedEntities).toContain(entity1);
       expect(mixedEntities).not.toContain(entity2);
       expect(mixedEntities).not.toContain(entity3);
@@ -425,7 +425,7 @@ describe("World", () => {
       expect(world.has(entity3, followsEntity1)).toBe(true);
 
       // Query entities that follow entity1
-      const followers = world.queryEntities([followsEntity1]);
+      const followers = world.query([followsEntity1]);
       expect(followers).toContain(entity2);
       expect(followers).toContain(entity3);
 
@@ -441,7 +441,7 @@ describe("World", () => {
       expect(world.has(entity3, followsEntity1)).toBe(false);
 
       // Query should now return empty
-      const followersAfterDestroy = world.queryEntities([followsEntity1]);
+      const followersAfterDestroy = world.query([followsEntity1]);
       expect(followersAfterDestroy).toHaveLength(0);
 
       // entity2 and entity3 should still exist but without the relation components
@@ -464,7 +464,7 @@ describe("World", () => {
       expect(world.has(entity2, entity1)).toBe(true);
 
       // Query entities that have entity1 as component
-      const entitiesWithComponent = world.queryEntities([entity1]);
+      const entitiesWithComponent = world.query([entity1]);
       expect(entitiesWithComponent).toContain(entity2);
 
       // Destroy entity1
@@ -478,7 +478,7 @@ describe("World", () => {
       expect(world.has(entity2, entity1)).toBe(false);
 
       // Query should now return empty
-      const entitiesWithComponentAfterDestroy = world.queryEntities([entity1]);
+      const entitiesWithComponentAfterDestroy = world.query([entity1]);
       expect(entitiesWithComponentAfterDestroy).toHaveLength(0);
 
       // entity2 should still exist

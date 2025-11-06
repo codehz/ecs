@@ -67,10 +67,10 @@ describe("World Performance", () => {
     // Test query performance
     const startTime = performance.now();
 
-    const positionEntities = world.queryEntities([positionComponent]);
-    const velocityEntities = world.queryEntities([velocityComponent]);
-    const healthEntities = world.queryEntities([healthComponent]);
-    const positionAndVelocityEntities = world.queryEntities([positionComponent, velocityComponent]);
+    const positionEntities = world.query([positionComponent]);
+    const velocityEntities = world.query([velocityComponent]);
+    const healthEntities = world.query([healthComponent]);
+    const positionAndVelocityEntities = world.query([positionComponent, velocityComponent]);
 
     const endTime = performance.now();
     const duration = endTime - startTime;

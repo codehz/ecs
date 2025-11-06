@@ -471,15 +471,15 @@ export class World<UpdateParams extends any[] = []> {
    * Query entities with specific components
    * @returns Array of entity IDs that have all the specified components
    */
-  queryEntities(componentTypes: EntityId<any>[]): EntityId[];
-  queryEntities<const T extends readonly EntityId<any>[]>(
+  query(componentTypes: EntityId<any>[]): EntityId[];
+  query<const T extends readonly EntityId<any>[]>(
     componentTypes: T,
     includeComponents: true,
   ): Array<{
     entity: EntityId;
     components: ComponentTuple<T>;
   }>;
-  queryEntities(
+  query(
     componentTypes: EntityId<any>[],
     includeComponents?: boolean,
   ):
