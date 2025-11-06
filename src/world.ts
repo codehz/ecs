@@ -15,33 +15,45 @@ import { getOrCreateWithSideEffect } from "./utils";
  * Manages entities, components, and systems
  */
 export class World<UpdateParams extends any[] = []> {
+  // Core data structures for entity and archetype management
+  /** Manages allocation and deallocation of entity IDs */
   private entityIdManager = new EntityIdManager();
+
+  /** Array of all archetypes in the world */
   private archetypes: Archetype[] = [];
+
+  /** Maps archetype signatures (component type hashes) to archetype instances */
   private archetypeBySignature = new Map<string, Archetype>();
+
+  /** Maps entity IDs to their current archetype */
   private entityToArchetype = new Map<EntityId, Archetype>();
-  private systemScheduler = new SystemScheduler<UpdateParams>();
-  private queries: Query[] = [];
-  // Cache for queries keyed by component types + filter signature
-  private queryCache = new Map<string, { query: Query; refCount: number }>();
-  private commandBuffer = new CommandBuffer((entityId, commands) => this.executeEntityCommands(entityId, commands));
+
+  /** Maps component types to arrays of archetypes that contain them */
   private archetypesByComponent = new Map<EntityId<any>, Archetype[]>();
 
-  /**
-   * Hook storage for component and wildcard relation lifecycle events
-   */
-  private lifecycleHooks = new Map<EntityId<any>, Set<LifecycleHook<any>>>();
-
-  /**
-   * Reverse index tracking which entities use each entity as a component type
-   * Maps entity ID to set of {sourceEntityId, componentType} pairs where componentType uses this entity
-   * This includes both relation components and direct usage of entities as component types
-   */
+  /** Tracks which entities reference each entity as a component type */
   private entityReferences = new Map<EntityId, Set<{ sourceEntityId: EntityId; componentType: EntityId }>>();
 
-  /**
-   * Set of component IDs that are marked as exclusive relations
-   * For exclusive relations, an entity can have at most one relation per base component
-   */
+  // Query management
+  /** Array of all active queries for archetype change notifications */
+  private queries: Query[] = [];
+
+  /** Cache for queries keyed by component types and filter signatures */
+  private queryCache = new Map<string, { query: Query; refCount: number }>();
+
+  // System management
+  /** Schedules and executes systems in dependency order */
+  private systemScheduler = new SystemScheduler<UpdateParams>();
+
+  // Command execution
+  /** Buffers structural changes for deferred execution */
+  private commandBuffer = new CommandBuffer((entityId, commands) => this.executeEntityCommands(entityId, commands));
+
+  // Lifecycle and configuration
+  /** Stores lifecycle hooks for component and relation events */
+  private lifecycleHooks = new Map<EntityId<any>, Set<LifecycleHook<any>>>();
+
+  /** Set of component IDs marked as exclusive relations */
   private exclusiveComponents = new Set<EntityId>();
 
   /**
