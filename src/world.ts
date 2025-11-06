@@ -88,7 +88,7 @@ export class World<UpdateParams extends any[] = []> {
             componentTypes.push(c.type as EntityId<any>);
           }
 
-          const archetype = this.getOrCreateArchetype(componentTypes);
+          const archetype = this.ensureArchetype(componentTypes);
           archetype.addEntity(entityId, componentMap);
           this.entityToArchetype.set(entityId, archetype);
 
@@ -97,9 +97,9 @@ export class World<UpdateParams extends any[] = []> {
             const detailedType = getDetailedIdType(compType);
             if (detailedType.type === "entity-relation") {
               const targetEntityId = detailedType.targetId!;
-              this.addComponentReference(entityId, compType, targetEntityId);
+              this.trackEntityReference(entityId, compType, targetEntityId);
             } else if (detailedType.type === "entity") {
-              this.addComponentReference(entityId, compType, compType);
+              this.trackEntityReference(entityId, compType, compType);
             }
           }
         }
@@ -110,7 +110,7 @@ export class World<UpdateParams extends any[] = []> {
   /**
    * Generate a hash key for component types array
    */
-  private getComponentTypesHash(componentTypes: EntityId<any>[]): string {
+  private createArchetypeSignature(componentTypes: EntityId<any>[]): string {
     return componentTypes.join(",");
   }
 
@@ -120,7 +120,7 @@ export class World<UpdateParams extends any[] = []> {
   new(): EntityId {
     const entityId = this.entityIdManager.allocate();
     // Create empty archetype for entities with no components
-    let emptyArchetype = this.getOrCreateArchetype([]);
+    let emptyArchetype = this.ensureArchetype([]);
     emptyArchetype.addEntity(entityId, new Map());
     this.entityToArchetype.set(entityId, emptyArchetype);
     return entityId;
@@ -129,14 +129,14 @@ export class World<UpdateParams extends any[] = []> {
   /**
    * Destroy an entity and remove all its components (immediate execution)
    */
-  private _destroyEntity(entityId: EntityId): void {
+  private destroyEntityImmediate(entityId: EntityId): void {
     const archetype = this.entityToArchetype.get(entityId);
     if (!archetype) {
       return; // Entity doesn't exist, nothing to do
     }
 
     // Clean up components that use this entity as a component type
-    const componentReferences = this.getComponentReferences(entityId);
+    const componentReferences = this.getEntityReferences(entityId);
     for (const { sourceEntityId, componentType } of componentReferences) {
       // Directly remove the component from the source entity
       const sourceArchetype = this.entityToArchetype.get(sourceEntityId);
@@ -153,12 +153,12 @@ export class World<UpdateParams extends any[] = []> {
         }
 
         const newComponentTypes = Array.from(currentComponents.keys()).sort((a, b) => a - b);
-        const newArchetype = this.getOrCreateArchetype(newComponentTypes);
+        const newArchetype = this.ensureArchetype(newComponentTypes);
 
         // Remove from current archetype
         sourceArchetype.removeEntity(sourceEntityId);
         if (sourceArchetype.getEntities().length === 0) {
-          this.removeEmptyArchetype(sourceArchetype);
+          this.cleanupEmptyArchetype(sourceArchetype);
         }
 
         // Add to new archetype
@@ -166,10 +166,10 @@ export class World<UpdateParams extends any[] = []> {
         this.entityToArchetype.set(sourceEntityId, newArchetype);
 
         // Remove from component reverse index
-        this.removeComponentReference(sourceEntityId, componentType, entityId);
+        this.untrackEntityReference(sourceEntityId, componentType, entityId);
 
         // Trigger component removed hooks
-        this.executeComponentLifecycleHooks(sourceEntityId, new Map(), new Set([componentType]));
+        this.triggerLifecycleHooks(sourceEntityId, new Map(), new Set([componentType]));
       }
     }
 
@@ -178,7 +178,7 @@ export class World<UpdateParams extends any[] = []> {
 
     archetype.removeEntity(entityId);
     if (archetype.getEntities().length === 0) {
-      this.removeEmptyArchetype(archetype);
+      this.cleanupEmptyArchetype(archetype);
     }
     this.entityToArchetype.delete(entityId);
     this.entityIdManager.deallocate(entityId);
@@ -329,7 +329,7 @@ export class World<UpdateParams extends any[] = []> {
     // Build a deterministic key for the query (component types sorted + filter negative components sorted)
     const sortedTypes = [...componentTypes].sort((a, b) => a - b);
     const filterKey = serializeQueryFilter(filter);
-    const key = `${this.getComponentTypesHash(sortedTypes)}${filterKey ? `|${filterKey}` : ""}`;
+    const key = `${this.createArchetypeSignature(sortedTypes)}${filterKey ? `|${filterKey}` : ""}`;
 
     const cached = this.queryCache.get(key);
     if (cached) {
@@ -517,7 +517,7 @@ export class World<UpdateParams extends any[] = []> {
     // Check if entity should be destroyed
     const hasDestroy = commands.some((cmd) => cmd.type === "destroy");
     if (hasDestroy) {
-      this._destroyEntity(entityId);
+      this.destroyEntityImmediate(entityId);
       return changeset;
     }
 
@@ -597,7 +597,7 @@ export class World<UpdateParams extends any[] = []> {
 
     if (needsArchetypeChange) {
       // Move to new archetype with final component state
-      const newArchetype = this.getOrCreateArchetype(finalComponentTypes);
+      const newArchetype = this.ensureArchetype(finalComponentTypes);
 
       // Remove from current archetype
       currentArchetype.removeEntity(entityId);
@@ -619,10 +619,10 @@ export class World<UpdateParams extends any[] = []> {
       if (detailedType.type === "entity-relation") {
         // For relation components, track the target entity
         const targetEntityId = detailedType.targetId!;
-        this.removeComponentReference(entityId, componentType, targetEntityId);
+        this.untrackEntityReference(entityId, componentType, targetEntityId);
       } else if (detailedType.type === "entity") {
         // For direct entity usage as component type, track the component type itself
-        this.removeComponentReference(entityId, componentType, componentType);
+        this.untrackEntityReference(entityId, componentType, componentType);
       }
     }
 
@@ -632,15 +632,15 @@ export class World<UpdateParams extends any[] = []> {
       if (detailedType.type === "entity-relation") {
         // For relation components, track the target entity
         const targetEntityId = detailedType.targetId!;
-        this.addComponentReference(entityId, componentType, targetEntityId);
+        this.trackEntityReference(entityId, componentType, targetEntityId);
       } else if (detailedType.type === "entity") {
         // For direct entity usage as component type, track the component type itself
-        this.addComponentReference(entityId, componentType, componentType);
+        this.trackEntityReference(entityId, componentType, componentType);
       }
     }
 
     // Trigger component lifecycle hooks
-    this.executeComponentLifecycleHooks(entityId, changeset.adds, changeset.removes);
+    this.triggerLifecycleHooks(entityId, changeset.adds, changeset.removes);
 
     return changeset;
   }
@@ -648,9 +648,9 @@ export class World<UpdateParams extends any[] = []> {
   /**
    * Get or create an archetype for the given component types
    */
-  private getOrCreateArchetype(componentTypes: EntityId<any>[]): Archetype {
+  private ensureArchetype(componentTypes: EntityId<any>[]): Archetype {
     const sortedTypes = [...componentTypes].sort((a, b) => a - b);
-    const hashKey = this.getComponentTypesHash(sortedTypes);
+    const hashKey = this.createArchetypeSignature(sortedTypes);
 
     return getOrCreateWithSideEffect(this.archetypeBySignature, hashKey, () => {
       // Create new archetype
@@ -679,7 +679,7 @@ export class World<UpdateParams extends any[] = []> {
    * @param componentType The component type (which may be an entity ID used as component type)
    * @param targetEntityId The entity being used as component type
    */
-  private addComponentReference(sourceEntityId: EntityId, componentType: EntityId, targetEntityId: EntityId): void {
+  private trackEntityReference(sourceEntityId: EntityId, componentType: EntityId, targetEntityId: EntityId): void {
     if (!this.entityReferences.has(targetEntityId)) {
       this.entityReferences.set(targetEntityId, new Set());
     }
@@ -692,7 +692,7 @@ export class World<UpdateParams extends any[] = []> {
    * @param componentType The component type
    * @param targetEntityId The entity being used as component type
    */
-  private removeComponentReference(sourceEntityId: EntityId, componentType: EntityId, targetEntityId: EntityId): void {
+  private untrackEntityReference(sourceEntityId: EntityId, componentType: EntityId, targetEntityId: EntityId): void {
     const references = this.entityReferences.get(targetEntityId);
     if (references) {
       references.forEach((ref) => {
@@ -711,9 +711,7 @@ export class World<UpdateParams extends any[] = []> {
    * @param targetEntityId The target entity
    * @returns Array of {sourceEntityId, componentType} pairs
    */
-  private getComponentReferences(
-    targetEntityId: EntityId,
-  ): Array<{ sourceEntityId: EntityId; componentType: EntityId }> {
+  private getEntityReferences(targetEntityId: EntityId): Array<{ sourceEntityId: EntityId; componentType: EntityId }> {
     const references = this.entityReferences.get(targetEntityId);
     return references ? Array.from(references) : [];
   }
@@ -721,7 +719,7 @@ export class World<UpdateParams extends any[] = []> {
   /**
    * Remove an empty archetype from all internal data structures
    */
-  private removeEmptyArchetype(archetype: Archetype): void {
+  private cleanupEmptyArchetype(archetype: Archetype): void {
     // Only remove if archetype is actually empty
     if (archetype.getEntities().length > 0) {
       return;
@@ -734,7 +732,7 @@ export class World<UpdateParams extends any[] = []> {
     }
 
     // Remove from archetypeMap
-    const hashKey = this.getComponentTypesHash(archetype.componentTypes);
+    const hashKey = this.createArchetypeSignature(archetype.componentTypes);
     this.archetypeBySignature.delete(hashKey);
 
     // Remove from archetypesByComponent
@@ -755,7 +753,7 @@ export class World<UpdateParams extends any[] = []> {
   /**
    * Execute component lifecycle hooks for added and removed components
    */
-  private executeComponentLifecycleHooks(
+  private triggerLifecycleHooks(
     entityId: EntityId,
     addedComponents: Map<EntityId<any>, any>,
     removedComponents: Set<EntityId<any>>,
