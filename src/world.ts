@@ -283,8 +283,8 @@ export class World<UpdateParams extends any[] = []> {
   /**
    * Register a system with optional dependencies
    */
-  registerSystem(system: System<UpdateParams>): void {
-    this.systemScheduler.addSystem(system);
+  registerSystem(system: System<UpdateParams>, additionalDeps: System<UpdateParams>[] = []): void {
+    this.systemScheduler.addSystem(system, additionalDeps);
   }
 
   /**

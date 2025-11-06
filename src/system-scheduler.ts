@@ -5,18 +5,21 @@ import type { System } from "./system";
  */
 export class SystemScheduler<UpdateParams extends any[] = [deltaTime: number]> {
   private systems = new Set<System<UpdateParams>>();
+  private systemDependencies = new Map<System<UpdateParams>, Set<System<UpdateParams>>>();
   private cachedExecutionOrder: System<UpdateParams>[] | null = null;
 
   /**
    * Add a system with optional dependencies
    * @param system The system to add
+   * @param additionalDeps Additional dependencies for the system
    */
-  addSystem(system: System<UpdateParams>): void {
+  addSystem(system: System<UpdateParams>, additionalDeps: System<UpdateParams>[] = []): void {
     this.systems.add(system);
     // Also add dependencies to the set
     for (const dep of system.dependencies || []) {
       this.systems.add(dep);
     }
+    this.systemDependencies.set(system, new Set([...additionalDeps, ...(system.dependencies || [])]));
     this.cachedExecutionOrder = null;
   }
 
@@ -41,7 +44,7 @@ export class SystemScheduler<UpdateParams extends any[] = [deltaTime: number]> {
 
       visiting.add(system);
 
-      for (const dep of system.dependencies || []) {
+      for (const dep of this.systemDependencies.get(system) || []) {
         visit(dep);
       }
 

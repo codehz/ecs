@@ -176,7 +176,7 @@ bun run examples/simple/demo.ts
 - `delete(entity, componentId)`: 从实体移除组件
 - `setExclusive(componentId)`: 将组件标记为独占关系
 - `createQuery(componentIds)`: 创建查询
-- `registerSystem(system)`: 注册系统
+- `registerSystem(system, dependencies?)`: 注册系统
 - `registerLifecycleHook(componentId, hook)`: 注册组件或通配符关系生命周期钩子
 - `unregisterLifecycleHook(componentId, hook)`: 注销组件或通配符关系生命周期钩子
 - `update(...params)`: 更新世界（参数取决于泛型配置）
@@ -289,7 +289,7 @@ class MovementSystem implements System<[deltaTime: number]> {
 }
 ```
 
-系统支持依赖关系排序，确保正确的执行顺序。依赖关系通过系统的 `dependencies` 属性指定：
+系统支持依赖关系排序，确保正确的执行顺序。依赖关系可以通过系统的 `dependencies` 属性指定：
 
 ```typescript
 class InputSystem implements System<[deltaTime: number]> {
@@ -314,7 +314,7 @@ class MovementSystem implements System<[deltaTime: number]> {
 // 注册系统
 const inputSystem = new InputSystem();
 world.registerSystem(inputSystem);
-world.registerSystem(new MovementSystem(inputSystem));
+world.registerSystem(new MovementSystem(inputSystem), [inputSystem]); // 也可以在注册时指定额外依赖
 ```
 
 系统将按照拓扑排序执行，依赖系统始终在被依赖系统之前运行。
