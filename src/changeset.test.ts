@@ -124,9 +124,9 @@ describe("ComponentChangeset", () => {
       existing.set(VelocityId, { x: 1, y: 2 });
       existing.set(HealthId, 100);
 
-      const finalTypes = changeset.applyTo(existing);
+      const finalTypes = changeset.getFinalComponentTypes(existing);
 
-      expect([...finalTypes.keys()]).toEqual([HealthId, PositionId]);
+      expect(finalTypes).toEqual([PositionId, HealthId]); // Sorted by ID
     });
   });
 

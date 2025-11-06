@@ -72,4 +72,12 @@ export class ComponentChangeset {
 
     return finalComponents;
   }
+
+  /**
+   * Get the final component types after applying changes
+   */
+  getFinalComponentTypes(existingComponents: Map<EntityId<any>, any>): EntityId<any>[] {
+    const finalComponents = this.applyTo(existingComponents);
+    return Array.from(finalComponents.keys()).sort((a, b) => a - b);
+  }
 }
