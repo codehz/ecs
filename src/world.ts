@@ -22,7 +22,7 @@ export class World<UpdateParams extends any[] = []> {
   /** Array of all archetypes in the world */
   private archetypes: Archetype[] = [];
 
-  /** Maps archetype signatures (component type hashes) to archetype instances */
+  /** Maps archetype signatures (component type signatures) to archetype instances */
   private archetypeBySignature = new Map<string, Archetype>();
 
   /** Maps entity IDs to their current archetype */
@@ -58,7 +58,7 @@ export class World<UpdateParams extends any[] = []> {
 
   /**
    * Create a new World.
-   * If an optional snapshot object is provided (previously produced by `World.serialize()`),
+   * If an optional snapshot object is provided (previously produced by `world.serialize()`),
    * the world will be restored from that snapshot. The snapshot may contain non-JSON values.
    */
   constructor(snapshot?: any) {
@@ -83,9 +83,9 @@ export class World<UpdateParams extends any[] = []> {
           const componentMap = new Map<EntityId<any>, any>();
           const componentTypes: EntityId<any>[] = [];
 
-          for (const c of componentsArray) {
-            componentMap.set(c.type as EntityId<any>, c.value);
-            componentTypes.push(c.type as EntityId<any>);
+          for (const componentEntry of componentsArray) {
+            componentMap.set(componentEntry.type as EntityId<any>, componentEntry.value);
+            componentTypes.push(componentEntry.type as EntityId<any>);
           }
 
           const archetype = this.ensureArchetype(componentTypes);
@@ -108,7 +108,8 @@ export class World<UpdateParams extends any[] = []> {
   }
 
   /**
-   * Generate a hash key for component types array
+   * Generate a signature string for component types array
+   * @returns A string signature for the component types
    */
   private createArchetypeSignature(componentTypes: EntityId<any>[]): string {
     return componentTypes.join(",");
@@ -116,6 +117,7 @@ export class World<UpdateParams extends any[] = []> {
 
   /**
    * Create a new entity
+   * @returns The ID of the newly created entity
    */
   new(): EntityId {
     const entityId = this.entityIdManager.allocate();
@@ -143,10 +145,10 @@ export class World<UpdateParams extends any[] = []> {
       if (sourceArchetype) {
         // Remove from current archetype and move to new archetype without this component
         const currentComponents = new Map<EntityId<any>, any>();
-        for (const componentType of sourceArchetype.componentTypes) {
-          if (componentType !== componentType) {
-            const componentData = sourceArchetype.get(sourceEntityId, componentType);
-            currentComponents.set(componentType, componentData);
+        for (const archetypeComponentType of sourceArchetype.componentTypes) {
+          if (archetypeComponentType !== componentType) {
+            const componentData = sourceArchetype.get(sourceEntityId, archetypeComponentType);
+            currentComponents.set(archetypeComponentType, componentData);
           }
         }
 
@@ -248,12 +250,14 @@ export class World<UpdateParams extends any[] = []> {
    * Returns an array of all matching relation instances
    * @param entityId The entity
    * @param componentType The wildcard relation type
+   * @returns Array of [targetEntityId, componentData] pairs for all matching relations
    */
   get<T>(entityId: EntityId, componentType: WildcardRelationId<T>): [EntityId<unknown>, T][];
   /**
    * Get component data for a specific entity and component type
    * @param entityId The entity
    * @param componentType The component type
+   * @returns The component data
    */
   get<T>(entityId: EntityId, componentType: EntityId<T>): T;
   get<T>(entityId: EntityId, componentType: EntityId<T> | WildcardRelationId<T>): T | [EntityId<unknown>, any][] {
@@ -322,6 +326,7 @@ export class World<UpdateParams extends any[] = []> {
 
   /**
    * Create a cached query for efficient entity lookups
+   * @returns A Query object for the specified component types and filter
    */
   createQuery(componentTypes: EntityId<any>[], filter: QueryFilter = {}): Query {
     // Build a deterministic key for the query (component types sorted + filter negative components sorted)
@@ -464,6 +469,7 @@ export class World<UpdateParams extends any[] = []> {
 
   /**
    * Query entities with specific components
+   * @returns Array of entity IDs that have all the specified components
    */
   queryEntities(componentTypes: EntityId<any>[]): EntityId[];
   queryEntities<const T extends readonly EntityId<any>[]>(
@@ -507,6 +513,7 @@ export class World<UpdateParams extends any[] = []> {
 
   /**
    * @internal Execute commands for a single entity (for internal use by CommandBuffer)
+   * @returns ComponentChangeset describing the changes made
    */
   executeEntityCommands(entityId: EntityId, commands: Command[]): ComponentChangeset {
     // Track component changes using ComponentChangeset
@@ -645,6 +652,7 @@ export class World<UpdateParams extends any[] = []> {
 
   /**
    * Get or create an archetype for the given component types
+   * @returns The archetype for the given component types
    */
   private ensureArchetype(componentTypes: EntityId<any>[]): Archetype {
     const sortedTypes = [...componentTypes].sort((a, b) => a - b);
@@ -729,7 +737,7 @@ export class World<UpdateParams extends any[] = []> {
       this.archetypes.splice(index, 1);
     }
 
-    // Remove from archetypeMap
+    // Remove from archetype signature map
     const hashKey = this.createArchetypeSignature(archetype.componentTypes);
     this.archetypeBySignature.delete(hashKey);
 
