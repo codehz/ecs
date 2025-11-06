@@ -146,9 +146,7 @@ export class World<UpdateParams extends any[] = []> {
         for (const componentType of sourceArchetype.componentTypes) {
           if (componentType !== componentType) {
             const componentData = sourceArchetype.get(sourceEntityId, componentType);
-            if (componentData !== undefined) {
-              currentComponents.set(componentType, componentData);
-            }
+            currentComponents.set(componentType, componentData);
           }
         }
 
