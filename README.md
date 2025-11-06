@@ -171,6 +171,8 @@ bun run examples/simple/demo.ts
 
 - `new()`: 创建新实体
 - `set(entity, componentId, data)`: 向实体添加组件
+- `get(entity, componentId)`: 获取实体的组件数据（注意：只能获取已设置的组件，使用前请先用 `has()` 检查组件是否存在）
+- `has(entity, componentId)`: 检查实体是否拥有指定组件
 - `delete(entity, componentId)`: 从实体移除组件
 - `setExclusive(componentId)`: 将组件标记为独占关系
 - `createQuery(componentIds)`: 创建查询
@@ -251,6 +253,7 @@ const restored = World.deserialize(readySnapshot);
 
 注意事项
 
+- **重要警告**：`get()` 方法只能获取实体已设置的组件。如果尝试获取不存在的组件，会抛出错误。由于 `undefined` 是组件的有效值，不能使用 `get()` 的返回值是否为 `undefined` 来判断组件是否存在。请在使用 `get()` 之前先用 `has()` 方法检查组件是否存在。
 - 快照只包含实体、组件、以及 `EntityIdManager` 的分配器状态（用于保留下一次分配的 ID）；并不会自动恢复已注册的系统、查询缓存或生命周期钩子。恢复后应由应用负责重新注册系统与钩子。
 - 若需要跨版本兼容，建议在持久化格式中包含 `version` 字段，并在恢复时进行格式兼容性检查与迁移。
 

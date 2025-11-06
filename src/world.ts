@@ -265,6 +265,19 @@ export class World<UpdateParams extends any[] = []> {
     if (!archetype) {
       throw new Error(`Entity ${entityId} does not exist`);
     }
+
+    // Check if entity has the component before attempting to get it
+    // Note: undefined is a valid component value, so we cannot use undefined to check existence
+    const detailedType = getDetailedIdType(componentType);
+    if (detailedType.type !== "wildcard-relation") {
+      // For regular components, check if the component type exists in the archetype
+      if (!archetype.componentTypes.includes(componentType)) {
+        throw new Error(
+          `Entity ${entityId} does not have component ${componentType}. Use has() to check component existence before calling get().`,
+        );
+      }
+    }
+
     return archetype.get(entityId, componentType);
   }
 

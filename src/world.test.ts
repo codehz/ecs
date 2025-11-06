@@ -79,7 +79,9 @@ describe("World", () => {
       world.delete(entity, positionComponent);
       world.sync();
       expect(world.has(entity, positionComponent)).toBe(false);
-      expect(() => world.get(entity, positionComponent)).toThrow(/^Component type \d+ is not in this archetype$/);
+      expect(() => world.get(entity, positionComponent)).toThrow(
+        /^Entity \d+ does not have component \d+\. Use has\(\) to check component existence before calling get\(\)\.$/,
+      );
     });
 
     it("should throw error when removing invalid component type", () => {
