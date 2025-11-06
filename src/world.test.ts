@@ -268,7 +268,7 @@ describe("World", () => {
       };
 
       world.registerSystem(system);
-      await world.update(0.016);
+      world.update(0.016);
 
       expect(updateCalled).toBe(true);
     });
@@ -294,7 +294,7 @@ describe("World", () => {
       world.registerSystem(systemB);
       world.registerSystem(systemC);
 
-      await world.update(0.016);
+      world.update(0.016);
 
       expect(executionOrder).toEqual(["A", "B", "C"]);
     });

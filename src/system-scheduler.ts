@@ -63,19 +63,26 @@ export class SystemScheduler<UpdateParams extends any[] = []> {
     return result;
   }
 
-  async update(...params: UpdateParams): Promise<void> {
+  update(...params: UpdateParams): Promise<void[]> | void {
     const executionOrder = this.getExecutionOrder();
     const systemPromises = new Map<System<UpdateParams>, Promise<void>>();
 
     for (const system of executionOrder) {
       const deps = Array.from(this.systemDependencies.get(system) || []);
-      const depPromises = deps.map((dep) => systemPromises.get(dep)!);
+      const depPromises = deps.map((dep) => systemPromises.get(dep)!).filter(Boolean);
 
-      const promise = Promise.all(depPromises).then(() => system.update(...params));
-      systemPromises.set(system, promise);
+      if (depPromises.length > 0) {
+        const promise = Promise.all(depPromises).then(() => system.update(...params));
+        systemPromises.set(system, promise);
+      } else {
+        const result = system.update(...params);
+        if (result instanceof Promise) {
+          systemPromises.set(system, result);
+        }
+      }
     }
 
-    await Promise.all(systemPromises.values());
+    return Promise.all(systemPromises.values());
   }
 
   /**

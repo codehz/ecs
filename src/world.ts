@@ -320,10 +320,16 @@ export class World<UpdateParams extends any[] = []> {
 
   /**
    * Update the world (run all systems in dependency order)
+   * This function is synchronous when all systems are synchronous,
+   * and asynchronous (returns a Promise) when any system is asynchronous.
    */
-  async update(...params: UpdateParams): Promise<void> {
-    await this.systemScheduler.update(...params);
-    this.commandBuffer.execute();
+  update(...params: UpdateParams): Promise<void> | void {
+    const result = this.systemScheduler.update(...params);
+    if (result instanceof Promise) {
+      return result.then(() => this.commandBuffer.execute());
+    } else {
+      this.commandBuffer.execute();
+    }
   }
 
   /**
