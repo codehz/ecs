@@ -27,7 +27,7 @@ export class SystemScheduler<UpdateParams extends any[] = []> {
    * Get the execution order of systems based on dependencies
    * Uses topological sort
    */
-  private getExecutionOrder(): System<UpdateParams>[] {
+  getExecutionOrder(): System<UpdateParams>[] {
     if (this.cachedExecutionOrder !== null) {
       return this.cachedExecutionOrder;
     }
@@ -65,9 +65,17 @@ export class SystemScheduler<UpdateParams extends any[] = []> {
 
   async update(...params: UpdateParams): Promise<void> {
     const executionOrder = this.getExecutionOrder();
+    const systemPromises = new Map<System<UpdateParams>, Promise<void>>();
+
     for (const system of executionOrder) {
-      await system.update(...params);
+      const deps = Array.from(this.systemDependencies.get(system) || []);
+      const depPromises = deps.map((dep) => systemPromises.get(dep)!);
+
+      const promise = Promise.all(depPromises).then(() => system.update(...params));
+      systemPromises.set(system, promise);
     }
+
+    await Promise.all(systemPromises.values());
   }
 
   /**

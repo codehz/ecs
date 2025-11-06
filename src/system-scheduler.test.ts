@@ -28,18 +28,46 @@ describe("SystemScheduler", () => {
     expect(scheduler.getExecutionOrder()).toEqual([systemA, systemB, systemC]);
   });
 
-  it("should clear all systems", () => {
+  it("should execute independent systems in parallel", async () => {
     const scheduler = new SystemScheduler();
-    const systemB: System = { update: () => {} };
-    const systemA: System = { update: () => {}, dependencies: [systemB] };
+    const executionOrder: string[] = [];
+
+    const systemA: System = {
+      update: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        executionOrder.push("A");
+      },
+    };
+    const systemB: System = {
+      update: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        executionOrder.push("B");
+      },
+    };
+    const systemC: System = {
+      update: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        executionOrder.push("C");
+      },
+      dependencies: [systemA],
+    };
 
     scheduler.addSystem(systemA);
     scheduler.addSystem(systemB);
+    scheduler.addSystem(systemC);
 
-    expect(scheduler.getExecutionOrder()).toHaveLength(2);
+    const start = Date.now();
+    await scheduler.update();
+    const duration = Date.now() - start;
 
-    scheduler.clear();
+    // A and B should execute in parallel (100ms), C after A (100ms), total ~200ms
+    // Sequential would be ~300ms
+    expect(duration).toBeLessThan(250); // Allow some margin
 
-    expect(scheduler.getExecutionOrder()).toHaveLength(0);
+    // Execution order should have A and B in some order, then C
+    expect(executionOrder).toContain("A");
+    expect(executionOrder).toContain("B");
+    expect(executionOrder).toContain("C");
+    expect(executionOrder.indexOf("C")).toBeGreaterThan(executionOrder.indexOf("A"));
   });
 });

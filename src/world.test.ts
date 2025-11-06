@@ -257,7 +257,7 @@ describe("World", () => {
       world.update(0.016);
     });
 
-    it("should call system update methods", () => {
+    it("should call system update methods", async () => {
       const world = new World<[deltaTime: number]>();
       let updateCalled = false;
       const system = {
@@ -268,24 +268,24 @@ describe("World", () => {
       };
 
       world.registerSystem(system);
-      world.update(0.016);
+      await world.update(0.016);
 
       expect(updateCalled).toBe(true);
     });
 
-    it("should execute systems in dependency order", () => {
+    it("should execute systems in dependency order", async () => {
       const world = new World<[deltaTime: number]>();
       const executionOrder: string[] = [];
 
       const systemA = {
-        update: (dt: number) => executionOrder.push("A"),
+        update: (dt: number) => void executionOrder.push("A"),
       };
       const systemB = {
-        update: (dt: number) => executionOrder.push("B"),
+        update: (dt: number) => void executionOrder.push("B"),
         dependencies: [systemA],
       };
       const systemC = {
-        update: (dt: number) => executionOrder.push("C"),
+        update: (dt: number) => void executionOrder.push("C"),
         dependencies: [systemB],
       };
 
@@ -294,7 +294,7 @@ describe("World", () => {
       world.registerSystem(systemB);
       world.registerSystem(systemC);
 
-      world.update(0.016);
+      await world.update(0.016);
 
       expect(executionOrder).toEqual(["A", "B", "C"]);
     });
