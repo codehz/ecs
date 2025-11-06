@@ -106,22 +106,30 @@ export class Archetype {
       return undefined;
     }
 
-    // Remove from entity list
-    this.entities.splice(index, 1);
-    this.entityToIndex.delete(entityId);
-
-    // Extract component data
+    // Extract component data before removal
     const removedData = new Map<EntityId<any>, any>();
     for (const componentType of this.componentTypes) {
       const dataArray = this.getComponentData(componentType);
-      removedData.set(componentType, dataArray[index]);
-      dataArray.splice(index, 1);
+      removedData.set(componentType, dataArray[index] === MISSING_COMPONENT ? undefined : dataArray[index]);
     }
 
-    // Update indices for remaining entities
-    for (let i = index; i < this.entities.length; i++) {
-      this.entityToIndex.set(this.entities[i]!, i);
+    const lastIndex = this.entities.length - 1;
+    if (index !== lastIndex) {
+      // Swap with last entity for O(1) removal
+      const lastEntity = this.entities[lastIndex]!;
+      this.entities[index] = lastEntity;
+      this.entityToIndex.set(lastEntity, index);
+
+      // Swap component data
+      for (const componentType of this.componentTypes) {
+        const dataArray = this.getComponentData(componentType);
+        [dataArray[index], dataArray[lastIndex]] = [dataArray[lastIndex], dataArray[index]];
+      }
     }
+
+    // Remove the last element
+    this.entities.pop();
+    this.entityToIndex.delete(entityId);
 
     return removedData;
   }
