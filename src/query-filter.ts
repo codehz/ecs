@@ -26,8 +26,12 @@ export function matchesComponentTypes(archetype: Archetype, componentTypes: Enti
   return componentTypes.every((type) => {
     const detailedType = getDetailedIdType(type);
     if (detailedType.type === "wildcard-relation") {
-      // For wildcard relations, check if archetype contains the component
-      return archetype.componentTypes.includes(detailedType.componentId!);
+      // For wildcard relations, check if archetype contains the component relation
+      return archetype.componentTypes.some((archetypeType) => {
+        if (!isRelationId(archetypeType)) return false;
+        const decoded = decodeRelationId(archetypeType);
+        return decoded.componentId === detailedType.componentId;
+      });
     } else {
       // For regular components, check direct inclusion
       return archetype.componentTypes.includes(type);
