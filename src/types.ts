@@ -14,13 +14,25 @@ export interface LifecycleHook<T = unknown> {
   onRemoved?: (entityId: EntityId, componentType: EntityId<T>) => void;
 }
 
+export type ComponentType<T> = EntityId<T> | OptionalEntityId<T>;
+
+export type OptionalEntityId<T> = { optional: EntityId<T> };
+
+export function isOptionalEntityId<T>(type: ComponentType<T>): type is OptionalEntityId<T> {
+  return typeof type === "object" && type !== null && "optional" in type;
+}
+
+export type ComponentTypeToData<T> = T extends { optional: infer U }
+  ? { value: ComponentTypeToData<U> } | undefined
+  : T extends WildcardRelationId<infer U>
+    ? [EntityId<unknown>, U][]
+    : T extends EntityId<infer U>
+      ? U
+      : never;
+
 /**
  * Type helper for component tuples extracted from EntityId array
  */
-export type ComponentTuple<T extends readonly EntityId<any>[]> = {
-  readonly [K in keyof T]: T[K] extends WildcardRelationId<infer U>
-    ? [EntityId<unknown>, U][]
-    : T[K] extends EntityId<infer U>
-      ? U
-      : never;
+export type ComponentTuple<T extends readonly ComponentType<any>[]> = {
+  readonly [K in keyof T]: ComponentTypeToData<T[K]>;
 };

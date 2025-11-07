@@ -1,7 +1,7 @@
 import { Archetype } from "./archetype";
 import type { EntityId } from "./entity";
 import { matchesComponentTypes, matchesFilter, type QueryFilter } from "./query-filter";
-import type { ComponentTuple } from "./types";
+import type { ComponentTuple, ComponentType } from "./types";
 import type { World } from "./world";
 
 /**
@@ -46,7 +46,7 @@ export class Query {
    * @param componentTypes Array of component types to retrieve
    * @returns Array of objects with entity and component data
    */
-  getEntitiesWithComponents<const T extends readonly EntityId<any>[]>(
+  getEntitiesWithComponents<const T extends readonly ComponentType<any>[]>(
     componentTypes: T,
   ): Array<{
     entity: EntityId;
@@ -74,7 +74,7 @@ export class Query {
    * @param componentTypes Array of component types to retrieve
    * @param callback Function called for each entity with its components
    */
-  forEach<const T extends readonly EntityId<any>[]>(
+  forEach<const T extends readonly ComponentType<any>[]>(
     componentTypes: T,
     callback: (entity: EntityId, ...components: ComponentTuple<T>) => void,
   ): void {
