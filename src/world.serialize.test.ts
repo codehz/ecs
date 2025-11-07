@@ -6,8 +6,8 @@ describe("World serialization", () => {
   it("should serialize and deserialize a world with components and relations", () => {
     type Position = { x: number; y: number };
 
-    const PositionComp = component<Position>();
-    const HealthComp = component<number>();
+    const PositionComp = component<Position>("position");
+    const HealthComp = component<number>("health");
 
     const world = new World();
 

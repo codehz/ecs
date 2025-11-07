@@ -1,8 +1,8 @@
-import { Archetype } from "./archetype";
+import { Archetype, MISSING_COMPONENT } from "./archetype";
 import { ComponentChangeset } from "./changeset";
 import { CommandBuffer, type Command } from "./command-buffer";
-import type { EntityId, WildcardRelationId } from "./entity";
-import { EntityIdManager, getDetailedIdType, relation } from "./entity";
+import type { ComponentId, EntityId, WildcardRelationId } from "./entity";
+import { EntityIdManager, getDetailedIdType, relation, getComponentNameById, getComponentIdByName } from "./entity";
 import { Query } from "./query";
 import { serializeQueryFilter, type QueryFilter } from "./query-filter";
 import type { System } from "./system";
@@ -61,7 +61,7 @@ export class World<UpdateParams extends any[] = []> {
    * If an optional snapshot object is provided (previously produced by `world.serialize()`),
    * the world will be restored from that snapshot. The snapshot may contain non-JSON values.
    */
-  constructor(snapshot?: any) {
+  constructor(snapshot?: SerializedWorld) {
     // If snapshot provided, restore world state
     if (snapshot && typeof snapshot === "object") {
       if (snapshot.entityManager) {
@@ -78,14 +78,41 @@ export class World<UpdateParams extends any[] = []> {
       if (Array.isArray(snapshot.entities)) {
         for (const entry of snapshot.entities) {
           const entityId = entry.id as EntityId;
-          const componentsArray: Array<{ type: number; value: any }> = entry.components || [];
+          const componentsArray: SerializedComponent[] = entry.components || [];
 
           const componentMap = new Map<EntityId<any>, any>();
           const componentTypes: EntityId<any>[] = [];
 
           for (const componentEntry of componentsArray) {
-            componentMap.set(componentEntry.type as EntityId<any>, componentEntry.value);
-            componentTypes.push(componentEntry.type as EntityId<any>);
+            const componentTypeRaw = componentEntry.type;
+            let componentType: EntityId<any>;
+
+            if (typeof componentTypeRaw === "number") {
+              componentType = componentTypeRaw as EntityId<any>;
+            } else if (typeof componentTypeRaw === "string") {
+              // Component name lookup
+              const compId = getComponentIdByName(componentTypeRaw);
+              if (compId === undefined) {
+                throw new Error(`Unknown component name in snapshot: ${componentTypeRaw}`);
+              }
+              componentType = compId;
+            } else if (
+              typeof componentTypeRaw === "object" &&
+              componentTypeRaw !== null &&
+              typeof componentTypeRaw.component === "string" &&
+              typeof componentTypeRaw.target === "number"
+            ) {
+              // Component name lookup
+              const compId = getComponentIdByName(componentTypeRaw.component);
+              if (compId === undefined) {
+                throw new Error(`Unknown component name in snapshot: ${componentTypeRaw.component}`);
+              }
+              componentType = relation(compId, componentTypeRaw.target as EntityId);
+            } else {
+              throw new Error(`Invalid component type in snapshot: ${JSON.stringify(componentTypeRaw)}`);
+            }
+            componentMap.set(componentType, componentEntry.value);
+            componentTypes.push(componentType);
           }
 
           const archetype = this.ensureArchetype(componentTypes);
@@ -830,16 +857,34 @@ export class World<UpdateParams extends any[] = []> {
    * This returns an in-memory structure and does not perform JSON stringification.
    * Component values are stored as-is (they may be non-JSON-serializable).
    */
-  serialize(): any {
-    const entities: Array<{ id: number; components: Array<{ type: number; value: any }> }> = [];
+  serialize(): SerializedWorld {
+    const entities: SerializedEntity[] = [];
 
-    for (const [entityId, archetype] of this.entityToArchetype.entries()) {
-      const compEntries: Array<{ type: number; value: any }> = [];
-      for (const compType of archetype.componentTypes) {
-        const value = archetype.get(entityId as EntityId, compType as EntityId<any>);
-        compEntries.push({ type: compType as number, value });
+    for (const archetype of this.archetypes) {
+      const dumpedEntities = archetype.dump();
+      for (const { entity, components } of dumpedEntities) {
+        entities.push({
+          id: entity,
+          components: Array.from(components.entries()).map(([rawType, value]) => {
+            const detailedType = getDetailedIdType(rawType);
+            let type: number | string | { component: string; target: number } = rawType;
+            let componentName;
+            switch (detailedType.type) {
+              case "component":
+                type = getComponentNameById(rawType as ComponentId) || rawType;
+                break;
+              case "entity-relation":
+              case "component-relation":
+                componentName = getComponentNameById(detailedType.componentId);
+                if (componentName) {
+                  type = { component: componentName, target: detailedType.targetId! };
+                }
+                break;
+            }
+            return { type, value: value === MISSING_COMPONENT ? undefined : value };
+          }),
+        });
       }
-      entities.push({ id: entityId as number, components: compEntries });
     }
 
     return {
@@ -850,3 +895,20 @@ export class World<UpdateParams extends any[] = []> {
     };
   }
 }
+
+export type SerializedWorld = {
+  version: number;
+  entityManager: any;
+  exclusiveComponents: EntityId[];
+  entities: SerializedEntity[];
+};
+
+export type SerializedEntity = {
+  id: number;
+  components: SerializedComponent[];
+};
+
+export type SerializedComponent = {
+  type: number | string | { component: string; target: number };
+  value: any;
+};

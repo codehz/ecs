@@ -423,8 +423,9 @@ const ComponentNames: Map<ComponentId<any>, string> = new Map();
 const ComponentIdForNames: Map<string, ComponentId<any>> = new Map();
 
 /**
- * Allocate a new component ID from the global allocator
- * Optionally register a name for the component
+ * Allocate a new component ID from the global allocator.
+ * Optionally register a name for the component.
+ * The name is only for serialization/debugging and does not affect base functionality.
  * @param name Optional name for the component
  * @returns The allocated component ID
  */
@@ -448,4 +449,12 @@ export function component<T = void>(name?: string): ComponentId<T> {
  */
 export function getComponentIdByName(name: string): ComponentId<any> | undefined {
   return ComponentIdForNames.get(name);
+}
+
+/** Get a component name by its ID
+ * @param id The component ID
+ * @returns The component name if found, undefined otherwise
+ */
+export function getComponentNameById(id: ComponentId<any>): string | undefined {
+  return ComponentNames.get(id);
 }

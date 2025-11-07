@@ -6,7 +6,7 @@ import { getOrComputeCache } from "./utils";
 /**
  * Special value to represent missing component data
  */
-const MISSING_COMPONENT = Symbol("missing component");
+export const MISSING_COMPONENT = Symbol("missing component");
 
 /**
  * Archetype class for ECS architecture
@@ -93,6 +93,54 @@ export class Archetype {
       const data = componentData.get(componentType);
       this.getComponentData(componentType).push(data === undefined ? MISSING_COMPONENT : data);
     }
+  }
+
+  /**
+   * Get all component data for a specific entity
+   * @param entityId The entity to get data for
+   * @returns Map of component type to component data
+   */
+  getEntity(entityId: EntityId): Map<EntityId<any>, any> | undefined {
+    const index = this.entityToIndex.get(entityId);
+    if (index === undefined) {
+      return undefined;
+    }
+
+    const entityData = new Map<EntityId<any>, any>();
+    for (const componentType of this.componentTypes) {
+      const dataArray = this.getComponentData(componentType);
+      const data = dataArray[index];
+      entityData.set(componentType, data === MISSING_COMPONENT ? undefined : data);
+    }
+
+    return entityData;
+  }
+
+  /**
+   * Dump all entities and their component data in this archetype
+   * @returns Array of objects with entity and component data
+   */
+  dump(): Array<{
+    entity: EntityId;
+    components: Map<EntityId<any>, any>;
+  }> {
+    const result: Array<{
+      entity: EntityId;
+      components: Map<EntityId<any>, any>;
+    }> = [];
+
+    for (let i = 0; i < this.entities.length; i++) {
+      const entity = this.entities[i]!;
+      const components = new Map<EntityId<any>, any>();
+      for (const componentType of this.componentTypes) {
+        const dataArray = this.getComponentData(componentType);
+        const data = dataArray[i];
+        components.set(componentType, data === MISSING_COMPONENT ? undefined : data);
+      }
+      result.push({ entity, components });
+    }
+
+    return result;
   }
 
   /**
