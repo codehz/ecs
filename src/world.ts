@@ -546,13 +546,6 @@ export class World<UpdateParams extends any[] = []> {
       return changeset; // Entity doesn't exist, nothing to do
     }
 
-    // Get current component data
-    const currentComponents = new Map<EntityId<any>, any>();
-    for (const componentType of currentArchetype.componentTypes) {
-      const componentData = currentArchetype.get(entityId, componentType);
-      currentComponents.set(componentType, componentData);
-    }
-
     // Process commands to determine final state
     for (const command of commands) {
       switch (command.type) {
@@ -603,24 +596,17 @@ export class World<UpdateParams extends any[] = []> {
       }
     }
 
-    // Apply changes to current components to get final state
-    const finalComponents = changeset.applyTo(currentComponents);
+    const finalComponentTypes = changeset.getFinalComponentTypes(currentArchetype.componentTypes);
 
-    // Check if we need to move to a different archetype
-    const currentComponentTypes = currentArchetype.componentTypes;
-    const needsArchetypeChange =
-      finalComponents.size !== currentComponentTypes.length ||
-      !currentComponentTypes.every((type) => finalComponents.has(type));
-
-    if (needsArchetypeChange) {
+    if (finalComponentTypes) {
       // Move to new archetype with final component state
-      const newArchetype = this.ensureArchetype(finalComponents.keys());
+      const newArchetype = this.ensureArchetype(finalComponentTypes);
 
-      // Remove from current archetype
-      currentArchetype.removeEntity(entityId);
+      // Remove from current archetype and get current components
+      const currentComponents = currentArchetype.removeEntity(entityId)!;
 
       // Add to new archetype with final component data
-      newArchetype.addEntity(entityId, finalComponents);
+      newArchetype.addEntity(entityId, changeset.applyTo(currentComponents));
       this.entityToArchetype.set(entityId, newArchetype);
     } else {
       // Same archetype, just update component data

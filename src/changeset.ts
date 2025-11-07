@@ -70,4 +70,34 @@ export class ComponentChangeset {
 
     return existingComponents;
   }
+
+  /**
+   * Get the final component types after applying the changeset
+   * @param existingComponentTypes - The current component types on the entity
+   * @returns The final component types or undefined if no changes
+   */
+  getFinalComponentTypes(existingComponentTypes: EntityId<any>[]): EntityId<any>[] | undefined {
+    const finalComponentTypes = new Set<EntityId<any>>(existingComponentTypes);
+    let changed = false;
+
+    // Apply removals
+    for (const componentType of this.removes) {
+      if (!finalComponentTypes.has(componentType)) {
+        continue; // Component not present, skip
+      }
+      changed = true;
+      finalComponentTypes.delete(componentType);
+    }
+
+    // Apply additions
+    for (const componentType of this.adds.keys()) {
+      if (finalComponentTypes.has(componentType)) {
+        continue; // Component already present, skip
+      }
+      changed = true;
+      finalComponentTypes.add(componentType);
+    }
+
+    return changed ? Array.from(finalComponentTypes) : undefined;
+  }
 }
