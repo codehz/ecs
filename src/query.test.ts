@@ -260,18 +260,19 @@ describe("Query", () => {
     it("should support wildcard relations in queries", () => {
       const world = new World();
 
-      // Create a wildcard relation for position component
-      const wildcardPositionRelation = relation(positionComponent, "*");
-      const query = world.createQuery([wildcardPositionRelation]);
+      const tag = component();
+      // Create a wildcard relation for tag component
+      const wildcardTagRelation = relation(tag, "*");
+      const query = world.createQuery([wildcardTagRelation]);
 
       const entity1 = world.new();
       const entity2 = world.new();
       const entity3 = world.new();
 
-      world.set(entity1, positionComponent, { x: 1, y: 2 });
-      world.set(entity1, velocityComponent, { x: 0.1, y: 0.2 });
+      world.set(entity1, relation(tag, positionComponent), { x: 1, y: 2 });
+      world.set(entity1, relation(tag, velocityComponent), { x: 0.1, y: 0.2 });
 
-      world.set(entity2, positionComponent, { x: 3, y: 4 });
+      world.set(entity2, relation(tag, positionComponent), { x: 3, y: 4 });
 
       // entity3 has no position component
 
