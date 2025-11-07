@@ -83,6 +83,7 @@ export class ComponentChangeset {
     // Apply removals
     for (const componentType of this.removes) {
       if (!finalComponentTypes.has(componentType)) {
+        this.removes.delete(componentType);
         continue; // Component not present, skip
       }
       changed = true;
