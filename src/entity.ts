@@ -70,7 +70,7 @@ type RelationIdType<T, R> =
   R extends ComponentId<infer U>
     ? U extends void
       ? ComponentRelationId<T>
-      : ComponentRelationId<T extends void ? U : T & U>
+      : ComponentRelationId<T extends void ? U : T>
     : R extends EntityId<any>
       ? EntityRelationId<T>
       : never;
