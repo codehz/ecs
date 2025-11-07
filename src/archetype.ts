@@ -273,7 +273,7 @@ export class Archetype {
     callback: (entity: EntityId, ...components: ComponentTuple<T>) => void,
   ): void {
     // Create a cache key from component types
-    const cacheKey = componentTypes.map((id) => id.toString()).join(",");
+    const cacheKey = componentTypes.map((id) => (isOptionalEntityId(id) ? `opt(${id.optional})` : `${id}`)).join(",");
 
     // Get or compute component data sources
     const componentDataSources = getOrComputeCache(this.componentDataSourcesCache, cacheKey, () => {
