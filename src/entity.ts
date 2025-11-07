@@ -419,9 +419,33 @@ export class ComponentIdAllocator {
 
 const globalComponentIdAllocator = new ComponentIdAllocator();
 
+const ComponentNames: Map<ComponentId<any>, string> = new Map();
+const ComponentIdForNames: Map<string, ComponentId<any>> = new Map();
+
 /**
  * Allocate a new component ID from the global allocator
+ * Optionally register a name for the component
+ * @param name Optional name for the component
+ * @returns The allocated component ID
  */
-export function component<T = void>(): ComponentId<T> {
-  return globalComponentIdAllocator.allocate<T>();
+export function component<T = void>(name?: string): ComponentId<T> {
+  const id = globalComponentIdAllocator.allocate<T>();
+  if (name) {
+    if (ComponentIdForNames.has(name)) {
+      throw new Error(`Component name "${name}" is already registered`);
+    }
+
+    ComponentNames.set(id, name);
+    ComponentIdForNames.set(name, id);
+  }
+  return id;
+}
+
+/**
+ * Get a component ID by its registered name
+ * @param name The component name
+ * @returns The component ID if found, undefined otherwise
+ */
+export function getComponentIdByName(name: string): ComponentId<any> | undefined {
+  return ComponentIdForNames.get(name);
 }
