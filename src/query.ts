@@ -8,20 +8,16 @@ import type { World } from "./world";
  * Query class for efficient entity queries with cached archetypes
  */
 export class Query {
-  // Public key used by World to identify cached queries
-  public readonly key: string;
-
   private world: World<any[]>;
   private componentTypes: EntityId<any>[];
   private filter: QueryFilter;
   private cachedArchetypes: Archetype[] = [];
   private isDisposed = false;
 
-  constructor(world: World<any[]>, componentTypes: EntityId<any>[], filter: QueryFilter = {}, key?: string) {
+  constructor(world: World<any[]>, componentTypes: EntityId<any>[], filter: QueryFilter = {}) {
     this.world = world;
     this.componentTypes = [...componentTypes].sort((a, b) => a - b);
     this.filter = filter;
-    this.key = key ?? `${this.componentTypes.join(",")}|`;
     this.updateCache();
     // Register with world for archetype updates
     world._registerQuery(this);

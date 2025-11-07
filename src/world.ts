@@ -2,7 +2,7 @@ import { Archetype, MISSING_COMPONENT } from "./archetype";
 import { ComponentChangeset } from "./changeset";
 import { CommandBuffer, type Command } from "./command-buffer";
 import type { ComponentId, EntityId, WildcardRelationId } from "./entity";
-import { EntityIdManager, getDetailedIdType, relation, getComponentNameById, getComponentIdByName } from "./entity";
+import { EntityIdManager, getComponentIdByName, getComponentNameById, getDetailedIdType, relation } from "./entity";
 import { Query } from "./query";
 import { serializeQueryFilter, type QueryFilter } from "./query-filter";
 import type { System } from "./system";
@@ -382,7 +382,7 @@ export class World<UpdateParams extends any[] = []> {
       return cached.query;
     }
 
-    const query = new Query(this, sortedTypes, filter, key);
+    const query = new Query(this, sortedTypes, filter);
     this.queryCache.set(key, { query, refCount: 1 });
     return query;
   }
@@ -409,32 +409,17 @@ export class World<UpdateParams extends any[] = []> {
    * Decrements the refCount and fully disposes the query when it reaches zero.
    */
   releaseQuery(query: Query): void {
-    const key = query.key;
-    // Fallback: try to find by identity
     for (const [k, v] of this.queryCache.entries()) {
       if (v.query === query) {
         v.refCount--;
         if (v.refCount <= 0) {
           this.queryCache.delete(k);
+          this._unregisterQuery(query);
           // Fully dispose the query (will unregister it from notification list)
           v.query._disposeInternal();
         }
         return;
       }
-    }
-
-    const entry = this.queryCache.get(key);
-    if (!entry) {
-      // Nothing cached, ensure it's unregistered
-      this._unregisterQuery(query);
-      return;
-    }
-
-    entry.refCount--;
-    if (entry.refCount <= 0) {
-      this.queryCache.delete(key);
-      // Fully dispose the query (will unregister it from notification list)
-      entry.query._disposeInternal();
     }
   }
 
