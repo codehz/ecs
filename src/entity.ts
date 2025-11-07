@@ -210,9 +210,14 @@ export function getDetailedIdType(id: EntityId<any>):
       targetId?: never;
     }
   | {
-      type: "entity-relation" | "component-relation" | "wildcard-relation";
+      type: "entity-relation" | "wildcard-relation";
       componentId: ComponentId<any>;
       targetId: EntityId<any>;
+    }
+  | {
+      type: "component-relation";
+      componentId: ComponentId<any>;
+      targetId: ComponentId<any>;
     } {
   if (isComponentId(id)) {
     return { type: "component" };
@@ -249,7 +254,7 @@ export function getDetailedIdType(id: EntityId<any>):
       return {
         type,
         componentId: decoded.componentId,
-        targetId: decoded.targetId,
+        targetId: decoded.targetId as any,
       };
     } catch (error) {
       // Invalid relation ID

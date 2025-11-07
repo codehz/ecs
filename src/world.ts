@@ -99,15 +99,22 @@ export class World<UpdateParams extends any[] = []> {
             } else if (
               typeof componentTypeRaw === "object" &&
               componentTypeRaw !== null &&
-              typeof componentTypeRaw.component === "string" &&
-              typeof componentTypeRaw.target === "number"
+              typeof componentTypeRaw.component === "string"
             ) {
               // Component name lookup
               const compId = getComponentIdByName(componentTypeRaw.component);
               if (compId === undefined) {
                 throw new Error(`Unknown component name in snapshot: ${componentTypeRaw.component}`);
               }
-              componentType = relation(compId, componentTypeRaw.target as EntityId);
+              if (typeof componentTypeRaw.target === "string") {
+                const targetCompId = getComponentIdByName(componentTypeRaw.target);
+                if (targetCompId === undefined) {
+                  throw new Error(`Unknown target component name in snapshot: ${componentTypeRaw.target}`);
+                }
+                componentType = relation(compId, targetCompId);
+              } else {
+                componentType = relation(compId, componentTypeRaw.target as EntityId);
+              }
             } else {
               throw new Error(`Invalid component type in snapshot: ${JSON.stringify(componentTypeRaw)}`);
             }
@@ -852,17 +859,25 @@ export class World<UpdateParams extends any[] = []> {
           id: entity,
           components: Array.from(components.entries()).map(([rawType, value]) => {
             const detailedType = getDetailedIdType(rawType);
-            let type: number | string | { component: string; target: number } = rawType;
+            let type: SerializedComponent["type"] = rawType;
             let componentName;
             switch (detailedType.type) {
               case "component":
                 type = getComponentNameById(rawType as ComponentId) || rawType;
                 break;
               case "entity-relation":
-              case "component-relation":
                 componentName = getComponentNameById(detailedType.componentId);
                 if (componentName) {
                   type = { component: componentName, target: detailedType.targetId! };
+                }
+                break;
+              case "component-relation":
+                componentName = getComponentNameById(detailedType.componentId);
+                if (componentName) {
+                  type = {
+                    component: componentName,
+                    target: getComponentNameById(detailedType.targetId!) || detailedType.targetId!,
+                  };
                 }
                 break;
             }
@@ -894,6 +909,6 @@ export type SerializedEntity = {
 };
 
 export type SerializedComponent = {
-  type: number | string | { component: string; target: number };
+  type: number | string | { component: string; target: number | string };
   value: any;
 };
