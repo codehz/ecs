@@ -65,7 +65,6 @@ export function createEntityId(id: number): EntityId {
 /**
  * Type for relation ID based on component and target types
  */
-// type RelationIdType<T, U> = U extends void ? EntityId<T> : T extends void ? EntityId<U> : EntityId<never>;
 type RelationIdType<T, R> =
   R extends ComponentId<infer U>
     ? U extends void
