@@ -51,7 +51,7 @@ export class World<UpdateParams extends any[] = []> {
 
   // Lifecycle and configuration
   /** Stores lifecycle hooks for component and relation events */
-  private lifecycleHooks = new Map<EntityId<any>, Set<LifecycleHook<any>>>();
+  private hooks = new Map<EntityId<any>, Set<LifecycleHook<any>>>();
 
   /** Set of component IDs marked as exclusive relations */
   private exclusiveComponents = new Set<EntityId>();
@@ -179,6 +179,7 @@ export class World<UpdateParams extends any[] = []> {
       if (sourceArchetype) {
         // Remove from current archetype and move to new archetype without this component
         const currentComponents = new Map<EntityId<any>, any>();
+        let removedComponent = sourceArchetype.get(sourceEntityId, componentType);
         for (const archetypeComponentType of sourceArchetype.componentTypes) {
           if (archetypeComponentType !== componentType) {
             const componentData = sourceArchetype.get(sourceEntityId, archetypeComponentType);
@@ -202,7 +203,7 @@ export class World<UpdateParams extends any[] = []> {
         this.untrackEntityReference(sourceEntityId, componentType, entityId);
 
         // Trigger component removed hooks
-        this.triggerLifecycleHooks(sourceEntityId, new Map(), new Set([componentType]));
+        this.triggerLifecycleHooks(sourceEntityId, new Map(), new Map([[componentType, removedComponent]]));
       }
     }
 
@@ -249,7 +250,7 @@ export class World<UpdateParams extends any[] = []> {
   /**
    * Remove a component from an entity (deferred)
    */
-  delete<T>(entityId: EntityId, componentType: EntityId<T>): void {
+  remove<T>(entityId: EntityId, componentType: EntityId<T>): void {
     if (!this.exists(entityId)) {
       throw new Error(`Entity ${entityId} does not exist`);
     }
@@ -266,7 +267,7 @@ export class World<UpdateParams extends any[] = []> {
   /**
    * Destroy an entity and remove all its components (deferred)
    */
-  destroy(entityId: EntityId): void {
+  delete(entityId: EntityId): void {
     this.commandBuffer.destroy(entityId);
   }
 
@@ -324,22 +325,34 @@ export class World<UpdateParams extends any[] = []> {
   /**
    * Register a lifecycle hook for component or wildcard relation events
    */
-  registerLifecycleHook<T>(componentType: EntityId<T>, hook: LifecycleHook<T>): void {
-    if (!this.lifecycleHooks.has(componentType)) {
-      this.lifecycleHooks.set(componentType, new Set());
+  hook<T>(componentType: EntityId<T>, hook: LifecycleHook<T>): void {
+    if (!this.hooks.has(componentType)) {
+      this.hooks.set(componentType, new Set());
     }
-    this.lifecycleHooks.get(componentType)!.add(hook);
+    this.hooks.get(componentType)!.add(hook);
+
+    if (hook.on_init !== undefined) {
+      this.archetypesByComponent.get(componentType)?.forEach((archetype) => {
+        const entities = archetype.getEntityToIndexMap();
+        const componentData = archetype.getComponentData<T>(componentType);
+        for (const [entity, index] of entities) {
+          const data = componentData[index];
+          const value = (data === MISSING_COMPONENT ? undefined : data) as T;
+          hook.on_init?.(entity, componentType, value);
+        }
+      });
+    }
   }
 
   /**
    * Unregister a lifecycle hook for component or wildcard relation events
    */
-  unregisterLifecycleHook<T>(componentType: EntityId<T>, hook: LifecycleHook<T>): void {
-    const hooks = this.lifecycleHooks.get(componentType);
+  unhook<T>(componentType: EntityId<T>, hook: LifecycleHook<T>): void {
+    const hooks = this.hooks.get(componentType);
     if (hooks) {
       hooks.delete(hook);
       if (hooks.size === 0) {
-        this.lifecycleHooks.delete(componentType);
+        this.hooks.delete(componentType);
       }
     }
   }
@@ -616,6 +629,7 @@ export class World<UpdateParams extends any[] = []> {
     }
 
     const finalComponentTypes = changeset.getFinalComponentTypes(currentArchetype.componentTypes);
+    const removedCompoents = new Map<EntityId<any>, any>();
 
     if (finalComponentTypes) {
       // Move to new archetype with final component state
@@ -623,6 +637,10 @@ export class World<UpdateParams extends any[] = []> {
 
       // Remove from current archetype and get current components
       const currentComponents = currentArchetype.removeEntity(entityId)!;
+
+      for (const componentType of changeset.removes) {
+        removedCompoents.set(componentType, currentComponents.get(componentType));
+      }
 
       // Add to new archetype with final component data
       newArchetype.addEntity(entityId, changeset.applyTo(currentComponents));
@@ -662,7 +680,7 @@ export class World<UpdateParams extends any[] = []> {
     }
 
     // Trigger component lifecycle hooks
-    this.triggerLifecycleHooks(entityId, changeset.adds, changeset.removes);
+    this.triggerLifecycleHooks(entityId, changeset.adds, removedCompoents);
 
     return changeset;
   }
@@ -779,17 +797,15 @@ export class World<UpdateParams extends any[] = []> {
   private triggerLifecycleHooks(
     entityId: EntityId,
     addedComponents: Map<EntityId<any>, any>,
-    removedComponents: Set<EntityId<any>>,
+    removedComponents: Map<EntityId<any>, any>,
   ): void {
     // Trigger component added hooks
     for (const [componentType, component] of addedComponents) {
       // Trigger direct component hooks
-      const directHooks = this.lifecycleHooks.get(componentType);
+      const directHooks = this.hooks.get(componentType);
       if (directHooks) {
         for (const lifecycleHook of directHooks) {
-          if (lifecycleHook.onAdded) {
-            lifecycleHook.onAdded(entityId, componentType, component);
-          }
+          lifecycleHook.on_set?.(entityId, componentType, component);
         }
       }
 
@@ -801,26 +817,22 @@ export class World<UpdateParams extends any[] = []> {
         detailedType.type === "wildcard-relation"
       ) {
         const wildcardRelationId = relation(detailedType.componentId!, "*");
-        const wildcardHooks = this.lifecycleHooks.get(wildcardRelationId);
+        const wildcardHooks = this.hooks.get(wildcardRelationId);
         if (wildcardHooks) {
           for (const lifecycleHook of wildcardHooks) {
-            if (lifecycleHook.onAdded) {
-              (lifecycleHook as any).onAdded(entityId, componentType, component);
-            }
+            lifecycleHook.on_set?.(entityId, componentType, component);
           }
         }
       }
     }
 
     // Trigger component removed hooks
-    for (const componentType of removedComponents) {
+    for (const [componentType, component] of removedComponents) {
       // Trigger direct component hooks
-      const directHooks = this.lifecycleHooks.get(componentType);
+      const directHooks = this.hooks.get(componentType);
       if (directHooks) {
         for (const lifecycleHook of directHooks) {
-          if (lifecycleHook.onRemoved) {
-            lifecycleHook.onRemoved(entityId, componentType);
-          }
+          lifecycleHook.on_remove?.(entityId, componentType, component);
         }
       }
 
@@ -832,12 +844,10 @@ export class World<UpdateParams extends any[] = []> {
         detailedType.type === "wildcard-relation"
       ) {
         const wildcardRelationId = relation(detailedType.componentId!, "*");
-        const wildcardHooks = this.lifecycleHooks.get(wildcardRelationId);
+        const wildcardHooks = this.hooks.get(wildcardRelationId);
         if (wildcardHooks) {
           for (const hook of wildcardHooks) {
-            if (hook.onRemoved) {
-              (hook as any).onRemoved(entityId, componentType);
-            }
+            hook.on_remove?.(entityId, componentType, component);
           }
         }
       }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, mock } from "bun:test";
 import { component, createEntityId, relation, type EntityId } from "./entity";
 import { World } from "./world";
 
@@ -19,7 +19,7 @@ describe("World", () => {
       const entity = world.new();
       expect(world.exists(entity)).toBe(true);
 
-      world.destroy(entity);
+      world.delete(entity);
       world.sync();
       expect(world.exists(entity)).toBe(false);
     });
@@ -29,7 +29,7 @@ describe("World", () => {
       const fakeEntity = createEntityId(9999);
       expect(world.exists(fakeEntity)).toBe(false);
       // Should not throw
-      world.destroy(fakeEntity);
+      world.delete(fakeEntity);
     });
   });
 
@@ -76,7 +76,7 @@ describe("World", () => {
       world.sync();
       expect(world.has(entity, positionComponent)).toBe(true);
 
-      world.delete(entity, positionComponent);
+      world.remove(entity, positionComponent);
       world.sync();
       expect(world.has(entity, positionComponent)).toBe(false);
       expect(() => world.get(entity, positionComponent)).toThrow(
@@ -89,7 +89,7 @@ describe("World", () => {
       const entity = world.new();
       const invalidComponentType = 0 as EntityId<any>; // Invalid component ID
 
-      expect(() => world.delete(entity, invalidComponentType)).toThrow("Invalid component type: 0");
+      expect(() => world.remove(entity, invalidComponentType)).toThrow("Invalid component type: 0");
     });
 
     it("should allow removing wildcard relation components", () => {
@@ -110,7 +110,7 @@ describe("World", () => {
 
       // Remove using wildcard relation should remove all matching components
       const wildcardRelation = relation(positionComponent, "*");
-      world.delete(entity, wildcardRelation);
+      world.remove(entity, wildcardRelation);
       world.sync();
       expect(world.has(entity, relationId1)).toBe(false);
       expect(world.has(entity, relationId2)).toBe(false);
@@ -432,7 +432,7 @@ describe("World", () => {
       expect(followers).toContain(entity3);
 
       // Destroy entity1
-      world.destroy(entity1);
+      world.delete(entity1);
       world.sync();
 
       // Verify entity1 is destroyed
@@ -470,7 +470,7 @@ describe("World", () => {
       expect(entitiesWithComponent).toContain(entity2);
 
       // Destroy entity1
-      world.destroy(entity1);
+      world.delete(entity1);
       world.sync();
 
       // Verify entity1 is destroyed
@@ -495,6 +495,35 @@ describe("World", () => {
     const positionComponent = component<Position>();
     const velocityComponent = component<Velocity>();
 
+    it("should trigger component initialized hooks", () => {
+      const world = new World();
+      const entity = world.new();
+      const position: Position = { x: 10, y: 20 };
+
+      let hookCalled = false;
+      let hookEntityId: EntityId | undefined;
+
+      let hookComponentType: EntityId<Position> | undefined;
+      let hookComponent: Position | undefined;
+
+      world.set(entity, positionComponent, position);
+      world.sync();
+
+      world.hook(positionComponent, {
+        on_init: (entityId, componentType, component) => {
+          hookCalled = true;
+          hookEntityId = entityId;
+          hookComponentType = componentType;
+          hookComponent = component;
+        },
+      });
+
+      expect(hookCalled).toBe(true);
+      expect(hookEntityId).toBe(entity);
+      expect(hookComponentType).toBe(positionComponent);
+      expect(hookComponent).toEqual(position);
+    });
+
     it("should trigger component added hooks", () => {
       const world = new World();
       const entity = world.new();
@@ -505,8 +534,8 @@ describe("World", () => {
       let hookComponentType: EntityId<Position> | undefined;
       let hookComponent: Position | undefined;
 
-      world.registerLifecycleHook(positionComponent, {
-        onAdded: (entityId, componentType, component) => {
+      world.hook(positionComponent, {
+        on_set: (entityId, componentType, component) => {
           hookCalled = true;
           hookEntityId = entityId;
           hookComponentType = componentType;
@@ -534,21 +563,24 @@ describe("World", () => {
       let hookCalled = false;
       let hookEntityId: EntityId | undefined;
       let hookComponentType: EntityId<Position> | undefined;
+      let hookComponent: Position | undefined;
 
-      world.registerLifecycleHook(positionComponent, {
-        onRemoved: (entityId, componentType) => {
+      world.hook(positionComponent, {
+        on_remove: (entityId, componentType, component) => {
           hookCalled = true;
           hookEntityId = entityId;
           hookComponentType = componentType;
+          hookComponent = component;
         },
       });
 
-      world.delete(entity, positionComponent);
+      world.remove(entity, positionComponent);
       world.sync();
 
       expect(hookCalled).toBe(true);
       expect(hookEntityId).toBe(entity);
       expect(hookComponentType).toBe(positionComponent);
+      expect(hookComponent).toEqual(position);
     });
 
     it("should handle multiple hooks for the same component type", () => {
@@ -559,14 +591,14 @@ describe("World", () => {
       let hook1Called = false;
       let hook2Called = false;
 
-      world.registerLifecycleHook(positionComponent, {
-        onAdded: () => {
+      world.hook(positionComponent, {
+        on_set: () => {
           hook1Called = true;
         },
       });
 
-      world.registerLifecycleHook(positionComponent, {
-        onAdded: () => {
+      world.hook(positionComponent, {
+        on_set: () => {
           hook2Called = true;
         },
       });
@@ -586,11 +618,11 @@ describe("World", () => {
       let addedCalled = false;
       let removedCalled = false;
 
-      world.registerLifecycleHook(positionComponent, {
-        onAdded: () => {
+      world.hook(positionComponent, {
+        on_set: () => {
           addedCalled = true;
         },
-        onRemoved: () => {
+        on_remove: () => {
           removedCalled = true;
         },
       });
@@ -601,7 +633,7 @@ describe("World", () => {
       expect(addedCalled).toBe(true);
       expect(removedCalled).toBe(false);
 
-      world.delete(entity, positionComponent);
+      world.remove(entity, positionComponent);
       world.sync();
 
       expect(removedCalled).toBe(true);
@@ -614,8 +646,8 @@ describe("World", () => {
 
       let addedCalled = false;
 
-      world.registerLifecycleHook(positionComponent, {
-        onAdded: () => {
+      world.hook(positionComponent, {
+        on_set: () => {
           addedCalled = true;
         },
       });
@@ -636,13 +668,13 @@ describe("World", () => {
 
       let removedCalled = false;
 
-      world.registerLifecycleHook(positionComponent, {
-        onRemoved: () => {
+      world.hook(positionComponent, {
+        on_remove: () => {
           removedCalled = true;
         },
       });
 
-      world.delete(entity, positionComponent);
+      world.remove(entity, positionComponent);
       world.sync();
 
       expect(removedCalled).toBe(true);
@@ -668,12 +700,12 @@ describe("World", () => {
       let removedComponentType: EntityId<{ x: number; y: number }> | undefined;
 
       // Register a wildcard relation hook for positionComponent
-      world.registerLifecycleHook(wildcardRelationId, {
-        onAdded: (entityId, componentType, component) => {
+      world.hook(wildcardRelationId, {
+        on_set: (entityId, componentType, component) => {
           addedCalled = true;
           addedComponentType = componentType;
         },
-        onRemoved: (entityId, componentType) => {
+        on_remove: (entityId, componentType) => {
           removedCalled = true;
           removedComponentType = componentType;
         },
@@ -687,7 +719,7 @@ describe("World", () => {
       expect(addedComponentType).toBe(relationId);
 
       // Remove the relation component
-      world.delete(entity1, relationId);
+      world.remove(entity1, relationId);
       world.sync();
 
       expect(removedCalled).toBe(true);
@@ -707,8 +739,8 @@ describe("World", () => {
       let hookCalled = false;
 
       // Register a wildcard relation hook for positionComponent
-      world.registerLifecycleHook(wildcardRelationId, {
-        onAdded: () => {
+      world.hook(wildcardRelationId, {
+        on_set: () => {
           hookCalled = true;
         },
       });

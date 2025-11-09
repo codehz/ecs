@@ -7,11 +7,15 @@ export interface LifecycleHook<T = unknown> {
   /**
    * Called when a component is added to an entity
    */
-  onAdded?: (entityId: EntityId, componentType: EntityId<T>, component: T) => void;
+  on_init?: (entityId: EntityId, componentType: EntityId<T>, component: T) => void;
   /**
-   * Called when a component is removed from an entity
+   * Called when a component is added to an entity
    */
-  onRemoved?: (entityId: EntityId, componentType: EntityId<T>) => void;
+  on_set?: (entityId: EntityId, componentType: EntityId<T>, component: T) => void;
+  /**
+   * Called when a component is deleted from an entity
+   */
+  on_remove?: (entityId: EntityId, componentType: EntityId<T>, component: T) => void;
 }
 
 export type ComponentType<T> = EntityId<T> | OptionalEntityId<T>;

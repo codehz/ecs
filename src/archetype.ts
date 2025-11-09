@@ -266,6 +266,13 @@ export class Archetype {
   }
 
   /**
+   * Get the mapping of entities to their indices in this archetype
+   */
+  getEntityToIndexMap(): Map<EntityId, number> {
+    return this.entityToIndex;
+  }
+
+  /**
    * Get component data for all entities of a specific component type
    * @param componentType The component type
    */

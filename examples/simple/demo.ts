@@ -75,16 +75,16 @@ function main() {
   console.log(`Child has ChildOf(parent2): ${world.has(child, relation(ChildOf, parent2))}`);
 
   // 注册组件钩子
-  world.registerLifecycleHook(PositionId, {
-    onAdded: (entityId, componentType, component) => {
+  world.hook(PositionId, {
+    on_set: (entityId, componentType, component) => {
       console.log(
         `组件添加钩子触发: 实体 ${entityId} 添加了 ${componentType} 组件，值为 (${component.x}, ${component.y})`,
       );
     },
   });
 
-  world.registerLifecycleHook(VelocityId, {
-    onRemoved: (entityId, componentType) => {
+  world.hook(VelocityId, {
+    on_remove: (entityId, componentType) => {
       console.log(`组件移除钩子触发: 实体 ${entityId} 移除了 ${componentType} 组件`);
     },
   });
@@ -101,7 +101,7 @@ function main() {
 
   // 演示组件移除钩子
   console.log("\n移除组件演示:");
-  world.delete(entity1, VelocityId);
+  world.remove(entity1, VelocityId);
   world.sync();
 
   console.log("\nDemo completed!");
