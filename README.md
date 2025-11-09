@@ -60,18 +60,22 @@ ECS 支持在组件添加或移除时执行回调函数：
 
 ```typescript
 // 注册组件生命周期钩子
-world.registerLifecycleHook(PositionId, {
-  onAdded: (entityId, componentType, component) => {
+world.hook(PositionId, {
+  on_init: (entityId, componentType, component) => {
+    // 当钩子注册时，为现有实体上的组件调用
+    console.log(`现有组件 ${componentType} 在实体 ${entityId}`);
+  },
+  on_set: (entityId, componentType, component) => {
     console.log(`组件 ${componentType} 被添加到实体 ${entityId}`);
   },
-  onRemoved: (entityId, componentType) => {
+  on_remove: (entityId, componentType, component) => {
     console.log(`组件 ${componentType} 被从实体 ${entityId} 移除`);
   },
 });
 
 // 你也可以只注册其中一个钩子
-world.registerLifecycleHook(VelocityId, {
-  onRemoved: (entityId, componentType) => {
+world.hook(VelocityId, {
+  on_remove: (entityId, componentType, component) => {
     console.log(`组件 ${componentType} 被从实体 ${entityId} 移除`);
   },
 });
@@ -104,11 +108,11 @@ const entity = world.new();
 const wildcardPositionRelation = relation(PositionId, "*");
 
 // 注册通配符关系钩子
-world.registerLifecycleHook(wildcardPositionRelation, {
-  onAdded: (entityId, componentType, component) => {
+world.hook(wildcardPositionRelation, {
+  on_set: (entityId, componentType, component) => {
     console.log(`关系组件 ${componentType} 被添加到实体 ${entityId}`);
   },
-  onRemoved: (entityId, componentType) => {
+  on_remove: (entityId, componentType, component) => {
     console.log(`关系组件 ${componentType} 被从实体 ${entityId} 移除`);
   },
 });
@@ -177,8 +181,8 @@ bun run examples/simple/demo.ts
 - `setExclusive(componentId)`: 将组件标记为独占关系
 - `createQuery(componentIds)`: 创建查询
 - `registerSystem(system, dependencies?)`: 注册系统
-- `registerLifecycleHook(componentId, hook)`: 注册组件或通配符关系生命周期钩子
-- `unregisterLifecycleHook(componentId, hook)`: 注销组件或通配符关系生命周期钩子
+- `hook(componentId, hook)`: 注册组件或通配符关系生命周期钩子
+- `unhook(componentId, hook)`: 注销组件或通配符关系生命周期钩子
 - `update(...params)`: 更新世界（参数取决于泛型配置）
 - `sync()`: 应用命令缓冲区
 
