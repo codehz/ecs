@@ -21,7 +21,7 @@ describe("CommandBuffer", () => {
     // Add commands
     buffer.set(entity1, componentType1, { x: 1 });
     buffer.set(entity1, componentType2, { y: 2 });
-    buffer.delete(entity2, componentType1);
+    buffer.remove(entity2, componentType1);
 
     // Execute
     buffer.execute();
@@ -64,7 +64,7 @@ describe("CommandBuffer", () => {
 
     // Add commands including destroy
     buffer.set(entity, componentType, { x: 1 });
-    buffer.destroy(entity);
+    buffer.delete(entity);
 
     buffer.execute();
 

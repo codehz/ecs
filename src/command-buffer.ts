@@ -36,14 +36,14 @@ export class CommandBuffer {
   /**
    * Remove a component from an entity (deferred)
    */
-  delete<T>(entityId: EntityId, componentType: EntityId<T>): void {
+  remove<T>(entityId: EntityId, componentType: EntityId<T>): void {
     this.commands.push({ type: "delete", entityId, componentType });
   }
 
   /**
    * Destroy an entity (deferred)
    */
-  destroy(entityId: EntityId): void {
+  delete(entityId: EntityId): void {
     this.commands.push({ type: "destroy", entityId });
   }
 

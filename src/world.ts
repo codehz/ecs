@@ -261,14 +261,14 @@ export class World<UpdateParams extends any[] = []> {
       throw new Error(`Invalid component type: ${componentType}`);
     }
 
-    this.commandBuffer.delete(entityId, componentType);
+    this.commandBuffer.remove(entityId, componentType);
   }
 
   /**
    * Destroy an entity and remove all its components (deferred)
    */
   delete(entityId: EntityId): void {
-    this.commandBuffer.destroy(entityId);
+    this.commandBuffer.delete(entityId);
   }
 
   /**
