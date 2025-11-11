@@ -2,7 +2,15 @@ import { Archetype, MISSING_COMPONENT } from "./archetype";
 import { ComponentChangeset } from "./changeset";
 import { CommandBuffer, type Command } from "./command-buffer";
 import type { ComponentId, EntityId, WildcardRelationId } from "./entity";
-import { EntityIdManager, getComponentIdByName, getComponentNameById, getDetailedIdType, relation } from "./entity";
+import {
+  decodeRelationId,
+  EntityIdManager,
+  getComponentIdByName,
+  getComponentNameById,
+  getDetailedIdType,
+  isRelationId,
+  relation,
+} from "./entity";
 import { Query } from "./query";
 import { serializeQueryFilter, type QueryFilter } from "./query-filter";
 import type { System } from "./system";
@@ -506,9 +514,14 @@ export class World<UpdateParams extends any[] = []> {
 
     // Filter by wildcard relations
     for (const wildcard of wildcardRelations) {
-      const componentArchetypes = this.archetypesByComponent.get(wildcard.componentId) || [];
       // Keep only archetypes that have the component
-      matchingArchetypes = matchingArchetypes.filter((archetype) => componentArchetypes.includes(archetype));
+      matchingArchetypes = matchingArchetypes.filter((archetype) =>
+        archetype.componentTypes.some((archetypeType) => {
+          if (!isRelationId(archetypeType)) return false;
+          const decoded = decodeRelationId(archetypeType);
+          return decoded.componentId === wildcard.componentId;
+        }),
+      );
     }
 
     return matchingArchetypes;

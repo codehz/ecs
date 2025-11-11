@@ -304,6 +304,7 @@ describe("World", () => {
     type Position = { x: number; y: number };
     type Velocity = { x: number; y: number };
 
+    const markComponent = component();
     const positionComponent = component<Position>();
     const velocityComponent = component<Velocity>();
 
@@ -354,12 +355,14 @@ describe("World", () => {
       const entity3 = world.new();
 
       // Create a wildcard relation for position component
-      const wildcardPositionRelation = relation(positionComponent, "*");
+      const wildcardPositionRelation = relation(markComponent, "*");
 
-      world.set(entity1, positionComponent, { x: 1, y: 2 });
-      world.set(entity1, velocityComponent, { x: 0.1, y: 0.2 });
+      world.set(entity1, relation(markComponent, positionComponent), { x: 1, y: 2 });
+      world.set(entity1, relation(markComponent, velocityComponent), { x: 0.1, y: 0.2 });
 
-      world.set(entity2, positionComponent, { x: 3, y: 4 });
+      world.set(entity2, relation(markComponent, positionComponent), { x: 3, y: 4 });
+
+      world.set(entity3, positionComponent, { x: 5, y: 6 });
 
       // entity3 has no position component
 
@@ -379,12 +382,12 @@ describe("World", () => {
       const entity3 = world.new();
 
       // Create a wildcard relation for position component
-      const wildcardPositionRelation = relation(positionComponent, "*");
+      const wildcardPositionRelation = relation(markComponent, "*");
 
-      world.set(entity1, positionComponent, { x: 1, y: 2 });
+      world.set(entity1, relation(markComponent, positionComponent), { x: 1, y: 2 });
       world.set(entity1, velocityComponent, { x: 0.1, y: 0.2 });
 
-      world.set(entity2, positionComponent, { x: 3, y: 4 });
+      world.set(entity2, relation(markComponent, positionComponent), { x: 3, y: 4 });
       // entity2 doesn't have velocity
 
       world.set(entity3, velocityComponent, { x: 0.5, y: 0.6 });
