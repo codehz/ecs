@@ -75,12 +75,6 @@ export class World<UpdateParams extends any[] = []> {
       if (snapshot.entityManager) {
         this.entityIdManager.deserializeState(snapshot.entityManager);
       }
-      // Restore exclusive components
-      if (Array.isArray(snapshot.exclusiveComponents)) {
-        for (const id of snapshot.exclusiveComponents) {
-          this.exclusiveComponents.add(id);
-        }
-      }
 
       // Restore entities and their components
       if (Array.isArray(snapshot.entities)) {
@@ -918,7 +912,6 @@ export class World<UpdateParams extends any[] = []> {
     return {
       version: 1,
       entityManager: this.entityIdManager.serializeState(),
-      exclusiveComponents: Array.from(this.exclusiveComponents),
       entities,
     };
   }
@@ -927,7 +920,6 @@ export class World<UpdateParams extends any[] = []> {
 export type SerializedWorld = {
   version: number;
   entityManager: any;
-  exclusiveComponents: EntityId[];
   entities: SerializedEntity[];
 };
 
