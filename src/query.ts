@@ -127,6 +127,17 @@ export class Query {
   }
 
   /**
+   * Remove an archetype from the cached archetypes
+   */
+  removeArchetype(archetype: Archetype): void {
+    if (this.isDisposed) return;
+    const index = this.cachedArchetypes.indexOf(archetype);
+    if (index !== -1) {
+      this.cachedArchetypes.splice(index, 1);
+    }
+  }
+
+  /**
    * Dispose the query and disconnect from world
    */
   /**

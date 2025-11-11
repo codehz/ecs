@@ -789,6 +789,11 @@ export class World<UpdateParams extends any[] = []> {
         }
       }
     }
+
+    // Remove from queries
+    for (const query of this.queries) {
+      query.removeArchetype(archetype);
+    }
   }
 
   /**
