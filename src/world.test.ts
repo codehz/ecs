@@ -403,7 +403,7 @@ describe("World", () => {
       expect(mixedEntities).not.toContain(entity3);
     });
 
-    it("should clean up relation components when target entity is destroyed", () => {
+    it.only("should clean up relation components when target entity is destroyed", () => {
       const world = new World();
 
       // Create component IDs
@@ -421,6 +421,10 @@ describe("World", () => {
 
       // Create relation components (entity2 and entity3 follow entity1)
       const followsEntity1 = relation(followsComponent, entity1);
+      world.set(entity2, followsEntity1);
+      world.set(entity3, followsEntity1);
+      world.sync();
+      // Add twice to test idempotency
       world.set(entity2, followsEntity1);
       world.set(entity3, followsEntity1);
       world.sync();

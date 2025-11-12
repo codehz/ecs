@@ -11,6 +11,7 @@ import {
   isRelationId,
   relation,
 } from "./entity";
+import { MultiMap } from "./multi-map";
 import { Query } from "./query";
 import { serializeQueryFilter, type QueryFilter } from "./query-filter";
 import type { System } from "./system";
@@ -40,7 +41,7 @@ export class World<UpdateParams extends any[] = []> {
   private archetypesByComponent = new Map<EntityId<any>, Archetype[]>();
 
   /** Tracks which entities reference each entity as a component type */
-  private entityReferences = new Map<EntityId, Set<{ sourceEntityId: EntityId; componentType: EntityId }>>();
+  private entityReferences = new Map<EntityId, MultiMap<EntityId, EntityId>>();
 
   // Query management
   /** Array of all active queries for archetype change notifications */
@@ -175,7 +176,7 @@ export class World<UpdateParams extends any[] = []> {
 
     // Clean up components that use this entity as a component type
     const componentReferences = this.getEntityReferences(entityId);
-    for (const { sourceEntityId, componentType } of componentReferences) {
+    for (const [sourceEntityId, componentType] of componentReferences) {
       // Directly remove the component from the source entity
       const sourceArchetype = this.entityToArchetype.get(sourceEntityId);
       if (sourceArchetype) {
@@ -729,9 +730,9 @@ export class World<UpdateParams extends any[] = []> {
    */
   private trackEntityReference(sourceEntityId: EntityId, componentType: EntityId, targetEntityId: EntityId): void {
     if (!this.entityReferences.has(targetEntityId)) {
-      this.entityReferences.set(targetEntityId, new Set());
+      this.entityReferences.set(targetEntityId, new MultiMap());
     }
-    this.entityReferences.get(targetEntityId)!.add({ sourceEntityId, componentType });
+    this.entityReferences.get(targetEntityId)!.add(sourceEntityId, componentType);
   }
 
   /**
@@ -743,12 +744,8 @@ export class World<UpdateParams extends any[] = []> {
   private untrackEntityReference(sourceEntityId: EntityId, componentType: EntityId, targetEntityId: EntityId): void {
     const references = this.entityReferences.get(targetEntityId);
     if (references) {
-      references.forEach((reference) => {
-        if (reference.sourceEntityId === sourceEntityId && reference.componentType === componentType) {
-          references.delete(reference);
-        }
-      });
-      if (references.size === 0) {
+      references.get(sourceEntityId).delete(componentType);
+      if (references.keyCount === 0) {
         this.entityReferences.delete(targetEntityId);
       }
     }
@@ -757,11 +754,10 @@ export class World<UpdateParams extends any[] = []> {
   /**
    * Get all component references where a target entity is used as a component type
    * @param targetEntityId The target entity
-   * @returns Array of {sourceEntityId, componentType} pairs
+   * @returns A MultiMap of sourceEntityId to componentTypes that reference the target entity
    */
-  private getEntityReferences(targetEntityId: EntityId): Array<{ sourceEntityId: EntityId; componentType: EntityId }> {
-    const references = this.entityReferences.get(targetEntityId);
-    return references ? Array.from(references) : [];
+  private getEntityReferences(targetEntityId: EntityId): Iterable<[EntityId, EntityId]> {
+    return this.entityReferences.get(targetEntityId) ?? [];
   }
 
   /**
