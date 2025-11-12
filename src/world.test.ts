@@ -403,7 +403,7 @@ describe("World", () => {
       expect(mixedEntities).not.toContain(entity3);
     });
 
-    it.only("should clean up relation components when target entity is destroyed", () => {
+    it("should clean up relation components when target entity is destroyed", () => {
       const world = new World();
 
       // Create component IDs
