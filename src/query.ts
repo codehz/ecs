@@ -84,6 +84,27 @@ export class Query {
   }
 
   /**
+   * Iterate over entities with their component data (generator)
+   * @param componentTypes Array of component types to retrieve
+   */
+  *iterate<const T extends readonly ComponentType<any>[]>(
+    componentTypes: T,
+  ): IterableIterator<{
+    entity: EntityId;
+    components: ComponentTuple<T>;
+  }> {
+    if (this.isDisposed) {
+      throw new Error("Query has been disposed");
+    }
+
+    // return combinedGenerator(this);
+    for (const archetype of this.cachedArchetypes) {
+      // Delegate to archetype iterator
+      yield* archetype.iterateWithComponents(componentTypes);
+    }
+  }
+
+  /**
    * Get component data arrays for all matching entities
    * @param componentType The component type to retrieve
    * @returns Array of component data for all matching entities

@@ -96,6 +96,11 @@ describe("Query", () => {
 
       // Should throw after dispose
       expect(() => query.getEntities()).toThrow("Query has been disposed");
+      // iterate should also throw
+      expect(() => {
+        // use spread to attempt to consume iterator
+        [...query.iterate([positionComponent])];
+      }).toThrow("Query has been disposed");
     });
 
     it("should handle multiple queries", () => {
@@ -205,6 +210,37 @@ describe("Query", () => {
         visitedEntities.push(entity);
         visitedPositions.push(position);
       });
+
+      expect(visitedEntities.length).toBe(2);
+      expect(visitedPositions.length).toBe(2);
+      expect(visitedEntities).toContain(entity1);
+      expect(visitedEntities).toContain(entity2);
+      expect(visitedPositions).toContainEqual(pos1);
+      expect(visitedPositions).toContainEqual(pos2);
+    });
+
+    it("should iterate over entities with iterate", () => {
+      const world = new World();
+      const query = world.createQuery([positionComponent]);
+
+      const entity1 = world.new();
+      const entity2 = world.new();
+
+      const pos1: Position = { x: 1, y: 2 };
+      const pos2: Position = { x: 3, y: 4 };
+
+      world.set(entity1, positionComponent, pos1);
+      world.set(entity2, positionComponent, pos2);
+
+      world.sync();
+
+      const visitedEntities: EntityId[] = [];
+      const visitedPositions: Position[] = [];
+
+      for (const { entity, components } of query.iterate([positionComponent])) {
+        visitedEntities.push(entity);
+        visitedPositions.push(components[0]);
+      }
 
       expect(visitedEntities.length).toBe(2);
       expect(visitedPositions.length).toBe(2);
@@ -496,6 +532,41 @@ describe("Query", () => {
 
       expect(result2!.components[0]).toEqual({ x: 3, y: 4 });
       expect(result2!.components[1]).toBeUndefined();
+    });
+
+    it("should handle optional components in iterate", () => {
+      const world = new World();
+      const query = world.createQuery([positionComponent]);
+
+      const entity1 = world.new();
+      const entity2 = world.new();
+
+      world.set(entity1, positionComponent, { x: 1, y: 2 });
+      world.set(entity1, velocityComponent, { x: 0.1, y: 0.2 });
+      world.set(entity2, positionComponent, { x: 3, y: 4 });
+      // entity2 has no velocity
+
+      world.sync();
+
+      const results: Array<{ entity: EntityId; position: Position; velocity?: { value: Velocity } }> = [];
+
+      for (const { entity, components } of query.iterate([positionComponent, { optional: velocityComponent }])) {
+        results.push({ entity, position: components[0], velocity: components[1] as any });
+      }
+
+      expect(results.length).toBe(2);
+
+      const result1 = results.find((r) => r.entity === entity1);
+      const result2 = results.find((r) => r.entity === entity2);
+
+      expect(result1).toBeDefined();
+      expect(result2).toBeDefined();
+
+      expect(result1!.position).toEqual({ x: 1, y: 2 });
+      expect(result1!.velocity).toEqual({ value: { x: 0.1, y: 0.2 } });
+
+      expect(result2!.position).toEqual({ x: 3, y: 4 });
+      expect(result2!.velocity).toBeUndefined();
     });
 
     it("should handle mixed mandatory and optional components", () => {

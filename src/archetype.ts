@@ -40,7 +40,7 @@ export class Archetype {
    * For regular components: data array
    * For wildcards: matching relation types array
    */
-  private componentDataSourcesCache: Map<string, (any[] | EntityId<any>[])[]> = new Map();
+  private componentDataSourcesCache: Map<string, (any[] | EntityId<any>[] | undefined)[]> = new Map();
 
   /**
    * Create a new archetype with the specified component types
@@ -294,6 +294,86 @@ export class Archetype {
   }
 
   /**
+   * Helper: compute or return cached data sources for provided componentTypes
+   */
+  private getCachedComponentDataSources<const T extends readonly ComponentType<any>[]>(
+    componentTypes: T,
+  ): (any[] | EntityId<any>[] | undefined)[] {
+    const cacheKey = componentTypes.map((id) => (isOptionalEntityId(id) ? `opt(${id.optional})` : `${id}`)).join(",");
+    return getOrComputeCache(this.componentDataSourcesCache, cacheKey, () => {
+      return componentTypes.map((compType) => {
+        let optional = false;
+        if (isOptionalEntityId(compType)) {
+          compType = compType.optional;
+          optional = true;
+        }
+        const detailedType = getDetailedIdType(compType);
+        if (detailedType.type === "wildcard-relation") {
+          const componentId = detailedType.componentId;
+
+          const matchingRelations = this.componentTypes.filter((ct) => {
+            const detailedCt = getDetailedIdType(ct);
+            if (detailedCt.type !== "entity-relation" && detailedCt.type !== "component-relation") return false;
+            return detailedCt.componentId === componentId;
+          });
+
+          return optional ? (matchingRelations.length > 0 ? matchingRelations : undefined) : matchingRelations;
+        } else {
+          return optional ? this.getOptionalComponentData(compType) : this.getComponentData(compType);
+        }
+      });
+    });
+  }
+
+  /**
+   * Helper: build component tuples for a specific entity index using precomputed data sources
+   */
+  private buildComponentsForIndex<const T extends readonly ComponentType<any>[]>(
+    componentTypes: T,
+    componentDataSources: (any[] | EntityId<any>[] | undefined)[],
+    entityIndex: number,
+  ): ComponentTuple<T> {
+    return componentDataSources.map((dataSource, i) => {
+      let compType = componentTypes[i]!;
+      let optional = false;
+      if (isOptionalEntityId(compType)) {
+        compType = compType.optional;
+        optional = true;
+      }
+      if (getIdType(compType) === "wildcard-relation") {
+        if (dataSource === undefined) {
+          if (optional) {
+            return undefined;
+          } else {
+            throw new Error(`No matching relations found for mandatory wildcard relation component type`);
+          }
+        }
+        const matchingRelations = dataSource as EntityId<any>[];
+        const relations: [EntityId<unknown>, any][] = [];
+        for (const relType of matchingRelations) {
+          const dataArray = this.getComponentData(relType);
+          const data = dataArray[entityIndex];
+          const decodedRel = decodeRelationId(relType as RelationId<any>);
+          relations.push([decodedRel.targetId, data === MISSING_COMPONENT ? undefined : data]);
+        }
+        return optional ? { value: relations } : relations;
+      } else {
+        if (dataSource === undefined) {
+          if (optional) {
+            return undefined;
+          } else {
+            throw new Error(`No matching relations found for mandatory wildcard relation component type`);
+          }
+        }
+        const dataArray = dataSource as any[];
+        const data = dataArray[entityIndex];
+        const result = data === MISSING_COMPONENT ? undefined : data;
+        return optional ? { value: result } : result;
+      }
+    }) as ComponentTuple<T>;
+  }
+
+  /**
    * Get entities with their component data for specified component types
    * Optimized for bulk component access with pre-computed indices
    * @param componentTypes Array of component types to retrieve
@@ -319,6 +399,29 @@ export class Archetype {
 
   /**
    * Iterate over entities with their component data for specified component types
+   * implemented as a generator returning each entity/components pair lazily
+   * @param componentTypes Array of component types to retrieve
+   */
+  *iterateWithComponents<const T extends readonly ComponentType<any>[]>(
+    componentTypes: T,
+  ): IterableIterator<{
+    entity: EntityId;
+    components: ComponentTuple<T>;
+  }> {
+    // Reuse the same pre-caching and data access logic as forEachWithComponents
+    const componentDataSources = this.getCachedComponentDataSources(componentTypes);
+
+    for (let entityIndex = 0; entityIndex < this.entities.length; entityIndex++) {
+      const entity = this.entities[entityIndex]!;
+
+      const components = this.buildComponentsForIndex(componentTypes, componentDataSources, entityIndex);
+
+      yield { entity, components };
+    }
+  }
+
+  /**
+   * Iterate over entities with their component data for specified component types
    * Optimized for bulk component access
    * @param componentTypes Array of component types to retrieve
    * @param callback Function called for each entity with its components
@@ -328,81 +431,13 @@ export class Archetype {
     callback: (entity: EntityId, ...components: ComponentTuple<T>) => void,
   ): void {
     // Create a cache key from component types
-    const cacheKey = componentTypes.map((id) => (isOptionalEntityId(id) ? `opt(${id.optional})` : `${id}`)).join(",");
-
-    // Get or compute component data sources
-    const componentDataSources = getOrComputeCache(this.componentDataSourcesCache, cacheKey, () => {
-      // Pre-cache data sources for component types to avoid repeated calculations
-      // For wildcard relations, cache the matching relation types
-      // For regular components, cache the data array reference
-      return componentTypes.map((compType) => {
-        let optional = false;
-        if (isOptionalEntityId(compType)) {
-          compType = compType.optional;
-          optional = true;
-        }
-        const detailedType = getDetailedIdType(compType);
-        if (detailedType.type === "wildcard-relation") {
-          const componentId = detailedType.componentId;
-
-          // Find all concrete relation componentTypes in this archetype that match the wildcard
-          const matchingRelations = this.componentTypes.filter((ct) => {
-            const detailedCt = getDetailedIdType(ct);
-            if (detailedCt.type !== "entity-relation" && detailedCt.type !== "component-relation") return false;
-            return detailedCt.componentId === componentId;
-          });
-
-          return optional ? (matchingRelations.length > 0 ? matchingRelations : undefined) : matchingRelations;
-        } else {
-          return optional ? this.getOptionalComponentData(compType) : this.getComponentData(compType);
-        }
-      });
-    });
+    const componentDataSources = this.getCachedComponentDataSources(componentTypes);
 
     for (let entityIndex = 0; entityIndex < this.entities.length; entityIndex++) {
       const entity = this.entities[entityIndex]!;
 
       // Direct array access for each component type using pre-cached sources
-      const components = componentDataSources.map((dataSource, i) => {
-        let compType = componentTypes[i]!;
-        let optional = false;
-        if (isOptionalEntityId(compType)) {
-          compType = compType.optional;
-          optional = true;
-        }
-        if (getIdType(compType) === "wildcard-relation") {
-          if (dataSource === undefined) {
-            if (optional) {
-              return undefined;
-            } else {
-              // it should not happen due to earlier checks
-              throw new Error(`No matching relations found for mandatory wildcard relation component type`);
-            }
-          }
-          const matchingRelations = dataSource as EntityId<any>[];
-          const relations: [EntityId<unknown>, any][] = [];
-          for (const relType of matchingRelations) {
-            const dataArray = this.getComponentData(relType);
-            const data = dataArray[entityIndex];
-            const decodedRel = decodeRelationId(relType as RelationId<any>);
-            relations.push([decodedRel.targetId, data === MISSING_COMPONENT ? undefined : data]);
-          }
-          return optional ? { value: relations } : relations;
-        } else {
-          if (dataSource === undefined) {
-            if (optional) {
-              return undefined;
-            } else {
-              // it should not happen due to earlier checks
-              throw new Error(`No matching relations found for mandatory wildcard relation component type`);
-            }
-          }
-          const dataArray = dataSource as any[];
-          const data = dataArray[entityIndex];
-          const result = data === MISSING_COMPONENT ? undefined : data;
-          return optional ? { value: result } : result;
-        }
-      }) as ComponentTuple<T>;
+      const components = this.buildComponentsForIndex(componentTypes, componentDataSources, entityIndex);
 
       callback(entity, ...components);
     }
