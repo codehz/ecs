@@ -404,10 +404,7 @@ export class Archetype {
    */
   *iterateWithComponents<const T extends readonly ComponentType<any>[]>(
     componentTypes: T,
-  ): IterableIterator<{
-    entity: EntityId;
-    components: ComponentTuple<T>;
-  }> {
+  ): IterableIterator<[EntityId, ...ComponentTuple<T>]> {
     // Reuse the same pre-caching and data access logic as forEachWithComponents
     const componentDataSources = this.getCachedComponentDataSources(componentTypes);
 
@@ -416,7 +413,7 @@ export class Archetype {
 
       const components = this.buildComponentsForIndex(componentTypes, componentDataSources, entityIndex);
 
-      yield { entity, components };
+      yield [entity, ...components];
     }
   }
 

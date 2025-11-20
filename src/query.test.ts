@@ -1,7 +1,6 @@
-import { describe, it, expect } from "bun:test";
-import { World } from "./world";
-import { Query } from "./query";
+import { describe, expect, it } from "bun:test";
 import { component, relation, type EntityId } from "./entity";
+import { World } from "./world";
 
 describe("Query", () => {
   describe("Query Creation and Basic Functionality", () => {
@@ -237,9 +236,9 @@ describe("Query", () => {
       const visitedEntities: EntityId[] = [];
       const visitedPositions: Position[] = [];
 
-      for (const { entity, components } of query.iterate([positionComponent])) {
+      for (const [entity, position] of query.iterate([positionComponent])) {
         visitedEntities.push(entity);
-        visitedPositions.push(components[0]);
+        visitedPositions.push(position);
       }
 
       expect(visitedEntities.length).toBe(2);
@@ -550,8 +549,8 @@ describe("Query", () => {
 
       const results: Array<{ entity: EntityId; position: Position; velocity?: { value: Velocity } }> = [];
 
-      for (const { entity, components } of query.iterate([positionComponent, { optional: velocityComponent }])) {
-        results.push({ entity, position: components[0], velocity: components[1] as any });
+      for (const [entity, position, velocity] of query.iterate([positionComponent, { optional: velocityComponent }])) {
+        results.push({ entity, position, velocity });
       }
 
       expect(results.length).toBe(2);

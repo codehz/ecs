@@ -89,10 +89,7 @@ export class Query {
    */
   *iterate<const T extends readonly ComponentType<any>[]>(
     componentTypes: T,
-  ): IterableIterator<{
-    entity: EntityId;
-    components: ComponentTuple<T>;
-  }> {
+  ): IterableIterator<[EntityId, ...ComponentTuple<T>]> {
     if (this.isDisposed) {
       throw new Error("Query has been disposed");
     }
