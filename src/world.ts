@@ -64,6 +64,8 @@ export class World<UpdateParams extends any[] = []> {
 
   /** Set of component IDs marked as exclusive relations */
   private exclusiveComponents = new Set<EntityId>();
+  /** Set of component IDs that will cascade delete when the relation target is deleted */
+  private cascadeDeleteComponents = new Set<EntityId>();
 
   /**
    * Create a new World.
@@ -169,18 +171,38 @@ export class World<UpdateParams extends any[] = []> {
    * Destroy an entity and remove all its components (immediate execution)
    */
   private destroyEntityImmediate(entityId: EntityId): void {
-    const archetype = this.entityToArchetype.get(entityId);
-    if (!archetype) {
-      return; // Entity doesn't exist, nothing to do
-    }
+    // Implement BFS-style cascade deletion for entity relations where cascade is enabled
+    const queue: EntityId[] = [entityId];
+    const visited = new Set<EntityId>();
 
-    // Clean up components that use this entity as a component type
-    const componentReferences = this.getEntityReferences(entityId);
-    for (const [sourceEntityId, componentType] of componentReferences) {
-      // Directly remove the component from the source entity
-      const sourceArchetype = this.entityToArchetype.get(sourceEntityId);
-      if (sourceArchetype) {
-        // Remove from current archetype and move to new archetype without this component
+    while (queue.length > 0) {
+      const cur = queue.shift()!;
+      if (visited.has(cur)) continue;
+      visited.add(cur);
+
+      const archetype = this.entityToArchetype.get(cur);
+      if (!archetype) {
+        continue; // Entity doesn't exist
+      }
+
+      // Collect references to this entity and iterate
+      const componentReferences = Array.from(this.getEntityReferences(cur));
+      for (const [sourceEntityId, componentType] of componentReferences) {
+        // For each referencing entity, decide whether to cascade delete or simply remove the component
+        const sourceArchetype = this.entityToArchetype.get(sourceEntityId);
+        if (!sourceArchetype) continue;
+
+        const detailedType = getDetailedIdType(componentType);
+        // Cascade only applies to entity relations (not component-relation)
+        if (detailedType.type === "entity-relation" && this.cascadeDeleteComponents.has(detailedType.componentId!)) {
+          // Enqueue the referencing entity for deletion (cascade)
+          if (!visited.has(sourceEntityId)) {
+            queue.push(sourceEntityId);
+          }
+          continue;
+        }
+
+        // Non-cascade behavior: remove the relation component from the source entity
         const currentComponents = new Map<EntityId<any>, any>();
         let removedComponent = sourceArchetype.get(sourceEntityId, componentType);
         for (const archetypeComponentType of sourceArchetype.componentTypes) {
@@ -203,22 +225,23 @@ export class World<UpdateParams extends any[] = []> {
         this.entityToArchetype.set(sourceEntityId, newArchetype);
 
         // Remove from component reverse index
-        this.untrackEntityReference(sourceEntityId, componentType, entityId);
+        this.untrackEntityReference(sourceEntityId, componentType, cur);
 
         // Trigger component removed hooks
         this.triggerLifecycleHooks(sourceEntityId, new Map(), new Map([[componentType, removedComponent]]));
       }
-    }
 
-    // Clean up the reverse index for this entity
-    this.entityReferences.delete(entityId);
+      // Clean up the reverse index for this entity
+      this.entityReferences.delete(cur);
 
-    archetype.removeEntity(entityId);
-    if (archetype.getEntities().length === 0) {
-      this.cleanupEmptyArchetype(archetype);
+      // Remove the entity itself
+      archetype.removeEntity(cur);
+      if (archetype.getEntities().length === 0) {
+        this.cleanupEmptyArchetype(archetype);
+      }
+      this.entityToArchetype.delete(cur);
+      this.entityIdManager.deallocate(cur);
     }
-    this.entityToArchetype.delete(entityId);
-    this.entityIdManager.deallocate(entityId);
   }
 
   /**
@@ -366,6 +389,16 @@ export class World<UpdateParams extends any[] = []> {
    */
   setExclusive(componentId: EntityId): void {
     this.exclusiveComponents.add(componentId);
+  }
+
+  /**
+   * Mark a component as cascade-delete relation
+   * For cascade relations, when the relation target entity is deleted,
+   * the referencing entity will also be deleted (cascade).
+   * Only applicable to entity-relation components
+   */
+  setCascadeDelete(componentId: EntityId): void {
+    this.cascadeDeleteComponents.add(componentId);
   }
 
   /**
@@ -744,7 +777,7 @@ export class World<UpdateParams extends any[] = []> {
   private untrackEntityReference(sourceEntityId: EntityId, componentType: EntityId, targetEntityId: EntityId): void {
     const references = this.entityReferences.get(targetEntityId);
     if (references) {
-      references.get(sourceEntityId).delete(componentType);
+      references.remove(sourceEntityId, componentType);
       if (references.keyCount === 0) {
         this.entityReferences.delete(targetEntityId);
       }
@@ -757,7 +790,7 @@ export class World<UpdateParams extends any[] = []> {
    * @returns A MultiMap of sourceEntityId to componentTypes that reference the target entity
    */
   private getEntityReferences(targetEntityId: EntityId): Iterable<[EntityId, EntityId]> {
-    return this.entityReferences.get(targetEntityId) ?? [];
+    return this.entityReferences.get(targetEntityId) ?? new MultiMap();
   }
 
   /**

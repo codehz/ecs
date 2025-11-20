@@ -170,6 +170,85 @@ describe("World", () => {
       expect(world.has(entity, childOfParent2)).toBe(true);
     });
 
+    it("should cascade delete referencing entities when cascade enabled", () => {
+      const world = new World();
+      const parent = world.new();
+      const child = world.new();
+      const ChildOf = component();
+
+      // enable cascade delete for ChildOf
+      world.setCascadeDelete(ChildOf);
+
+      const childOfParent = relation(ChildOf, parent);
+      world.set(child, childOfParent);
+      world.sync();
+
+      world.delete(parent);
+      world.sync();
+
+      expect(world.exists(parent)).toBe(false);
+      expect(world.exists(child)).toBe(false);
+    });
+
+    it("should not cascade delete referencing entities when cascade disabled", () => {
+      const world = new World();
+      const parent = world.new();
+      const child = world.new();
+      const ChildOf = component();
+
+      const childOfParent = relation(ChildOf, parent);
+      world.set(child, childOfParent);
+      world.sync();
+
+      world.delete(parent);
+      world.sync();
+
+      expect(world.exists(parent)).toBe(false);
+      // child should still exist but without the relation
+      expect(world.exists(child)).toBe(true);
+      expect(world.has(child, childOfParent)).toBe(false);
+    });
+
+    it("should cascade delete transitively", () => {
+      const world = new World();
+      const a = world.new();
+      const b = world.new();
+      const c = world.new();
+      const ChildOf = component();
+
+      world.setCascadeDelete(ChildOf);
+
+      world.set(b, relation(ChildOf, a));
+      world.set(c, relation(ChildOf, b));
+      world.sync();
+
+      world.delete(a);
+      world.sync();
+
+      expect(world.exists(a)).toBe(false);
+      expect(world.exists(b)).toBe(false);
+      expect(world.exists(c)).toBe(false);
+    });
+
+    it("should handle cyclic cascade without infinite loop", () => {
+      const world = new World();
+      const a = world.new();
+      const b = world.new();
+      const ChildOf = component();
+
+      world.setCascadeDelete(ChildOf);
+
+      world.set(a, relation(ChildOf, b));
+      world.set(b, relation(ChildOf, a));
+      world.sync();
+
+      world.delete(a);
+      world.sync();
+
+      expect(world.exists(a)).toBe(false);
+      expect(world.exists(b)).toBe(false);
+    });
+
     it("should handle multiple components", () => {
       const world = new World();
       const entity = world.new();
