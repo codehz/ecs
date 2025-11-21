@@ -1,6 +1,7 @@
 // scripts/dist.ts - 构建脚本
 
 import { $ } from "bun";
+import { build as tsdownBuild } from "tsdown";
 
 export async function build() {
   const startTime = Date.now();
@@ -14,31 +15,16 @@ export async function build() {
 
   // 使用 Bun.build 构建所有入口点
   console.log("🔨 Building workflow library...");
-  const result = await Bun.build({
-    entrypoints,
-    outdir: "dist",
-    root: "src",
-    target: "node",
-    splitting: true,
+  const result = await tsdownBuild({
+    entry: entrypoints,
+    outDir: "dist",
+    dts: true,
+    sourcemap: true,
   });
-
-  if (!result.success) {
-    console.error("❌ Build failed:");
-    for (const log of result.logs) {
-      console.error(`  ${log.level}: ${log.message}`);
-    }
-    throw new Error("Build failed");
-  }
 
   // 输出构建结果
   const buildTime = Date.now() - startTime;
   console.log(`✅ Build successful in ${buildTime}ms!`);
-  console.log(`📦 Generated ${result.outputs.length} files:`);
-  for (const output of result.outputs) {
-    const size = output.size ? `${(output.size / 1024).toFixed(1)} KB` : "unknown";
-    console.log(`  ${output.path} (${size})`);
-  }
-  console.log();
 
   // 生成类型定义
   console.log("📝 Generating TypeScript declarations...");

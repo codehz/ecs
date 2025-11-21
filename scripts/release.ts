@@ -22,7 +22,7 @@
 
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { build } from "./build.js";
+import { build } from "tsdown";
 
 console.log("🚀 Starting release process...");
 const startTime = Date.now();
@@ -40,18 +40,23 @@ pkg.version = version;
 
 // 运行构建
 console.log("🔨 Running build process...");
-await build();
+await build({
+  entry: "src/index.ts",
+  outDir: "dist",
+  dts: true,
+  sourcemap: true,
+});
 
 // 生成 exports
 console.log("📋 Generating package exports...");
-const distFiles = readdirSync("dist", { recursive: true }).filter((f) => typeof f === "string" && f.endsWith(".js"));
+const distFiles = readdirSync("dist", { recursive: true }).filter((f) => typeof f === "string" && f.endsWith(".mjs"));
 const exports: Record<string, any> = {};
 for (const file of distFiles) {
   if (typeof file !== "string") continue;
   const normalizedFile = file.replace(/\\/g, "/");
-  const key = normalizedFile === "index.js" ? "." : `./${normalizedFile.replace(/\.js$/, "")}`;
+  const key = normalizedFile === "index.mjs" ? "." : `./${normalizedFile.replace(/\.mjs$/, "")}`;
   exports[key] = {
-    types: `./${normalizedFile.replace(/\.js$/, ".d.ts")}`,
+    types: `./${normalizedFile.replace(/\.mjs$/, ".d.mts")}`,
     import: `./${normalizedFile}`,
   };
 }
@@ -66,8 +71,8 @@ const publishPkg = {
   keywords: pkg.keywords,
   repository: pkg.repository,
   type: pkg.type,
-  main: "./index.js",
-  types: "./index.d.ts",
+  main: "./index.mjs",
+  types: "./index.d.mts",
   exports,
   peerDependencies: pkg.peerDependencies,
 };

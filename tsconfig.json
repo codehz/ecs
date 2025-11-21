@@ -22,11 +22,6 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false,
-    "plugins": [
-      {
-        "transform": "typia/lib/transform"
-      }
-    ],
     "strictNullChecks": true
   },
   "exclude": ["dist"]
