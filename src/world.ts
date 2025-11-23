@@ -728,7 +728,13 @@ export class World<UpdateParams extends any[] = []> {
       }
     }
 
-    const finalComponentTypes = changeset.getFinalComponentTypes(currentArchetype.componentTypes);
+    // Get all component types including dontFragment relations
+    const currentEntityData = currentArchetype.getEntity(entityId);
+    const allCurrentComponentTypes = currentEntityData
+      ? Array.from(currentEntityData.keys())
+      : currentArchetype.componentTypes;
+
+    const finalComponentTypes = changeset.getFinalComponentTypes(allCurrentComponentTypes);
     const removedCompoents = new Map<EntityId<any>, any>();
 
     if (finalComponentTypes) {
