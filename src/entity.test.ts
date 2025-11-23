@@ -21,6 +21,8 @@ import {
   getComponentOptions,
   isExclusiveComponent,
   isCascadeDeleteComponent,
+  getComponentNameById,
+  getComponentIdByName,
 } from "./entity";
 
 describe("Entity ID System", () => {
@@ -449,6 +451,17 @@ describe("Component Options", () => {
 
     const normalOpts = getComponentOptions(normalComp);
     expect(normalOpts).toBe(undefined);
+  });
+
+  it("should support name in options object", () => {
+    const namedComp = component({ name: "TestComponent", exclusive: true });
+    
+    const options = getComponentOptions(namedComp);
+    expect(options?.name).toBe("TestComponent");
+    expect(options?.exclusive).toBe(true);
+    
+    expect(getComponentNameById(namedComp)).toBe("TestComponent");
+    expect(getComponentIdByName("TestComponent")).toBe(namedComp);
   });
 
   it("should check if component is exclusive", () => {

@@ -432,6 +432,10 @@ const ComponentIdForNames: Map<string, ComponentId<any>> = new Map();
  */
 export interface ComponentOptions {
   /**
+   * Optional name for the component (for serialization/debugging)
+   */
+  name?: string;
+  /**
    * If true, an entity can have at most one relation per base component.
    * When adding a new relation with the same base component, any existing relations
    * with that base component are automatically removed.
@@ -450,9 +454,17 @@ const ComponentOptions: Map<ComponentId<any>, ComponentOptions> = new Map();
 
 /**
  * Allocate a new component ID from the global allocator.
- * Optionally register a name and options for the component.
  * @param nameOrOptions Optional name for the component (for serialization/debugging) or options object
  * @returns The allocated component ID
+ * @example
+ * // Just a name
+ * const Position = component<Position>("Position");
+ * 
+ * // With options
+ * const ChildOf = component({ exclusive: true, cascadeDelete: true });
+ * 
+ * // With name and options
+ * const ChildOf = component({ name: "ChildOf", exclusive: true });
  */
 export function component<T = void>(nameOrOptions?: string | ComponentOptions): ComponentId<T> {
   const id = globalComponentIdAllocator.allocate<T>();
@@ -465,6 +477,7 @@ export function component<T = void>(nameOrOptions?: string | ComponentOptions): 
     name = nameOrOptions;
   } else if (typeof nameOrOptions === "object" && nameOrOptions !== null) {
     options = nameOrOptions;
+    name = options.name;
   }
   
   // Register name if provided

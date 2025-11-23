@@ -382,29 +382,23 @@ export class World<UpdateParams extends any[] = []> {
 
   /**
    * Mark a component as exclusive relation
-   * For exclusive relations, an entity can have at most one relation per base component
-   * @deprecated Use component options instead: component<T>({ exclusive: true })
+   * @deprecated This method has been removed. Use component options instead: component({ exclusive: true })
+   * @throws Always throws an error directing to the new API
    */
   setExclusive(componentId: EntityId): void {
-    // This method is deprecated but kept for backward compatibility
-    // The actual behavior is now controlled by component options
     throw new Error(
-      "setExclusive is deprecated. Use component options instead: component<T>({ exclusive: true })",
+      "setExclusive has been removed. Use component options instead: component({ exclusive: true })",
     );
   }
 
   /**
    * Mark a component as cascade-delete relation
-   * For cascade relations, when the relation target entity is deleted,
-   * the referencing entity will also be deleted (cascade).
-   * Only applicable to entity-relation components
-   * @deprecated Use component options instead: component<T>({ cascadeDelete: true })
+   * @deprecated This method has been removed. Use component options instead: component({ cascadeDelete: true })
+   * @throws Always throws an error directing to the new API
    */
   setCascadeDelete(componentId: EntityId): void {
-    // This method is deprecated but kept for backward compatibility
-    // The actual behavior is now controlled by component options
     throw new Error(
-      "setCascadeDelete is deprecated. Use component options instead: component<T>({ cascadeDelete: true })",
+      "setCascadeDelete has been removed. Use component options instead: component({ cascadeDelete: true })",
     );
   }
 
