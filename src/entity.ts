@@ -448,6 +448,14 @@ export interface ComponentOptions {
    * Only applicable to entity-relation components.
    */
   cascadeDelete?: boolean;
+  /**
+   * If true, relations with this component will not cause archetype fragmentation.
+   * Entities with different target entities for this relation component will be stored
+   * in the same archetype, preventing fragmentation when there are many different targets.
+   * Only applicable to relation components.
+   * Inspired by Flecs' DontFragment trait.
+   */
+  dontFragment?: boolean;
 }
 
 const ComponentOptions: Map<ComponentId<any>, ComponentOptions> = new Map();
@@ -459,19 +467,19 @@ const ComponentOptions: Map<ComponentId<any>, ComponentOptions> = new Map();
  * @example
  * // Just a name
  * const Position = component<Position>("Position");
- * 
+ *
  * // With options
  * const ChildOf = component({ exclusive: true, cascadeDelete: true });
- * 
+ *
  * // With name and options
  * const ChildOf = component({ name: "ChildOf", exclusive: true });
  */
 export function component<T = void>(nameOrOptions?: string | ComponentOptions): ComponentId<T> {
   const id = globalComponentIdAllocator.allocate<T>();
-  
+
   let name: string | undefined;
   let options: ComponentOptions | undefined;
-  
+
   // Parse the parameter
   if (typeof nameOrOptions === "string") {
     name = nameOrOptions;
@@ -479,7 +487,7 @@ export function component<T = void>(nameOrOptions?: string | ComponentOptions): 
     options = nameOrOptions;
     name = options.name;
   }
-  
+
   // Register name if provided
   if (name) {
     if (ComponentIdForNames.has(name)) {
@@ -489,12 +497,12 @@ export function component<T = void>(nameOrOptions?: string | ComponentOptions): 
     ComponentNames.set(id, name);
     ComponentIdForNames.set(name, id);
   }
-  
+
   // Register options if provided
   if (options) {
     ComponentOptions.set(id, options);
   }
-  
+
   return id;
 }
 
@@ -540,4 +548,13 @@ export function isExclusiveComponent(id: ComponentId<any>): boolean {
  */
 export function isCascadeDeleteComponent(id: ComponentId<any>): boolean {
   return ComponentOptions.get(id)?.cascadeDelete ?? false;
+}
+
+/**
+ * Check if a component is marked as dontFragment
+ * @param id The component ID
+ * @returns true if the component is dontFragment, false otherwise
+ */
+export function isDontFragmentComponent(id: ComponentId<any>): boolean {
+  return ComponentOptions.get(id)?.dontFragment ?? false;
 }

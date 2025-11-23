@@ -1,5 +1,11 @@
 import type { EntityId, RelationId, WildcardRelationId } from "./entity";
-import { decodeRelationId, getDetailedIdType, getIdType, isWildcardRelationId } from "./entity";
+import {
+  decodeRelationId,
+  getDetailedIdType,
+  getIdType,
+  isDontFragmentComponent,
+  isWildcardRelationId,
+} from "./entity";
 import { isOptionalEntityId, type ComponentTuple, type ComponentType } from "./types";
 import { getOrComputeCache } from "./utils";
 
@@ -34,6 +40,12 @@ export class Archetype {
    * Reverse mapping from entity to its index in this archetype
    */
   private entityToIndex: Map<EntityId, number> = new Map();
+
+  /**
+   * Storage for dontFragment relations - maps entity ID to a map of relation type to component data
+   * This allows entities with different relation targets to share the same archetype
+   */
+  private dontFragmentRelations: Map<EntityId, Map<EntityId<any>, any>> = new Map();
 
   /**
    * Cache for pre-computed component data sources to avoid repeated calculations
@@ -77,7 +89,7 @@ export class Archetype {
   /**
    * Add an entity to this archetype with initial component data
    * @param entityId The entity to add
-   * @param componentData Map of component type to component data
+   * @param componentData Map of component type to component data (includes both regular and dontFragment components)
    */
   addEntity(entityId: EntityId, componentData: Map<EntityId<any>, any>): void {
     if (this.entityToIndex.has(entityId)) {
@@ -88,17 +100,39 @@ export class Archetype {
     this.entities.push(entityId);
     this.entityToIndex.set(entityId, index);
 
-    // Add component data
+    // Add component data for regular components (those in the archetype signature)
     for (const componentType of this.componentTypes) {
       const data = componentData.get(componentType);
       this.getComponentData(componentType).push(data === undefined ? MISSING_COMPONENT : data);
+    }
+
+    // Add dontFragment relations separately
+    const dontFragmentData = new Map<EntityId<any>, any>();
+    for (const [componentType, data] of componentData) {
+      // Skip if already added as regular component
+      if (this.componentTypes.includes(componentType)) {
+        continue;
+      }
+
+      // Check if this is a dontFragment relation
+      const detailedType = getDetailedIdType(componentType);
+      if (
+        (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
+        isDontFragmentComponent(detailedType.componentId!)
+      ) {
+        dontFragmentData.set(componentType, data);
+      }
+    }
+
+    if (dontFragmentData.size > 0) {
+      this.dontFragmentRelations.set(entityId, dontFragmentData);
     }
   }
 
   /**
    * Get all component data for a specific entity
    * @param entityId The entity to get data for
-   * @returns Map of component type to component data
+   * @returns Map of component type to component data (includes both regular and dontFragment components)
    */
   getEntity(entityId: EntityId): Map<EntityId<any>, any> | undefined {
     const index = this.entityToIndex.get(entityId);
@@ -113,12 +147,20 @@ export class Archetype {
       entityData.set(componentType, data === MISSING_COMPONENT ? undefined : data);
     }
 
+    // Add dontFragment relations
+    const dontFragmentData = this.dontFragmentRelations.get(entityId);
+    if (dontFragmentData) {
+      for (const [componentType, data] of dontFragmentData) {
+        entityData.set(componentType, data);
+      }
+    }
+
     return entityData;
   }
 
   /**
    * Dump all entities and their component data in this archetype
-   * @returns Array of objects with entity and component data
+   * @returns Array of objects with entity and component data (includes both regular and dontFragment components)
    */
   dump(): Array<{
     entity: EntityId;
@@ -137,6 +179,15 @@ export class Archetype {
         const data = dataArray[i];
         components.set(componentType, data === MISSING_COMPONENT ? undefined : data);
       }
+
+      // Add dontFragment relations
+      const dontFragmentData = this.dontFragmentRelations.get(entity);
+      if (dontFragmentData) {
+        for (const [componentType, data] of dontFragmentData) {
+          components.set(componentType, data);
+        }
+      }
+
       result.push({ entity, components });
     }
 
@@ -146,7 +197,7 @@ export class Archetype {
   /**
    * Remove an entity from this archetype
    * @param entityId The entity to remove
-   * @returns The component data of the removed entity
+   * @returns The component data of the removed entity (includes both regular and dontFragment components)
    */
   removeEntity(entityId: EntityId): Map<EntityId<any>, any> | undefined {
     const index = this.entityToIndex.get(entityId);
@@ -159,6 +210,15 @@ export class Archetype {
     for (const componentType of this.componentTypes) {
       const dataArray = this.getComponentData(componentType);
       removedData.set(componentType, dataArray[index]);
+    }
+
+    // Include dontFragment relations in removed data
+    const dontFragmentData = this.dontFragmentRelations.get(entityId);
+    if (dontFragmentData) {
+      for (const [componentType, data] of dontFragmentData) {
+        removedData.set(componentType, data);
+      }
+      this.dontFragmentRelations.delete(entityId);
     }
 
     this.entityToIndex.delete(entityId);
@@ -219,6 +279,7 @@ export class Archetype {
       const componentId = decoded.componentId;
       const relations: [EntityId<unknown>, any][] = [];
 
+      // Check regular archetype components
       for (const relType of this.componentTypes) {
         const relDetailed = getDetailedIdType(relType);
         if (
@@ -233,10 +294,35 @@ export class Archetype {
         }
       }
 
+      // Check dontFragment relations
+      const dontFragmentData = this.dontFragmentRelations.get(entityId);
+      if (dontFragmentData) {
+        for (const [relType, data] of dontFragmentData) {
+          const relDetailed = getDetailedIdType(relType);
+          if (
+            (relDetailed.type === "entity-relation" || relDetailed.type === "component-relation") &&
+            relDetailed.componentId === componentId
+          ) {
+            relations.push([relDetailed.targetId, data]);
+          }
+        }
+      }
+
       return relations;
     } else {
-      const data = this.getComponentData(componentType)[index]!;
-      return data === MISSING_COMPONENT ? (undefined as T) : data;
+      // First check if it's in the archetype signature
+      if (this.componentTypes.includes(componentType)) {
+        const data = this.getComponentData(componentType)[index]!;
+        return data === MISSING_COMPONENT ? (undefined as T) : data;
+      }
+
+      // Check dontFragment relations
+      const dontFragmentData = this.dontFragmentRelations.get(entityId);
+      if (dontFragmentData && dontFragmentData.has(componentType)) {
+        return dontFragmentData.get(componentType);
+      }
+
+      throw new Error(`Component type ${componentType} not found for entity ${entityId}`);
     }
   }
 
@@ -247,15 +333,34 @@ export class Archetype {
    * @param data The component data
    */
   set<T>(entityId: EntityId, componentType: EntityId<T>, data: T): void {
-    if (!this.componentData.has(componentType)) {
-      throw new Error(`Component type ${componentType} is not in this archetype`);
-    }
     const index = this.entityToIndex.get(entityId);
     if (index === undefined) {
       throw new Error(`Entity ${entityId} is not in this archetype`);
     }
-    const dataArray = this.getComponentData(componentType);
-    dataArray[index] = data;
+
+    // Check if it's in the archetype signature
+    if (this.componentData.has(componentType)) {
+      const dataArray = this.getComponentData(componentType);
+      dataArray[index] = data;
+      return;
+    }
+
+    // Check if it's a dontFragment relation
+    const detailedType = getDetailedIdType(componentType);
+    if (
+      (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
+      isDontFragmentComponent(detailedType.componentId!)
+    ) {
+      let dontFragmentData = this.dontFragmentRelations.get(entityId);
+      if (!dontFragmentData) {
+        dontFragmentData = new Map();
+        this.dontFragmentRelations.set(entityId, dontFragmentData);
+      }
+      dontFragmentData.set(componentType, data);
+      return;
+    }
+
+    throw new Error(`Component type ${componentType} is not in this archetype`);
   }
 
   /**
