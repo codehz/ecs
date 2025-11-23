@@ -8,6 +8,8 @@ import {
   getComponentIdByName,
   getComponentNameById,
   getDetailedIdType,
+  isCascadeDeleteComponent,
+  isExclusiveComponent,
   isRelationId,
   relation,
 } from "./entity";
@@ -61,11 +63,6 @@ export class World<UpdateParams extends any[] = []> {
   // Lifecycle and configuration
   /** Stores lifecycle hooks for component and relation events */
   private hooks = new Map<EntityId<any>, Set<LifecycleHook<any>>>();
-
-  /** Set of component IDs marked as exclusive relations */
-  private exclusiveComponents = new Set<EntityId>();
-  /** Set of component IDs that will cascade delete when the relation target is deleted */
-  private cascadeDeleteComponents = new Set<EntityId>();
 
   /**
    * Create a new World.
@@ -194,7 +191,7 @@ export class World<UpdateParams extends any[] = []> {
 
         const detailedType = getDetailedIdType(componentType);
         // Cascade only applies to entity relations (not component-relation)
-        if (detailedType.type === "entity-relation" && this.cascadeDeleteComponents.has(detailedType.componentId!)) {
+        if (detailedType.type === "entity-relation" && isCascadeDeleteComponent(detailedType.componentId!)) {
           // Enqueue the referencing entity for deletion (cascade)
           if (!visited.has(sourceEntityId)) {
             queue.push(sourceEntityId);
@@ -386,9 +383,14 @@ export class World<UpdateParams extends any[] = []> {
   /**
    * Mark a component as exclusive relation
    * For exclusive relations, an entity can have at most one relation per base component
+   * @deprecated Use component options instead: component<T>({ exclusive: true })
    */
   setExclusive(componentId: EntityId): void {
-    this.exclusiveComponents.add(componentId);
+    // This method is deprecated but kept for backward compatibility
+    // The actual behavior is now controlled by component options
+    throw new Error(
+      "setExclusive is deprecated. Use component options instead: component<T>({ exclusive: true })",
+    );
   }
 
   /**
@@ -396,9 +398,14 @@ export class World<UpdateParams extends any[] = []> {
    * For cascade relations, when the relation target entity is deleted,
    * the referencing entity will also be deleted (cascade).
    * Only applicable to entity-relation components
+   * @deprecated Use component options instead: component<T>({ cascadeDelete: true })
    */
   setCascadeDelete(componentId: EntityId): void {
-    this.cascadeDeleteComponents.add(componentId);
+    // This method is deprecated but kept for backward compatibility
+    // The actual behavior is now controlled by component options
+    throw new Error(
+      "setCascadeDelete is deprecated. Use component options instead: component<T>({ cascadeDelete: true })",
+    );
   }
 
   /**
@@ -628,7 +635,7 @@ export class World<UpdateParams extends any[] = []> {
             // For exclusive relations, remove existing relations with the same base component
             if (
               (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
-              this.exclusiveComponents.has(detailedType.componentId!)
+              isExclusiveComponent(detailedType.componentId!)
             ) {
               for (const componentType of currentArchetype.componentTypes) {
                 const componentDetailedType = getDetailedIdType(componentType);

@@ -150,9 +150,8 @@ describe("World", () => {
       const parent1 = world.new();
       const parent2 = world.new();
 
-      // Mark ChildOf as exclusive
-      const ChildOf = component();
-      world.setExclusive(ChildOf);
+      // Create ChildOf component with exclusive option
+      const ChildOf = component({ exclusive: true });
 
       const childOfParent1 = relation(ChildOf, parent1);
       const childOfParent2 = relation(ChildOf, parent2);
@@ -174,10 +173,8 @@ describe("World", () => {
       const world = new World();
       const parent = world.new();
       const child = world.new();
-      const ChildOf = component();
-
-      // enable cascade delete for ChildOf
-      world.setCascadeDelete(ChildOf);
+      // Create ChildOf component with cascadeDelete option
+      const ChildOf = component({ cascadeDelete: true });
 
       const childOfParent = relation(ChildOf, parent);
       world.set(child, childOfParent);
@@ -214,9 +211,8 @@ describe("World", () => {
       const a = world.new();
       const b = world.new();
       const c = world.new();
-      const ChildOf = component();
-
-      world.setCascadeDelete(ChildOf);
+      // Create ChildOf component with cascadeDelete option
+      const ChildOf = component({ cascadeDelete: true });
 
       world.set(b, relation(ChildOf, a));
       world.set(c, relation(ChildOf, b));
@@ -234,9 +230,8 @@ describe("World", () => {
       const world = new World();
       const a = world.new();
       const b = world.new();
-      const ChildOf = component();
-
-      world.setCascadeDelete(ChildOf);
+      // Create ChildOf component with cascadeDelete option
+      const ChildOf = component({ cascadeDelete: true });
 
       world.set(a, relation(ChildOf, b));
       world.set(b, relation(ChildOf, a));

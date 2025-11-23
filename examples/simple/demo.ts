@@ -10,7 +10,7 @@ type Velocity = { x: number; y: number };
 // 定义组件ID
 const PositionId = component<Position>();
 const VelocityId = component<Velocity>();
-const ChildOf = component(); // Exclusive relation component
+const ChildOf = component({ exclusive: true }); // Exclusive relation component
 
 // 移动系统
 class MovementSystem implements System<[deltaTime: number]> {
@@ -58,8 +58,7 @@ function main() {
   const parent2 = world.new();
   const child = world.new();
 
-  // 设置ChildOf为exclusive relation
-  world.setExclusive(ChildOf);
+  // ChildOf is already marked as exclusive in component definition
 
   // 添加第一个parent relation
   world.set(child, relation(ChildOf, parent1));

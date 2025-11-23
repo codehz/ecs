@@ -17,6 +17,10 @@ import {
   isEntityId,
   isRelationId,
   isWildcardRelationId,
+  component,
+  getComponentOptions,
+  isExclusiveComponent,
+  isCascadeDeleteComponent,
 } from "./entity";
 
 describe("Entity ID System", () => {
@@ -421,5 +425,45 @@ describe("ComponentIdManager", () => {
       manager.allocate();
       expect(manager.hasAvailableIds()).toBe(false);
     });
+  });
+});
+
+describe("Component Options", () => {
+  it("should store and retrieve component options", () => {
+    const exclusiveComp = component({ exclusive: true });
+    const cascadeComp = component({ cascadeDelete: true });
+    const bothComp = component({ exclusive: true, cascadeDelete: true });
+    const normalComp = component();
+
+    const exclusiveOpts = getComponentOptions(exclusiveComp);
+    expect(exclusiveOpts?.exclusive).toBe(true);
+    expect(exclusiveOpts?.cascadeDelete).toBe(undefined);
+
+    const cascadeOpts = getComponentOptions(cascadeComp);
+    expect(cascadeOpts?.exclusive).toBe(undefined);
+    expect(cascadeOpts?.cascadeDelete).toBe(true);
+
+    const bothOpts = getComponentOptions(bothComp);
+    expect(bothOpts?.exclusive).toBe(true);
+    expect(bothOpts?.cascadeDelete).toBe(true);
+
+    const normalOpts = getComponentOptions(normalComp);
+    expect(normalOpts).toBe(undefined);
+  });
+
+  it("should check if component is exclusive", () => {
+    const exclusiveComp = component({ exclusive: true });
+    const normalComp = component();
+
+    expect(isExclusiveComponent(exclusiveComp)).toBe(true);
+    expect(isExclusiveComponent(normalComp)).toBe(false);
+  });
+
+  it("should check if component is cascade delete", () => {
+    const cascadeComp = component({ cascadeDelete: true });
+    const normalComp = component();
+
+    expect(isCascadeDeleteComponent(cascadeComp)).toBe(true);
+    expect(isCascadeDeleteComponent(normalComp)).toBe(false);
   });
 });

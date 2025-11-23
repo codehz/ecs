@@ -42,6 +42,7 @@ export const WILDCARD_TARGET_ID = 0;
 /**
  * Create a component ID
  * @param id Component identifier (1-1023)
+ * @internal This function is for internal use and testing only. Use `component()` to create components.
  * @see component
  */
 export function createComponentId<T = void>(id: number): ComponentId<T> {
@@ -427,14 +428,46 @@ const ComponentNames: Map<ComponentId<any>, string> = new Map();
 const ComponentIdForNames: Map<string, ComponentId<any>> = new Map();
 
 /**
+ * Component options that define intrinsic properties
+ */
+export interface ComponentOptions {
+  /**
+   * If true, an entity can have at most one relation per base component.
+   * When adding a new relation with the same base component, any existing relations
+   * with that base component are automatically removed.
+   * Only applicable to relation components.
+   */
+  exclusive?: boolean;
+  /**
+   * If true, when a relation target entity is deleted, all entities that reference
+   * it through this component will also be deleted (cascade delete).
+   * Only applicable to entity-relation components.
+   */
+  cascadeDelete?: boolean;
+}
+
+const ComponentOptions: Map<ComponentId<any>, ComponentOptions> = new Map();
+
+/**
  * Allocate a new component ID from the global allocator.
- * Optionally register a name for the component.
- * The name is only for serialization/debugging and does not affect base functionality.
- * @param name Optional name for the component
+ * Optionally register a name and options for the component.
+ * @param nameOrOptions Optional name for the component (for serialization/debugging) or options object
  * @returns The allocated component ID
  */
-export function component<T = void>(name?: string): ComponentId<T> {
+export function component<T = void>(nameOrOptions?: string | ComponentOptions): ComponentId<T> {
   const id = globalComponentIdAllocator.allocate<T>();
+  
+  let name: string | undefined;
+  let options: ComponentOptions | undefined;
+  
+  // Parse the parameter
+  if (typeof nameOrOptions === "string") {
+    name = nameOrOptions;
+  } else if (typeof nameOrOptions === "object" && nameOrOptions !== null) {
+    options = nameOrOptions;
+  }
+  
+  // Register name if provided
   if (name) {
     if (ComponentIdForNames.has(name)) {
       throw new Error(`Component name "${name}" is already registered`);
@@ -443,6 +476,12 @@ export function component<T = void>(name?: string): ComponentId<T> {
     ComponentNames.set(id, name);
     ComponentIdForNames.set(name, id);
   }
+  
+  // Register options if provided
+  if (options) {
+    ComponentOptions.set(id, options);
+  }
+  
   return id;
 }
 
@@ -461,4 +500,31 @@ export function getComponentIdByName(name: string): ComponentId<any> | undefined
  */
 export function getComponentNameById(id: ComponentId<any>): string | undefined {
   return ComponentNames.get(id);
+}
+
+/**
+ * Get component options by its ID
+ * @param id The component ID
+ * @returns The component options if found, undefined otherwise
+ */
+export function getComponentOptions(id: ComponentId<any>): ComponentOptions | undefined {
+  return ComponentOptions.get(id);
+}
+
+/**
+ * Check if a component is marked as exclusive
+ * @param id The component ID
+ * @returns true if the component is exclusive, false otherwise
+ */
+export function isExclusiveComponent(id: ComponentId<any>): boolean {
+  return ComponentOptions.get(id)?.exclusive ?? false;
+}
+
+/**
+ * Check if a component is marked as cascade delete
+ * @param id The component ID
+ * @returns true if the component is cascade delete, false otherwise
+ */
+export function isCascadeDeleteComponent(id: ComponentId<any>): boolean {
+  return ComponentOptions.get(id)?.cascadeDelete ?? false;
 }
