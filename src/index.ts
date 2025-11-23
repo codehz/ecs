@@ -1,8 +1,37 @@
-// ECS Library Entry Point
-export * from "./entity";
-export * from "./world";
-export * from "./archetype";
-export * from "./query";
-export * from "./system";
-export * from "./system-scheduler";
-export * from "./types";
+// ECS Library Entry Point - Public API
+
+// Entity ID types and utilities
+export type {
+  EntityId,
+  ComponentId,
+  EntityRelationId,
+  ComponentRelationId,
+  WildcardRelationId,
+  RelationId,
+  ComponentOptions,
+} from "./entity";
+
+export {
+  component,
+  relation,
+  isComponentId,
+  isEntityId,
+  isRelationId,
+  isWildcardRelationId,
+  decodeRelationId,
+  getComponentIdByName,
+  getComponentNameById,
+} from "./entity";
+
+// World class
+export { World } from "./world";
+export type { SerializedWorld } from "./world";
+
+// Query class
+export { Query } from "./query";
+
+// System interface
+export type { System } from "./system";
+
+// Type utilities
+export type { LifecycleHook, ComponentType, ComponentTuple } from "./types";

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { Archetype, component, createEntityId, relation, type EntityId } from "./index";
+import { Archetype } from "./archetype";
+import { component, createEntityId, relation, type EntityId } from "./entity";
 
 describe("Archetype", () => {
   type Position = { x: number; y: number };
