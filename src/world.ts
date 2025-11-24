@@ -46,6 +46,9 @@ export class World<UpdateParams extends any[] = []> {
   /** Tracks which entities reference each entity as a component type */
   private entityReferences = new Map<EntityId, MultiMap<EntityId, EntityId>>();
 
+  /** Storage for dontFragment relations - maps entity ID to a map of relation type to component data */
+  private dontFragmentRelations: Map<EntityId, Map<EntityId<any>, any>> = new Map();
+
   // Query management
   /** Array of all active queries for archetype change notifications */
   private queries: Query[] = [];
@@ -963,9 +966,7 @@ export class World<UpdateParams extends any[] = []> {
     const sortedTypes = regularTypes.sort((a, b) => a - b);
     const hashKey = this.createArchetypeSignature(sortedTypes);
 
-    return getOrCreateWithSideEffect(this.archetypeBySignature, hashKey, () =>
-      this.createNewArchetype(sortedTypes),
-    );
+    return getOrCreateWithSideEffect(this.archetypeBySignature, hashKey, () => this.createNewArchetype(sortedTypes));
   }
 
   /**
@@ -995,7 +996,7 @@ export class World<UpdateParams extends any[] = []> {
    * Create a new archetype and register it with all tracking structures
    */
   private createNewArchetype(componentTypes: EntityId<any>[]): Archetype {
-    const newArchetype = new Archetype(componentTypes);
+    const newArchetype = new Archetype(componentTypes, this.dontFragmentRelations);
     this.archetypes.push(newArchetype);
 
     // Register archetype in component index
