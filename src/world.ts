@@ -573,13 +573,9 @@ export class World<UpdateParams extends any[] = []> {
 
     // Filter by wildcard relations
     for (const wildcard of wildcardRelations) {
-      // Keep only archetypes that have the component
+      // Keep only archetypes that have the component (including dontFragment relations)
       matchingArchetypes = matchingArchetypes.filter((archetype) =>
-        archetype.componentTypes.some((archetypeType) => {
-          if (!isRelationId(archetypeType)) return false;
-          const decoded = decodeRelationId(archetypeType);
-          return decoded.componentId === wildcard.componentId;
-        }),
+        archetype.hasRelationWithComponentId(wildcard.componentId),
       );
     }
 

@@ -1,5 +1,6 @@
 import { Archetype } from "./archetype";
-import type { EntityId } from "./entity";
+import type { EntityId, WildcardRelationId } from "./entity";
+import { getDetailedIdType } from "./entity";
 import { matchesComponentTypes, matchesFilter, type QueryFilter } from "./query-filter";
 import type { ComponentTuple, ComponentType } from "./types";
 import type { World } from "./world";
@@ -38,9 +39,44 @@ export class Query {
   getEntities(): EntityId[] {
     this.ensureNotDisposed();
     const result: EntityId[] = [];
-    for (const archetype of this.cachedArchetypes) {
-      result.push(...archetype.getEntities());
+
+    // Check if any component types are wildcard relations
+    const hasWildcardRelations = this.componentTypes.some((ct) => {
+      const detailed = getDetailedIdType(ct);
+      return detailed.type === "wildcard-relation";
+    });
+
+    // If there are wildcard relations, we need to filter entities that actually have them
+    // This is necessary for dontFragment components where an archetype can contain entities
+    // with and without the relation
+    if (hasWildcardRelations) {
+      for (const archetype of this.cachedArchetypes) {
+        for (const entity of archetype.getEntities()) {
+          // Check if entity has all required wildcard relations
+          let hasAllRelations = true;
+          for (const componentType of this.componentTypes) {
+            const detailed = getDetailedIdType(componentType);
+            if (detailed.type === "wildcard-relation") {
+              // Check if entity has at least one relation matching this wildcard
+              const relations = archetype.get(entity, componentType as WildcardRelationId<any>);
+              if (relations.length === 0) {
+                hasAllRelations = false;
+                break;
+              }
+            }
+          }
+          if (hasAllRelations) {
+            result.push(entity);
+          }
+        }
+      }
+    } else {
+      // No wildcard relations, can just return all entities from matching archetypes
+      for (const archetype of this.cachedArchetypes) {
+        result.push(...archetype.getEntities());
+      }
     }
+
     return result;
   }
 

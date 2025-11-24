@@ -457,10 +457,11 @@ export class Archetype {
     componentTypes: T,
     componentDataSources: (any[] | EntityId<any>[] | undefined)[],
     entityIndex: number,
+    entityId: EntityId,
   ): ComponentTuple<T> {
     return componentDataSources.map((dataSource, i) => {
       const compType = componentTypes[i]!;
-      return this.buildSingleComponent(compType, dataSource, entityIndex);
+      return this.buildSingleComponent(compType, dataSource, entityIndex, entityId);
     }) as ComponentTuple<T>;
   }
 
@@ -471,12 +472,19 @@ export class Archetype {
     compType: ComponentType<any>,
     dataSource: any[] | EntityId<any>[] | undefined,
     entityIndex: number,
+    entityId: EntityId,
   ): any {
     const optional = isOptionalEntityId(compType);
     const actualType = optional ? compType.optional : compType;
 
     if (getIdType(actualType) === "wildcard-relation") {
-      return this.buildWildcardRelationValue(dataSource, entityIndex, optional);
+      return this.buildWildcardRelationValue(
+        actualType as WildcardRelationId<any>,
+        dataSource,
+        entityIndex,
+        entityId,
+        optional,
+      );
     } else {
       return this.buildRegularComponentValue(dataSource, entityIndex, optional);
     }
@@ -486,25 +494,49 @@ export class Archetype {
    * Build wildcard relation value from matching relations
    */
   private buildWildcardRelationValue(
+    wildcardRelationType: WildcardRelationId<any>,
     dataSource: any[] | EntityId<any>[] | undefined,
     entityIndex: number,
+    entityId: EntityId,
     optional: boolean,
   ): any {
-    if (dataSource === undefined) {
-      if (optional) {
-        return undefined;
-      }
-      throw new Error(`No matching relations found for mandatory wildcard relation component type`);
-    }
-
-    const matchingRelations = dataSource as EntityId<any>[];
+    const matchingRelations = (dataSource as EntityId<any>[]) || [];
     const relations: [EntityId<unknown>, any][] = [];
 
+    // Add regular archetype relations
     for (const relType of matchingRelations) {
       const dataArray = this.getComponentData(relType);
       const data = dataArray[entityIndex];
       const decodedRel = decodeRelationId(relType as RelationId<any>);
       relations.push([decodedRel.targetId, data === MISSING_COMPONENT ? undefined : data]);
+    }
+
+    // Add dontFragment relations for this entity
+    // Get the component ID from the wildcard relation type
+    const wildcardDecoded = decodeRelationId(wildcardRelationType);
+    const targetComponentId = wildcardDecoded.componentId;
+
+    const dontFragmentData = this.dontFragmentRelations.get(entityId);
+    if (dontFragmentData) {
+      // Check dontFragment relations for matching component ID
+      for (const [relType, data] of dontFragmentData) {
+        const relDetailed = getDetailedIdType(relType);
+        if (
+          (relDetailed.type === "entity-relation" || relDetailed.type === "component-relation") &&
+          relDetailed.componentId === targetComponentId
+        ) {
+          relations.push([relDetailed.targetId, data]);
+        }
+      }
+    }
+
+    // If no relations found and not optional, this entity doesn't match
+    if (relations.length === 0) {
+      if (!optional) {
+        throw new Error(`No matching relations found for mandatory wildcard relation component type`);
+      }
+      // For optional, return undefined when there are no relations
+      return undefined;
     }
 
     return optional ? { value: relations } : relations;
@@ -570,7 +602,7 @@ export class Archetype {
     for (let entityIndex = 0; entityIndex < this.entities.length; entityIndex++) {
       const entity = this.entities[entityIndex]!;
 
-      const components = this.buildComponentsForIndex(componentTypes, componentDataSources, entityIndex);
+      const components = this.buildComponentsForIndex(componentTypes, componentDataSources, entityIndex, entity);
 
       yield [entity, ...components];
     }
@@ -593,7 +625,7 @@ export class Archetype {
       const entity = this.entities[entityIndex]!;
 
       // Direct array access for each component type using pre-cached sources
-      const components = this.buildComponentsForIndex(componentTypes, componentDataSources, entityIndex);
+      const components = this.buildComponentsForIndex(componentTypes, componentDataSources, entityIndex, entity);
 
       callback(entity, ...components);
     }
@@ -612,5 +644,42 @@ export class Archetype {
       }
       callback(this.entities[i]!, components);
     }
+  }
+
+  /**
+   * Check if any entity in this archetype has a relation matching the given component ID
+   * This includes both regular relations in componentTypes and dontFragment relations
+   * @param componentId The component ID to match
+   * @returns true if any entity has a matching relation
+   */
+  hasRelationWithComponentId(componentId: EntityId<any>): boolean {
+    // Check regular archetype components
+    for (const componentType of this.componentTypes) {
+      const detailedType = getDetailedIdType(componentType);
+      if (
+        (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
+        detailedType.componentId === componentId
+      ) {
+        return true;
+      }
+    }
+
+    // Check dontFragment relations for any entity in this archetype
+    for (const entityId of this.entities) {
+      const entityDontFragmentRelations = this.dontFragmentRelations.get(entityId);
+      if (entityDontFragmentRelations) {
+        for (const relationType of entityDontFragmentRelations.keys()) {
+          const detailedType = getDetailedIdType(relationType);
+          if (
+            (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
+            detailedType.componentId === componentId
+          ) {
+            return true;
+          }
+        }
+      }
+    }
+
+    return false;
   }
 }
