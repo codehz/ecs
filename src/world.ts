@@ -318,13 +318,8 @@ export class World<UpdateParams extends any[] = []> {
       (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
       isDontFragmentComponent(detailedType.componentId!)
     ) {
-      // Check if entity has this dontFragment relation
-      try {
-        archetype.get(entityId, componentType);
-        return true;
-      } catch {
-        return false;
-      }
+      // Check if entity has this dontFragment relation in the shared storage
+      return this.dontFragmentRelations.get(entityId)?.has(componentType) ?? false;
     }
 
     return false;
