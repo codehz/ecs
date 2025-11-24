@@ -244,6 +244,74 @@ describe("World", () => {
       expect(world.exists(b)).toBe(false);
     });
 
+    it("should prevent archetype fragmentation with dontFragment relations", () => {
+      const world = new World();
+      const entity1 = world.new();
+      const entity2 = world.new();
+      const target1 = world.new();
+      const target2 = world.new();
+
+      // Create Follows component with dontFragment option
+      const Follows = component<{ strength: number }>({ dontFragment: true });
+
+      const followsTarget1 = relation(Follows, target1);
+      const followsTarget2 = relation(Follows, target2);
+
+      // Add different relations to different entities
+      world.set(entity1, followsTarget1, { strength: 1 });
+      world.set(entity2, followsTarget2, { strength: 2 });
+      world.sync();
+
+      // Both entities should exist and have their relations
+      expect(world.has(entity1, followsTarget1)).toBe(true);
+      expect(world.has(entity2, followsTarget2)).toBe(true);
+
+      // They should be in the same archetype despite having different relation targets
+      // (this is the key behavior of dontFragment)
+      const archetype1 = (world as any).entityToArchetype.get(entity1);
+      const archetype2 = (world as any).entityToArchetype.get(entity2);
+      expect(archetype1).toBe(archetype2);
+
+      // Verify the wildcard marker is present
+      const wildcardMarker = relation(Follows, "*");
+      expect(archetype1.componentTypes).toContain(wildcardMarker);
+    });
+
+    it("should support cascadeDelete and dontFragment simultaneously", () => {
+      const world = new World();
+      const parent = world.new();
+      const child1 = world.new();
+      const child2 = world.new();
+
+      // Create ChildOf component with both cascadeDelete and dontFragment options
+      const ChildOf = component<{ priority: number }>({ cascadeDelete: true, dontFragment: true });
+
+      const childOfParent1 = relation(ChildOf, parent);
+      const childOfParent2 = relation(ChildOf, parent);
+
+      // Add relations to children
+      world.set(child1, childOfParent1, { priority: 1 });
+      world.set(child2, childOfParent2, { priority: 2 });
+      world.sync();
+
+      // Verify relations exist
+      expect(world.has(child1, childOfParent1)).toBe(true);
+      expect(world.has(child2, childOfParent2)).toBe(true);
+
+      // Both children should be in the same archetype (dontFragment behavior)
+      const archetype1 = (world as any).entityToArchetype.get(child1);
+      const archetype2 = (world as any).entityToArchetype.get(child2);
+      expect(archetype1).toBe(archetype2);
+
+      // Delete parent - should cascade delete both children (cascadeDelete behavior)
+      world.delete(parent);
+      world.sync();
+
+      expect(world.exists(parent)).toBe(false);
+      expect(world.exists(child1)).toBe(false);
+      expect(world.exists(child2)).toBe(false);
+    });
+
     it("should handle multiple components", () => {
       const world = new World();
       const entity = world.new();

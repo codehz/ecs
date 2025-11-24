@@ -21,6 +21,7 @@ import {
   getComponentOptions,
   isExclusiveComponent,
   isCascadeDeleteComponent,
+  isDontFragmentComponent,
   getComponentNameById,
   getComponentIdByName,
 } from "./entity";
@@ -455,11 +456,11 @@ describe("Component Options", () => {
 
   it("should support name in options object", () => {
     const namedComp = component({ name: "TestComponent", exclusive: true });
-    
+
     const options = getComponentOptions(namedComp);
     expect(options?.name).toBe("TestComponent");
     expect(options?.exclusive).toBe(true);
-    
+
     expect(getComponentNameById(namedComp)).toBe("TestComponent");
     expect(getComponentIdByName("TestComponent")).toBe(namedComp);
   });
@@ -478,5 +479,24 @@ describe("Component Options", () => {
 
     expect(isCascadeDeleteComponent(cascadeComp)).toBe(true);
     expect(isCascadeDeleteComponent(normalComp)).toBe(false);
+  });
+
+  it("should check if component is dontFragment", () => {
+    const dontFragmentComp = component({ dontFragment: true });
+    const normalComp = component();
+
+    expect(isDontFragmentComponent(dontFragmentComp)).toBe(true);
+    expect(isDontFragmentComponent(normalComp)).toBe(false);
+  });
+
+  it("should support cascadeDelete and dontFragment set simultaneously", () => {
+    const combinedComp = component({ cascadeDelete: true, dontFragment: true });
+
+    const options = getComponentOptions(combinedComp);
+    expect(options?.cascadeDelete).toBe(true);
+    expect(options?.dontFragment).toBe(true);
+
+    expect(isCascadeDeleteComponent(combinedComp)).toBe(true);
+    expect(isDontFragmentComponent(combinedComp)).toBe(true);
   });
 });
