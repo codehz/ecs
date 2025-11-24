@@ -3,7 +3,6 @@ import { ComponentChangeset } from "./changeset";
 import { CommandBuffer, type Command } from "./command-buffer";
 import type { ComponentId, EntityId, WildcardRelationId } from "./entity";
 import {
-  decodeRelationId,
   EntityIdManager,
   getComponentIdByName,
   getComponentNameById,
@@ -11,7 +10,6 @@ import {
   isCascadeDeleteComponent,
   isDontFragmentComponent,
   isExclusiveComponent,
-  isRelationId,
   relation,
 } from "./entity";
 import { MultiMap } from "./multi-map";
