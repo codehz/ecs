@@ -42,10 +42,11 @@ export class Archetype {
   private entityToIndex: Map<EntityId, number> = new Map();
 
   /**
-   * Storage for dontFragment relations - maps entity ID to a map of relation type to component data
+   * Reference to dontFragment relations storage from World
    * This allows entities with different relation targets to share the same archetype
+   * Stored in World to avoid migration overhead when entities change archetypes
    */
-  private dontFragmentRelations: Map<EntityId, Map<EntityId<any>, any>> = new Map();
+  private dontFragmentRelations: Map<EntityId, Map<EntityId<any>, any>>;
 
   /**
    * Cache for pre-computed component data sources to avoid repeated calculations
@@ -57,9 +58,11 @@ export class Archetype {
   /**
    * Create a new archetype with the specified component types
    * @param componentTypes The component types that define this archetype
+   * @param dontFragmentRelations Reference to the World's dontFragmentRelations storage
    */
-  constructor(componentTypes: EntityId<any>[]) {
+  constructor(componentTypes: EntityId<any>[], dontFragmentRelations: Map<EntityId, Map<EntityId<any>, any>>) {
     this.componentTypes = [...componentTypes].sort((a, b) => a - b); // Sort for consistent ordering
+    this.dontFragmentRelations = dontFragmentRelations;
 
     // Initialize component data arrays
     for (const componentType of this.componentTypes) {

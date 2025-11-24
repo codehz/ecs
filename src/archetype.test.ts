@@ -9,21 +9,24 @@ describe("Archetype", () => {
   const positionComponent = component<Position>();
   const velocityComponent = component<Velocity>();
 
+  // Helper function to create a dontFragmentRelations map for testing
+  const createDontFragmentRelations = () => new Map<EntityId, Map<EntityId<any>, any>>();
+
   it("should create an archetype with component types", () => {
-    const archetype = new Archetype([positionComponent, velocityComponent]);
+    const archetype = new Archetype([positionComponent, velocityComponent], createDontFragmentRelations());
     expect(archetype.componentTypes).toEqual([positionComponent, velocityComponent]);
     expect(archetype.size).toBe(0);
   });
 
   it("should match component types", () => {
-    const archetype = new Archetype([positionComponent, velocityComponent]);
+    const archetype = new Archetype([positionComponent, velocityComponent], createDontFragmentRelations());
     expect(archetype.matches([positionComponent, velocityComponent])).toBe(true);
     expect(archetype.matches([velocityComponent, positionComponent])).toBe(true); // Order doesn't matter
     expect(archetype.matches([positionComponent])).toBe(false);
   });
 
   it("should add and remove entities", () => {
-    const archetype = new Archetype([positionComponent, velocityComponent]);
+    const archetype = new Archetype([positionComponent, velocityComponent], createDontFragmentRelations());
     const entity1 = createEntityId(1024);
     const entity2 = createEntityId(1025);
 
@@ -52,7 +55,7 @@ describe("Archetype", () => {
   });
 
   it("should get and set component data", () => {
-    const archetype = new Archetype([positionComponent]);
+    const archetype = new Archetype([positionComponent], createDontFragmentRelations());
     const entity = createEntityId(1024);
     const initialPosition: Position = { x: 5, y: 5 };
 
@@ -78,7 +81,7 @@ describe("Archetype", () => {
     const entity = createEntityId(1024);
 
     // Archetype with multiple relations
-    const archetype = new Archetype([relation1, relation2]);
+    const archetype = new Archetype([relation1, relation2], createDontFragmentRelations());
 
     // Add entity with relations to target1 and target2
     archetype.addEntity(
@@ -104,7 +107,7 @@ describe("Archetype", () => {
   });
 
   it("should iterate over entities", () => {
-    const archetype = new Archetype([positionComponent]);
+    const archetype = new Archetype([positionComponent], createDontFragmentRelations());
     const entity1 = createEntityId(1024);
     const entity2 = createEntityId(1025);
 
@@ -120,7 +123,7 @@ describe("Archetype", () => {
   });
 
   it("should get component data arrays", () => {
-    const archetype = new Archetype([positionComponent]);
+    const archetype = new Archetype([positionComponent], createDontFragmentRelations());
     const entity1 = createEntityId(1024);
     const entity2 = createEntityId(1025);
     const pos1: Position = { x: 1, y: 1 };
@@ -149,8 +152,8 @@ describe("Archetype", () => {
     const relation3 = relation(positionComponent, createEntityId(1029)); // For entity2
 
     // Archetype with multiple relations
-    const archetype1 = new Archetype([relation1, relation2]);
-    const archetype2 = new Archetype([relation3]);
+    const archetype1 = new Archetype([relation1, relation2], createDontFragmentRelations());
+    const archetype2 = new Archetype([relation3], createDontFragmentRelations());
 
     // Add entity1 with relations to target1 and target2
     archetype1.addEntity(
@@ -196,7 +199,7 @@ describe("Archetype", () => {
     const relation2 = relation(positionComponent, target2);
     const wildcardPositionRelation = relation(positionComponent, "*");
 
-    const archetype = new Archetype([relation1, relation2]);
+    const archetype = new Archetype([relation1, relation2], createDontFragmentRelations());
 
     const entity1 = createEntityId(1024);
 

@@ -46,6 +46,9 @@ export class World<UpdateParams extends any[] = []> {
   /** Tracks which entities reference each entity as a component type */
   private entityReferences = new Map<EntityId, MultiMap<EntityId, EntityId>>();
 
+  /** Storage for dontFragment relations - maps entity ID to a map of relation type to component data */
+  private dontFragmentRelations: Map<EntityId, Map<EntityId<any>, any>> = new Map();
+
   // Query management
   /** Array of all active queries for archetype change notifications */
   private queries: Query[] = [];
@@ -315,13 +318,8 @@ export class World<UpdateParams extends any[] = []> {
       (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
       isDontFragmentComponent(detailedType.componentId!)
     ) {
-      // Check if entity has this dontFragment relation
-      try {
-        archetype.get(entityId, componentType);
-        return true;
-      } catch {
-        return false;
-      }
+      // Check if entity has this dontFragment relation in the shared storage
+      return this.dontFragmentRelations.get(entityId)?.has(componentType) ?? false;
     }
 
     return false;
@@ -352,8 +350,17 @@ export class World<UpdateParams extends any[] = []> {
     // Note: undefined is a valid component value, so we cannot use undefined to check existence
     const detailedType = getDetailedIdType(componentType);
     if (detailedType.type !== "wildcard-relation") {
-      // For regular components, check if the component type exists in the archetype
-      if (!archetype.componentTypes.includes(componentType)) {
+      // For regular components, check if the component type exists in the archetype or dontFragmentRelations
+      const inArchetype = archetype.componentTypes.includes(componentType);
+      const isDontFragment =
+        (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
+        isDontFragmentComponent(detailedType.componentId!);
+
+      // For dontFragment relations, check if it exists in the dontFragmentRelations storage
+      const hasComponent =
+        inArchetype || (isDontFragment && this.dontFragmentRelations.get(entityId)?.has(componentType));
+
+      if (!hasComponent) {
         throw new Error(
           `Entity ${entityId} does not have component ${componentType}. Use has() to check component existence before calling get().`,
         );
@@ -963,9 +970,7 @@ export class World<UpdateParams extends any[] = []> {
     const sortedTypes = regularTypes.sort((a, b) => a - b);
     const hashKey = this.createArchetypeSignature(sortedTypes);
 
-    return getOrCreateWithSideEffect(this.archetypeBySignature, hashKey, () =>
-      this.createNewArchetype(sortedTypes),
-    );
+    return getOrCreateWithSideEffect(this.archetypeBySignature, hashKey, () => this.createNewArchetype(sortedTypes));
   }
 
   /**
@@ -995,7 +1000,7 @@ export class World<UpdateParams extends any[] = []> {
    * Create a new archetype and register it with all tracking structures
    */
   private createNewArchetype(componentTypes: EntityId<any>[]): Archetype {
-    const newArchetype = new Archetype(componentTypes);
+    const newArchetype = new Archetype(componentTypes, this.dontFragmentRelations);
     this.archetypes.push(newArchetype);
 
     // Register archetype in component index
