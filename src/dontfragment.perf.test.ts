@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { World } from "./world";
-import { component, relation } from "./entity";
+import { component, relation, type EntityId } from "./entity";
 
 describe("DontFragment Performance", () => {
   it("should reduce archetype count with dontFragment enabled", () => {
@@ -13,11 +13,11 @@ describe("DontFragment Performance", () => {
     const Velocity1 = component<{ x: number; y: number }>();
     const ChildOf1 = component(); // WITHOUT dontFragment
 
-    const numParents = 100;
+    const numParents = 10000;
     const childrenPerParent = 10;
 
     // Create parent entities
-    const parents1: number[] = [];
+    const parents1: EntityId[] = [];
     for (let i = 0; i < numParents; i++) {
       parents1.push(world1.new());
     }
@@ -55,7 +55,7 @@ describe("DontFragment Performance", () => {
     const Velocity2 = component<{ x: number; y: number }>();
     const ChildOf2 = component({ dontFragment: true }); // WITH dontFragment
 
-    const parents2: number[] = [];
+    const parents2: EntityId[] = [];
     for (let i = 0; i < numParents; i++) {
       parents2.push(world2.new());
     }
@@ -116,7 +116,7 @@ describe("DontFragment Performance", () => {
     const Velocity1 = component<Velocity>();
     const ChildOf1 = component();
 
-    const parents1: number[] = [];
+    const parents1: EntityId[] = [];
     for (let i = 0; i < numParents; i++) {
       parents1.push(world1.new());
     }
@@ -137,7 +137,7 @@ describe("DontFragment Performance", () => {
     const Velocity2 = component<Velocity>();
     const ChildOf2 = component({ dontFragment: true });
 
-    const parents2: number[] = [];
+    const parents2: EntityId[] = [];
     for (let i = 0; i < numParents; i++) {
       parents2.push(world2.new());
     }
@@ -226,7 +226,7 @@ describe("DontFragment Performance", () => {
     const Health1 = component<Health>();
     const ChildOf1 = component();
 
-    const parents1: number[] = [];
+    const parents1: EntityId[] = [];
     for (let i = 0; i < numParents; i++) {
       parents1.push(world1.new());
     }
@@ -249,7 +249,7 @@ describe("DontFragment Performance", () => {
     const Health2 = component<Health>();
     const ChildOf2 = component({ dontFragment: true });
 
-    const parents2: number[] = [];
+    const parents2: EntityId[] = [];
     for (let i = 0; i < numParents; i++) {
       parents2.push(world2.new());
     }
@@ -346,7 +346,7 @@ describe("DontFragment Performance", () => {
       const Position1 = component<Position>();
       const ChildOf1 = component();
 
-      const parents1: number[] = [];
+      const parents1: EntityId[] = [];
       for (let i = 0; i < numParents; i++) {
         parents1.push(world1.new());
       }
@@ -369,7 +369,7 @@ describe("DontFragment Performance", () => {
       const Position2 = component<Position>();
       const ChildOf2 = component({ dontFragment: true });
 
-      const parents2: number[] = [];
+      const parents2: EntityId[] = [];
       for (let i = 0; i < numParents; i++) {
         parents2.push(world2.new());
       }
