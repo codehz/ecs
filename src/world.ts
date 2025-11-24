@@ -520,7 +520,7 @@ export class World<UpdateParams extends any[] = []> {
 
     // Separate regular components from wildcard relations
     const regularComponents: EntityId<any>[] = [];
-    const wildcardRelations: { componentId: EntityId<any>; relationId: EntityId<any> }[] = [];
+    const wildcardRelations: { componentId: ComponentId<any>; relationId: EntityId<any> }[] = [];
 
     for (const componentType of componentTypes) {
       const detailedType = getDetailedIdType(componentType);
@@ -733,7 +733,7 @@ export class World<UpdateParams extends any[] = []> {
   private removeExclusiveRelations(
     entityId: EntityId,
     currentArchetype: Archetype,
-    baseComponentId: EntityId<any>,
+    baseComponentId: ComponentId<any>,
     changeset: ComponentChangeset,
   ): void {
     // Check archetype components
@@ -758,7 +758,7 @@ export class World<UpdateParams extends any[] = []> {
   /**
    * Check if a component type is a relation with the given base component
    */
-  private isRelationWithComponent(componentType: EntityId<any>, baseComponentId: EntityId<any>): boolean {
+  private isRelationWithComponent(componentType: EntityId<any>, baseComponentId: ComponentId<any>): boolean {
     const detailedType = getDetailedIdType(componentType);
     return (
       (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
@@ -822,7 +822,7 @@ export class World<UpdateParams extends any[] = []> {
   private removeWildcardRelations(
     entityId: EntityId,
     currentArchetype: Archetype,
-    baseComponentId: EntityId<any>,
+    baseComponentId: ComponentId<any>,
     changeset: ComponentChangeset,
   ): void {
     // Check archetype components
