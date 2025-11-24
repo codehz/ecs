@@ -9,6 +9,7 @@ import {
   getComponentNameById,
   getDetailedIdType,
   isCascadeDeleteComponent,
+  isDontFragmentComponent,
   isExclusiveComponent,
   isRelationId,
   relation,
@@ -299,7 +300,31 @@ export class World<UpdateParams extends any[] = []> {
    */
   has<T>(entityId: EntityId, componentType: EntityId<T>): boolean {
     const archetype = this.entityToArchetype.get(entityId);
-    return archetype ? archetype.componentTypes.includes(componentType) : false;
+    if (!archetype) {
+      return false;
+    }
+
+    // Check regular archetype components
+    if (archetype.componentTypes.includes(componentType)) {
+      return true;
+    }
+
+    // Check dontFragment relations
+    const detailedType = getDetailedIdType(componentType);
+    if (
+      (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
+      isDontFragmentComponent(detailedType.componentId!)
+    ) {
+      // Check if entity has this dontFragment relation
+      try {
+        archetype.get(entityId, componentType);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    return false;
   }
 
   /**
@@ -386,9 +411,7 @@ export class World<UpdateParams extends any[] = []> {
    * @throws Always throws an error directing to the new API
    */
   setExclusive(componentId: EntityId): void {
-    throw new Error(
-      "setExclusive has been removed. Use component options instead: component({ exclusive: true })",
-    );
+    throw new Error("setExclusive has been removed. Use component options instead: component({ exclusive: true })");
   }
 
   /**
@@ -631,6 +654,7 @@ export class World<UpdateParams extends any[] = []> {
               (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
               isExclusiveComponent(detailedType.componentId!)
             ) {
+              // Check archetype components
               for (const componentType of currentArchetype.componentTypes) {
                 const componentDetailedType = getDetailedIdType(componentType);
                 if (
@@ -639,6 +663,22 @@ export class World<UpdateParams extends any[] = []> {
                   componentDetailedType.componentId === detailedType.componentId
                 ) {
                   changeset.delete(componentType);
+                }
+              }
+
+              // Also check dontFragment relations
+              const entityData = currentArchetype.getEntity(entityId);
+              if (entityData) {
+                for (const [componentType, _] of entityData) {
+                  const componentDetailedType = getDetailedIdType(componentType);
+                  if (
+                    (componentDetailedType.type === "entity-relation" ||
+                      componentDetailedType.type === "component-relation") &&
+                    componentDetailedType.componentId === detailedType.componentId &&
+                    !currentArchetype.componentTypes.includes(componentType) // It's a dontFragment relation
+                  ) {
+                    changeset.delete(componentType);
+                  }
                 }
               }
             }
@@ -651,6 +691,8 @@ export class World<UpdateParams extends any[] = []> {
             if (detailedType.type === "wildcard-relation") {
               // For wildcard relation removal, find all matching relation components
               const baseComponentId = detailedType.componentId!;
+
+              // Check archetype components
               for (const componentType of currentArchetype.componentTypes) {
                 const componentDetailedType = getDetailedIdType(componentType);
                 if (
@@ -658,6 +700,22 @@ export class World<UpdateParams extends any[] = []> {
                   componentDetailedType.type === "component-relation"
                 ) {
                   if (componentDetailedType.componentId === baseComponentId) {
+                    changeset.delete(componentType);
+                  }
+                }
+              }
+
+              // Also check dontFragment relations
+              const entityData = currentArchetype.getEntity(entityId);
+              if (entityData) {
+                for (const [componentType, _] of entityData) {
+                  const componentDetailedType = getDetailedIdType(componentType);
+                  if (
+                    (componentDetailedType.type === "entity-relation" ||
+                      componentDetailedType.type === "component-relation") &&
+                    componentDetailedType.componentId === baseComponentId &&
+                    !currentArchetype.componentTypes.includes(componentType) // It's a dontFragment relation
+                  ) {
                     changeset.delete(componentType);
                   }
                 }
@@ -670,7 +728,13 @@ export class World<UpdateParams extends any[] = []> {
       }
     }
 
-    const finalComponentTypes = changeset.getFinalComponentTypes(currentArchetype.componentTypes);
+    // Get all component types including dontFragment relations
+    const currentEntityData = currentArchetype.getEntity(entityId);
+    const allCurrentComponentTypes = currentEntityData
+      ? Array.from(currentEntityData.keys())
+      : currentArchetype.componentTypes;
+
+    const finalComponentTypes = changeset.getFinalComponentTypes(allCurrentComponentTypes);
     const removedCompoents = new Map<EntityId<any>, any>();
 
     if (finalComponentTypes) {
@@ -689,10 +753,57 @@ export class World<UpdateParams extends any[] = []> {
       this.entityToArchetype.set(entityId, newArchetype);
     } else {
       // Same archetype, just update component data
-      for (const [componentType, component] of changeset.adds) {
-        currentArchetype.set(entityId, componentType, component);
+      // Check if we have any dontFragment relations to remove or add
+      const currentComponents = currentArchetype.getEntity(entityId)!;
+      let hasDontFragmentChanges = false;
+
+      // Check if any removes or adds are dontFragment relations
+      for (const componentType of changeset.removes) {
+        const detailedType = getDetailedIdType(componentType);
+        if (
+          (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
+          isDontFragmentComponent(detailedType.componentId!)
+        ) {
+          hasDontFragmentChanges = true;
+          removedCompoents.set(componentType, currentComponents.get(componentType));
+        }
       }
-      // Removals are already handled by not including them in finalComponents
+
+      for (const [componentType, _] of changeset.adds) {
+        const detailedType = getDetailedIdType(componentType);
+        if (
+          (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
+          isDontFragmentComponent(detailedType.componentId!)
+        ) {
+          hasDontFragmentChanges = true;
+        }
+      }
+
+      if (hasDontFragmentChanges) {
+        // For dontFragment changes, we need to remove entity and re-add with updated components
+        const newComponents = new Map<EntityId<any>, any>();
+
+        // Start with current components, excluding those marked for removal
+        for (const [ct, value] of currentComponents) {
+          if (!changeset.removes.has(ct)) {
+            newComponents.set(ct, value);
+          }
+        }
+
+        // Add new components from changeset
+        for (const [ct, value] of changeset.adds) {
+          newComponents.set(ct, value);
+        }
+
+        // Remove and re-add to same archetype
+        currentArchetype.removeEntity(entityId);
+        currentArchetype.addEntity(entityId, newComponents);
+      } else {
+        // Regular add for non-dontFragment components
+        for (const [componentType, component] of changeset.adds) {
+          currentArchetype.set(entityId, componentType, component);
+        }
+      }
     }
 
     // Update component reverse index for removed components
@@ -729,14 +840,33 @@ export class World<UpdateParams extends any[] = []> {
 
   /**
    * Get or create an archetype for the given component types
-   * @returns The archetype for the given component types
+   * Filters out dontFragment relations from the archetype signature
+   * @returns The archetype for the given component types (excluding dontFragment relations)
    */
   private ensureArchetype(componentTypes: Iterable<EntityId<any>>): Archetype {
-    const sortedTypes = Array.from(componentTypes).sort((a, b) => a - b);
+    // Separate component types into regular and dontFragment relations
+    const regularTypes: EntityId<any>[] = [];
+
+    for (const componentType of componentTypes) {
+      const detailedType = getDetailedIdType(componentType);
+
+      // Check if this is a dontFragment relation
+      if (
+        (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
+        isDontFragmentComponent(detailedType.componentId!)
+      ) {
+        // Skip dontFragment relations from archetype signature
+        continue;
+      }
+
+      regularTypes.push(componentType);
+    }
+
+    const sortedTypes = regularTypes.sort((a, b) => a - b);
     const hashKey = this.createArchetypeSignature(sortedTypes);
 
     return getOrCreateWithSideEffect(this.archetypeBySignature, hashKey, () => {
-      // Create new archetype
+      // Create new archetype with only regular components (excluding dontFragment relations)
       const newArchetype = new Archetype(sortedTypes);
       this.archetypes.push(newArchetype);
 
