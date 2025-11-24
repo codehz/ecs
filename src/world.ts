@@ -355,11 +355,26 @@ export class World<UpdateParams extends any[] = []> {
     // Note: undefined is a valid component value, so we cannot use undefined to check existence
     const detailedType = getDetailedIdType(componentType);
     if (detailedType.type !== "wildcard-relation") {
-      // For regular components, check if the component type exists in the archetype
-      if (!archetype.componentTypes.includes(componentType)) {
+      // For regular components, check if the component type exists in the archetype or dontFragmentRelations
+      const inArchetype = archetype.componentTypes.includes(componentType);
+      const isDontFragment =
+        (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
+        isDontFragmentComponent(detailedType.componentId!);
+
+      if (!inArchetype && !isDontFragment) {
         throw new Error(
           `Entity ${entityId} does not have component ${componentType}. Use has() to check component existence before calling get().`,
         );
+      }
+
+      // For dontFragment relations, need to check if it actually exists
+      if (isDontFragment && !inArchetype) {
+        const dontFragmentData = this.dontFragmentRelations.get(entityId);
+        if (!dontFragmentData || !dontFragmentData.has(componentType)) {
+          throw new Error(
+            `Entity ${entityId} does not have component ${componentType}. Use has() to check component existence before calling get().`,
+          );
+        }
       }
     }
 
