@@ -519,7 +519,7 @@ export class Archetype {
       if (optional) {
         return undefined;
       }
-      throw new Error(`No matching relations found for mandatory wildcard relation component type`);
+      throw new Error(`Component data not found for mandatory component type`);
     }
 
     const dataArray = dataSource as any[];

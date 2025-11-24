@@ -24,12 +24,19 @@ export class Query {
   }
 
   /**
-   * Get all entities matching the query
+   * Check if query is disposed and throw error if so
    */
-  getEntities(): EntityId[] {
+  private ensureNotDisposed(): void {
     if (this.isDisposed) {
       throw new Error("Query has been disposed");
     }
+  }
+
+  /**
+   * Get all entities matching the query
+   */
+  getEntities(): EntityId[] {
+    this.ensureNotDisposed();
     const result: EntityId[] = [];
     for (const archetype of this.cachedArchetypes) {
       result.push(...archetype.getEntities());
@@ -48,9 +55,7 @@ export class Query {
     entity: EntityId;
     components: ComponentTuple<T>;
   }> {
-    if (this.isDisposed) {
-      throw new Error("Query has been disposed");
-    }
+    this.ensureNotDisposed();
 
     const result: Array<{
       entity: EntityId;
@@ -74,9 +79,7 @@ export class Query {
     componentTypes: T,
     callback: (entity: EntityId, ...components: ComponentTuple<T>) => void,
   ): void {
-    if (this.isDisposed) {
-      throw new Error("Query has been disposed");
-    }
+    this.ensureNotDisposed();
 
     for (const archetype of this.cachedArchetypes) {
       archetype.forEachWithComponents(componentTypes, callback);
@@ -90,13 +93,9 @@ export class Query {
   *iterate<const T extends readonly ComponentType<any>[]>(
     componentTypes: T,
   ): IterableIterator<[EntityId, ...ComponentTuple<T>]> {
-    if (this.isDisposed) {
-      throw new Error("Query has been disposed");
-    }
+    this.ensureNotDisposed();
 
-    // return combinedGenerator(this);
     for (const archetype of this.cachedArchetypes) {
-      // Delegate to archetype iterator
       yield* archetype.iterateWithComponents(componentTypes);
     }
   }
@@ -107,9 +106,7 @@ export class Query {
    * @returns Array of component data for all matching entities
    */
   getComponentData<T>(componentType: EntityId<T>): T[] {
-    if (this.isDisposed) {
-      throw new Error("Query has been disposed");
-    }
+    this.ensureNotDisposed();
 
     const result: T[] = [];
     for (const archetype of this.cachedArchetypes) {
