@@ -3,7 +3,6 @@ import { ComponentChangeset } from "./changeset";
 import { CommandBuffer, type Command } from "./command-buffer";
 import type { ComponentId, EntityId, WildcardRelationId } from "./entity";
 import {
-  decodeRelationId,
   EntityIdManager,
   getComponentIdByName,
   getComponentNameById,
@@ -11,7 +10,6 @@ import {
   isCascadeDeleteComponent,
   isDontFragmentComponent,
   isExclusiveComponent,
-  isRelationId,
   relation,
 } from "./entity";
 import { MultiMap } from "./multi-map";
@@ -520,7 +518,7 @@ export class World<UpdateParams extends any[] = []> {
 
     // Separate regular components from wildcard relations
     const regularComponents: EntityId<any>[] = [];
-    const wildcardRelations: { componentId: EntityId<any>; relationId: EntityId<any> }[] = [];
+    const wildcardRelations: { componentId: ComponentId<any>; relationId: EntityId<any> }[] = [];
 
     for (const componentType of componentTypes) {
       const detailedType = getDetailedIdType(componentType);
@@ -573,10 +571,25 @@ export class World<UpdateParams extends any[] = []> {
 
     // Filter by wildcard relations
     for (const wildcard of wildcardRelations) {
-      // Keep only archetypes that have the component (including dontFragment relations)
-      matchingArchetypes = matchingArchetypes.filter((archetype) =>
-        archetype.hasRelationWithComponentId(wildcard.componentId),
-      );
+      // For dontFragment components, check if wildcard marker is in archetypesByComponent
+      if (isDontFragmentComponent(wildcard.componentId)) {
+        // Use the wildcard marker for efficient lookup
+        const archetypesWithMarker = this.archetypesByComponent.get(wildcard.relationId) || [];
+
+        if (matchingArchetypes.length === 0) {
+          // No regular components, use all archetypes with the wildcard marker
+          matchingArchetypes = archetypesWithMarker;
+        } else {
+          // Filter to only include archetypes that have the wildcard marker
+          matchingArchetypes = matchingArchetypes.filter((archetype) => archetypesWithMarker.includes(archetype));
+        }
+      } else {
+        // For regular (non-dontFragment) relations, fall back to entity-level checking
+        // This is necessary because non-dontFragment relations are in the archetype signature
+        matchingArchetypes = matchingArchetypes.filter((archetype) =>
+          archetype.hasRelationWithComponentId(wildcard.componentId),
+        );
+      }
     }
 
     return matchingArchetypes;
@@ -697,6 +710,18 @@ export class World<UpdateParams extends any[] = []> {
       this.removeExclusiveRelations(entityId, currentArchetype, detailedType.componentId!, changeset);
     }
 
+    // For dontFragment relations, ensure wildcard marker is in archetype signature
+    if (
+      (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
+      isDontFragmentComponent(detailedType.componentId!)
+    ) {
+      const wildcardMarker = relation(detailedType.componentId!, "*");
+      // Add wildcard marker to changeset if not already in archetype
+      if (!currentArchetype.componentTypes.includes(wildcardMarker)) {
+        changeset.set(wildcardMarker, undefined);
+      }
+    }
+
     changeset.set(componentType, component);
   }
 
@@ -706,7 +731,7 @@ export class World<UpdateParams extends any[] = []> {
   private removeExclusiveRelations(
     entityId: EntityId,
     currentArchetype: Archetype,
-    baseComponentId: EntityId<any>,
+    baseComponentId: ComponentId<any>,
     changeset: ComponentChangeset,
   ): void {
     // Check archetype components
@@ -731,7 +756,7 @@ export class World<UpdateParams extends any[] = []> {
   /**
    * Check if a component type is a relation with the given base component
    */
-  private isRelationWithComponent(componentType: EntityId<any>, baseComponentId: EntityId<any>): boolean {
+  private isRelationWithComponent(componentType: EntityId<any>, baseComponentId: ComponentId<any>): boolean {
     const detailedType = getDetailedIdType(componentType);
     return (
       (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
@@ -754,6 +779,38 @@ export class World<UpdateParams extends any[] = []> {
       this.removeWildcardRelations(entityId, currentArchetype, detailedType.componentId!, changeset);
     } else {
       changeset.delete(componentType);
+
+      // If removing a dontFragment relation, check if we should remove the wildcard marker
+      if (
+        (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
+        isDontFragmentComponent(detailedType.componentId!)
+      ) {
+        // Check if there are any other dontFragment relations with the same component ID
+        const wildcardMarker = relation(detailedType.componentId!, "*");
+        const entityData = currentArchetype.getEntity(entityId);
+        let hasOtherRelations = false;
+
+        if (entityData) {
+          for (const [otherComponentType] of entityData) {
+            if (otherComponentType === componentType) continue; // Skip the one being removed
+            if (changeset.removes.has(otherComponentType)) continue; // Skip if also being removed
+
+            const otherDetailedType = getDetailedIdType(otherComponentType);
+            if (
+              (otherDetailedType.type === "entity-relation" || otherDetailedType.type === "component-relation") &&
+              otherDetailedType.componentId === detailedType.componentId
+            ) {
+              hasOtherRelations = true;
+              break;
+            }
+          }
+        }
+
+        // If no other relations exist, remove the wildcard marker
+        if (!hasOtherRelations) {
+          changeset.delete(wildcardMarker);
+        }
+      }
     }
   }
 
@@ -763,7 +820,7 @@ export class World<UpdateParams extends any[] = []> {
   private removeWildcardRelations(
     entityId: EntityId,
     currentArchetype: Archetype,
-    baseComponentId: EntityId<any>,
+    baseComponentId: ComponentId<any>,
     changeset: ComponentChangeset,
   ): void {
     // Check archetype components
@@ -782,6 +839,12 @@ export class World<UpdateParams extends any[] = []> {
           changeset.delete(componentType);
         }
       }
+    }
+
+    // If removing dontFragment relations, also remove the wildcard marker
+    if (isDontFragmentComponent(baseComponentId)) {
+      const wildcardMarker = relation(baseComponentId, "*");
+      changeset.delete(wildcardMarker);
     }
   }
 
@@ -970,7 +1033,7 @@ export class World<UpdateParams extends any[] = []> {
   }
 
   /**
-   * Filter out dontFragment relations from component types
+   * Filter out dontFragment relations from component types, but keep wildcard markers
    */
   private filterRegularComponentTypes(componentTypes: Iterable<EntityId<any>>): EntityId<any>[] {
     const regularTypes: EntityId<any>[] = [];
@@ -978,7 +1041,13 @@ export class World<UpdateParams extends any[] = []> {
     for (const componentType of componentTypes) {
       const detailedType = getDetailedIdType(componentType);
 
-      // Skip dontFragment relations from archetype signature
+      // Keep wildcard markers for dontFragment components (they mark the archetype)
+      if (detailedType.type === "wildcard-relation" && isDontFragmentComponent(detailedType.componentId!)) {
+        regularTypes.push(componentType);
+        continue;
+      }
+
+      // Skip specific dontFragment relations from archetype signature
       if (
         (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
         isDontFragmentComponent(detailedType.componentId!)
