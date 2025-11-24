@@ -59,7 +59,7 @@ export class Query {
             if (detailed.type === "wildcard-relation") {
               // Check if entity has at least one relation matching this wildcard
               const relations = archetype.get(entity, componentType as WildcardRelationId<any>);
-              if (relations.length === 0) {
+              if (!relations || relations.length === 0) {
                 hasAllRelations = false;
                 break;
               }

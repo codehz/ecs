@@ -533,7 +533,10 @@ export class Archetype {
     // If no relations found and not optional, this entity doesn't match
     if (relations.length === 0) {
       if (!optional) {
-        throw new Error(`No matching relations found for mandatory wildcard relation component type`);
+        const wildcardDecoded = decodeRelationId(wildcardRelationType);
+        throw new Error(
+          `No matching relations found for mandatory wildcard relation component ${wildcardDecoded.componentId} on entity ${entityId}`,
+        );
       }
       // For optional, return undefined when there are no relations
       return undefined;
