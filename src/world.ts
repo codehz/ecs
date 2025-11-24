@@ -361,20 +361,14 @@ export class World<UpdateParams extends any[] = []> {
         (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
         isDontFragmentComponent(detailedType.componentId!);
 
-      if (!inArchetype && !isDontFragment) {
+      // For dontFragment relations, check if it exists in the dontFragmentRelations storage
+      const hasComponent =
+        inArchetype || (isDontFragment && this.dontFragmentRelations.get(entityId)?.has(componentType));
+
+      if (!hasComponent) {
         throw new Error(
           `Entity ${entityId} does not have component ${componentType}. Use has() to check component existence before calling get().`,
         );
-      }
-
-      // For dontFragment relations, need to check if it actually exists
-      if (isDontFragment && !inArchetype) {
-        const dontFragmentData = this.dontFragmentRelations.get(entityId);
-        if (!dontFragmentData || !dontFragmentData.has(componentType)) {
-          throw new Error(
-            `Entity ${entityId} does not have component ${componentType}. Use has() to check component existence before calling get().`,
-          );
-        }
       }
     }
 
