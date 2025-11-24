@@ -411,26 +411,6 @@ export class World<UpdateParams extends any[] = []> {
   }
 
   /**
-   * Mark a component as exclusive relation
-   * @deprecated This method has been removed. Use component options instead: component({ exclusive: true })
-   * @throws Always throws an error directing to the new API
-   */
-  setExclusive(componentId: EntityId): void {
-    throw new Error("setExclusive has been removed. Use component options instead: component({ exclusive: true })");
-  }
-
-  /**
-   * Mark a component as cascade-delete relation
-   * @deprecated This method has been removed. Use component options instead: component({ cascadeDelete: true })
-   * @throws Always throws an error directing to the new API
-   */
-  setCascadeDelete(componentId: EntityId): void {
-    throw new Error(
-      "setCascadeDelete has been removed. Use component options instead: component({ cascadeDelete: true })",
-    );
-  }
-
-  /**
    * Update the world (run all systems in dependency order)
    * This function is synchronous when all systems are synchronous,
    * and asynchronous (returns a Promise) when any system is asynchronous.
