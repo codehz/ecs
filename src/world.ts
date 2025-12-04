@@ -218,8 +218,9 @@ export class World<UpdateParams extends any[] = []> {
 
       // Remove the entity itself
       archetype.removeEntity(cur);
-      this.cleanupEmptyArchetype(archetype);
       this.entityToArchetype.delete(cur);
+
+      this.cleanupArchetypesReferencingEntity(cur);
       this.entityIdManager.deallocate(cur);
     }
   }
@@ -900,9 +901,6 @@ export class World<UpdateParams extends any[] = []> {
     // Add to new archetype with updated components
     newArchetype.addEntity(entityId, changeset.applyTo(currentComponents));
     this.entityToArchetype.set(entityId, newArchetype);
-
-    // Cleanup empty archetype
-    this.cleanupEmptyArchetype(currentArchetype);
   }
 
   /**
@@ -1112,6 +1110,41 @@ export class World<UpdateParams extends any[] = []> {
    */
   private getEntityReferences(targetEntityId: EntityId): Iterable<[EntityId, EntityId]> {
     return this.entityReferences.get(targetEntityId) ?? new MultiMap();
+  }
+
+  /**
+   * Check if an archetype's signature references a specific entity
+   * (via entity-relation targeting the entity, or using entity as component type)
+   */
+  private archetypeReferencesEntity(archetype: Archetype, entityId: EntityId): boolean {
+    for (const componentType of archetype.componentTypes) {
+      if (componentType === entityId) {
+        return true;
+      }
+      if (isEntityRelation(componentType)) {
+        const targetId = getTargetIdFromRelationId(componentType);
+        if (targetId === entityId) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Cleanup empty archetypes that reference a specific deleted entity
+   * Only removes archetypes whose component types reference the entity
+   */
+  private cleanupArchetypesReferencingEntity(entityId: EntityId): void {
+    for (let i = this.archetypes.length - 1; i >= 0; i--) {
+      const archetype = this.archetypes[i]!;
+      if (archetype.getEntities().length === 0 && this.archetypeReferencesEntity(archetype, entityId)) {
+        this.removeArchetypeFromList(archetype);
+        this.removeArchetypeFromSignatureMap(archetype);
+        this.removeArchetypeFromComponentIndex(archetype);
+        this.removeArchetypeFromQueries(archetype);
+      }
+    }
   }
 
   /**

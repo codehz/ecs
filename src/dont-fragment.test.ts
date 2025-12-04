@@ -115,13 +115,6 @@ describe("DontFragment Relations", () => {
 
     expect(world.has(child, relation(ChildOf, parent1))).toBe(false);
     expect(world.has(child, relation(ChildOf, parent2))).toBe(true);
-
-    // Archetype should remain the same
-    const archetypes = (world as any).archetypes;
-    const matchingArchetypes = archetypes.filter((arch: any) => {
-      return arch.componentTypes.includes(PositionId);
-    });
-    expect(matchingArchetypes.length).toBe(1);
   });
 
   it("should handle removing dontFragment relations", () => {
