@@ -846,8 +846,19 @@ export class World<UpdateParams extends any[] = []> {
     const removedComponents = new Map<EntityId<any>, any>();
 
     if (finalComponentTypes) {
-      // Move to new archetype
-      this.moveEntityToNewArchetype(entityId, currentArchetype, finalComponentTypes, changeset, removedComponents);
+      // Check if archetype-affecting components actually changed
+      // (dontFragment components don't affect archetype signature)
+      const currentRegularTypes = this.filterRegularComponentTypes(allCurrentComponentTypes);
+      const finalRegularTypes = this.filterRegularComponentTypes(finalComponentTypes);
+      const archetypeChanged = !this.areComponentTypesEqual(currentRegularTypes, finalRegularTypes);
+
+      if (archetypeChanged) {
+        // Move to new archetype (regular components changed)
+        this.moveEntityToNewArchetype(entityId, currentArchetype, finalComponentTypes, changeset, removedComponents);
+      } else {
+        // Only dontFragment components changed, stay in same archetype
+        this.updateEntityInSameArchetype(entityId, currentArchetype, changeset, removedComponents);
+      }
     } else {
       // Update in same archetype
       this.updateEntityInSameArchetype(entityId, currentArchetype, changeset, removedComponents);
@@ -1010,6 +1021,16 @@ export class World<UpdateParams extends any[] = []> {
     const hashKey = this.createArchetypeSignature(sortedTypes);
 
     return getOrCreateWithSideEffect(this.archetypeBySignature, hashKey, () => this.createNewArchetype(sortedTypes));
+  }
+
+  /**
+   * Compare two arrays of component types for equality (order-independent)
+   */
+  private areComponentTypesEqual(types1: EntityId<any>[], types2: EntityId<any>[]): boolean {
+    if (types1.length !== types2.length) return false;
+    const sorted1 = [...types1].sort((a, b) => a - b);
+    const sorted2 = [...types2].sort((a, b) => a - b);
+    return sorted1.every((v, i) => v === sorted2[i]);
   }
 
   /**
