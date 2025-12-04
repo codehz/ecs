@@ -42,6 +42,26 @@ export const RELATION_SHIFT = 2 ** 42;
 export const WILDCARD_TARGET_ID = 0;
 
 /**
+ * Internal function to decode a relation ID into raw component and target IDs
+ * @param id The EntityId to decode
+ * @returns Object with componentId and targetId, or null if not a relation
+ */
+function decodeRelationRaw(id: EntityId<any>): { componentId: number; targetId: number } | null {
+  if (id >= 0) return null;
+  const absId = -id;
+  const componentId = Math.floor(absId / RELATION_SHIFT);
+  const targetId = absId % RELATION_SHIFT;
+  return { componentId, targetId };
+}
+
+/**
+ * Check if a component ID is valid (1-1023)
+ */
+function isValidComponentId(componentId: number): boolean {
+  return componentId >= 1 && componentId <= COMPONENT_ID_MAX;
+}
+
+/**
  * Create a component ID
  * @param id Component identifier (1-1023)
  * @internal This function is for internal use and testing only. Use `component()` to create components.
@@ -128,12 +148,8 @@ export function isRelationId<T>(id: EntityId<T>): id is RelationId<T> {
  * Check if an ID is a wildcard relation id
  */
 export function isWildcardRelationId<T>(id: EntityId<T>): id is WildcardRelationId<T> {
-  if (!isRelationId(id)) {
-    return false;
-  }
-  const absId = -id;
-  const targetId = absId % RELATION_SHIFT;
-  return targetId === WILDCARD_TARGET_ID;
+  const decoded = decodeRelationRaw(id);
+  return decoded !== null && decoded.targetId === WILDCARD_TARGET_ID;
 }
 
 /**
@@ -146,13 +162,18 @@ export function decodeRelationId(relationId: RelationId<any>): {
   targetId: EntityId<any>;
   type: "entity" | "component" | "wildcard";
 } {
-  if (!isRelationId(relationId)) {
+  const decoded = decodeRelationRaw(relationId);
+  if (decoded === null) {
     throw new Error("ID is not a relation ID");
   }
-  const absId = -relationId;
 
-  const componentId = Math.floor(absId / RELATION_SHIFT) as ComponentId<any>;
-  const targetId = (absId % RELATION_SHIFT) as EntityId<any>;
+  const { componentId: rawComponentId, targetId: rawTargetId } = decoded;
+  if (!isValidComponentId(rawComponentId)) {
+    throw new Error("Invalid component ID in relation");
+  }
+
+  const componentId = rawComponentId as ComponentId<any>;
+  const targetId = rawTargetId as EntityId<any>;
 
   // Determine type based on targetId range
   if (targetId === WILDCARD_TARGET_ID) {
@@ -178,11 +199,8 @@ export function getIdType(
   if (isRelationId(id)) {
     try {
       const decoded = decodeRelationId(id);
-      // Validate that componentId and targetId are valid
-      if (
-        !isComponentId(decoded.componentId) ||
-        (decoded.type !== "wildcard" && !isEntityId(decoded.targetId) && !isComponentId(decoded.targetId))
-      ) {
+      // Validate that componentId and targetId are valid (decodeRelationId already checks componentId)
+      if (decoded.type !== "wildcard" && !isEntityId(decoded.targetId) && !isComponentId(decoded.targetId)) {
         return "invalid";
       }
       switch (decoded.type) {
@@ -233,11 +251,8 @@ export function getDetailedIdType(id: EntityId<any>):
   if (isRelationId(id)) {
     try {
       const decoded = decodeRelationId(id);
-      // Validate that componentId and targetId are valid
-      if (
-        !isComponentId(decoded.componentId) ||
-        (decoded.type !== "wildcard" && !isEntityId(decoded.targetId) && !isComponentId(decoded.targetId))
-      ) {
+      // Validate that targetId is valid (decodeRelationId already checks componentId)
+      if (decoded.type !== "wildcard" && !isEntityId(decoded.targetId) && !isComponentId(decoded.targetId)) {
         return { type: "invalid" };
       }
       let type: "entity-relation" | "component-relation" | "wildcard-relation";
@@ -290,11 +305,8 @@ export function inspectEntityId(id: EntityId<any>): string {
   if (isRelationId(id)) {
     try {
       const decoded = decodeRelationId(id);
-      // Validate that both component and target IDs are valid
-      if (
-        !isComponentId(decoded.componentId) ||
-        (decoded.type !== "wildcard" && !isEntityId(decoded.targetId) && !isComponentId(decoded.targetId))
-      ) {
+      // Validate that targetId is valid (decodeRelationId already checks componentId)
+      if (decoded.type !== "wildcard" && !isEntityId(decoded.targetId) && !isComponentId(decoded.targetId)) {
         return `Invalid Relation ID (${id})`;
       }
       const componentStr = `Component ID (${decoded.componentId})`;
@@ -571,26 +583,31 @@ export function isDontFragmentComponent(id: ComponentId<any>): boolean {
 }
 
 /**
+ * Generic function to check relation flags with specific target conditions
+ * @param id The entity/relation ID to check
+ * @param flagBitSet The bitset for the flag
+ * @param targetCondition Function to check target ID condition
+ * @returns true if the condition is met, false otherwise
+ */
+function checkRelationFlag(
+  id: EntityId<any>,
+  flagBitSet: BitSet,
+  targetCondition: (targetId: number) => boolean,
+): boolean {
+  const decoded = decodeRelationRaw(id);
+  if (decoded === null) return false;
+  const { componentId, targetId } = decoded;
+  return isValidComponentId(componentId) && targetCondition(targetId) && flagBitSet.has(componentId);
+}
+
+/**
  * Check if a relation ID is a dontFragment relation (entity-relation or component-relation with dontFragment component)
  * This is an optimized function that avoids the overhead of getDetailedIdType
  * @param id The entity/relation ID to check
  * @returns true if this is a dontFragment relation, false otherwise
  */
 export function isDontFragmentRelation(id: EntityId<any>): boolean {
-  // Only relation IDs are negative; non-relations return false immediately
-  if (id >= 0) return false;
-
-  // Extract componentId directly from the relation encoding: -(componentId * RELATION_SHIFT + targetId)
-  // componentId = floor(absId / RELATION_SHIFT)
-  const absId = -id;
-  const componentId = Math.floor(absId / RELATION_SHIFT);
-
-  // Wildcard relations (targetId === 0) are not considered dontFragment relations for this check
-  const targetId = absId % RELATION_SHIFT;
-  if (targetId === WILDCARD_TARGET_ID) return false;
-
-  // Check if componentId is valid and has dontFragment flag
-  return componentId >= 1 && componentId <= COMPONENT_ID_MAX && dontFragmentFlags.has(componentId);
+  return checkRelationFlag(id, dontFragmentFlags, (targetId) => targetId !== WILDCARD_TARGET_ID);
 }
 
 /**
@@ -600,17 +617,7 @@ export function isDontFragmentRelation(id: EntityId<any>): boolean {
  * @returns true if this is a wildcard relation with dontFragment component, false otherwise
  */
 export function isDontFragmentWildcard(id: EntityId<any>): boolean {
-  // Only relation IDs are negative
-  if (id >= 0) return false;
-
-  const absId = -id;
-  const targetId = absId % RELATION_SHIFT;
-
-  // Must be a wildcard relation (targetId === 0)
-  if (targetId !== WILDCARD_TARGET_ID) return false;
-
-  const componentId = Math.floor(absId / RELATION_SHIFT);
-  return componentId >= 1 && componentId <= COMPONENT_ID_MAX && dontFragmentFlags.has(componentId);
+  return checkRelationFlag(id, dontFragmentFlags, (targetId) => targetId === WILDCARD_TARGET_ID);
 }
 
 /**
@@ -620,24 +627,14 @@ export function isDontFragmentWildcard(id: EntityId<any>): boolean {
  * @returns true if this is an exclusive relation, false otherwise
  */
 export function isExclusiveRelation(id: EntityId<any>): boolean {
-  if (id >= 0) return false;
-  const absId = -id;
-  const targetId = absId % RELATION_SHIFT;
-  if (targetId === WILDCARD_TARGET_ID) return false; // not an exclusive-specific relation
-  const componentId = Math.floor(absId / RELATION_SHIFT);
-  return componentId >= 1 && componentId <= COMPONENT_ID_MAX && exclusiveFlags.has(componentId);
+  return checkRelationFlag(id, exclusiveFlags, (targetId) => targetId !== WILDCARD_TARGET_ID);
 }
 
 /**
  * Check if a relation ID is a wildcard relation with exclusive component
  */
 export function isExclusiveWildcard(id: EntityId<any>): boolean {
-  if (id >= 0) return false;
-  const absId = -id;
-  const targetId = absId % RELATION_SHIFT;
-  if (targetId !== WILDCARD_TARGET_ID) return false;
-  const componentId = Math.floor(absId / RELATION_SHIFT);
-  return componentId >= 1 && componentId <= COMPONENT_ID_MAX && exclusiveFlags.has(componentId);
+  return checkRelationFlag(id, exclusiveFlags, (targetId) => targetId === WILDCARD_TARGET_ID);
 }
 
 /**
@@ -648,15 +645,11 @@ export function isExclusiveWildcard(id: EntityId<any>): boolean {
  * @returns true if this is an entity-relation with cascade delete, false otherwise
  */
 export function isCascadeDeleteRelation(id: EntityId<any>): boolean {
-  if (id >= 0) return false;
-  const absId = -id;
-  const targetId = absId % RELATION_SHIFT;
-  // Wildcard relations (targetId === 0) don't cascade
-  if (targetId === WILDCARD_TARGET_ID) return false;
-  // Only entity-relations cascade (targetId >= ENTITY_ID_START)
-  if (targetId < ENTITY_ID_START) return false;
-  const componentId = Math.floor(absId / RELATION_SHIFT);
-  return componentId >= 1 && componentId <= COMPONENT_ID_MAX && cascadeDeleteFlags.has(componentId);
+  return checkRelationFlag(
+    id,
+    cascadeDeleteFlags,
+    (targetId) => targetId !== WILDCARD_TARGET_ID && targetId >= ENTITY_ID_START,
+  );
 }
 
 /**
@@ -664,11 +657,9 @@ export function isCascadeDeleteRelation(id: EntityId<any>): boolean {
  * Returns undefined for non-relation IDs or invalid component IDs.
  */
 export function getComponentIdFromRelationId<T>(id: EntityId<T>): ComponentId<T> | undefined {
-  if (id >= 0) return undefined;
-  const absId = -id;
-  const componentId = Math.floor(absId / RELATION_SHIFT);
-  if (componentId < 1 || componentId > COMPONENT_ID_MAX) return undefined;
-  return componentId as ComponentId<T>;
+  const decoded = decodeRelationRaw(id);
+  if (decoded === null || !isValidComponentId(decoded.componentId)) return undefined;
+  return decoded.componentId as ComponentId<T>;
 }
 
 /**
@@ -676,29 +667,24 @@ export function getComponentIdFromRelationId<T>(id: EntityId<T>): ComponentId<T>
  * Returns undefined for non-relation IDs.
  */
 export function getTargetIdFromRelationId(id: EntityId<any>): EntityId<any> | undefined {
-  if (id >= 0) return undefined;
-  const absId = -id;
-  return (absId % RELATION_SHIFT) as EntityId<any>;
+  const decoded = decodeRelationRaw(id);
+  return decoded?.targetId as EntityId<any>;
 }
 
 /**
  * Check if an ID is an entity-relation (relation targeting an entity, not a component or wildcard)
  */
 export function isEntityRelation(id: EntityId<any>): boolean {
-  if (id >= 0) return false;
-  const absId = -id;
-  const targetId = absId % RELATION_SHIFT;
-  return targetId >= ENTITY_ID_START;
+  const decoded = decodeRelationRaw(id);
+  return decoded !== null && decoded.targetId >= ENTITY_ID_START;
 }
 
 /**
  * Check if an ID is a component-relation (relation targeting a component)
  */
 export function isComponentRelation(id: EntityId<any>): boolean {
-  if (id >= 0) return false;
-  const absId = -id;
-  const targetId = absId % RELATION_SHIFT;
-  return targetId >= 1 && targetId <= COMPONENT_ID_MAX;
+  const decoded = decodeRelationRaw(id);
+  return decoded !== null && isValidComponentId(decoded.targetId);
 }
 
 /**
