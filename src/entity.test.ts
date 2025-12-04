@@ -439,19 +439,22 @@ describe("Component Options", () => {
     const normalComp = component();
 
     const exclusiveOpts = getComponentOptions(exclusiveComp);
-    expect(exclusiveOpts?.exclusive).toBe(true);
-    expect(exclusiveOpts?.cascadeDelete).toBe(undefined);
+    expect(exclusiveOpts.exclusive).toBe(true);
+    expect(exclusiveOpts.cascadeDelete).toBe(undefined);
 
     const cascadeOpts = getComponentOptions(cascadeComp);
-    expect(cascadeOpts?.exclusive).toBe(undefined);
-    expect(cascadeOpts?.cascadeDelete).toBe(true);
+    expect(cascadeOpts.exclusive).toBe(undefined);
+    expect(cascadeOpts.cascadeDelete).toBe(true);
 
     const bothOpts = getComponentOptions(bothComp);
-    expect(bothOpts?.exclusive).toBe(true);
-    expect(bothOpts?.cascadeDelete).toBe(true);
+    expect(bothOpts.exclusive).toBe(true);
+    expect(bothOpts.cascadeDelete).toBe(true);
 
     const normalOpts = getComponentOptions(normalComp);
-    expect(normalOpts).toBe(undefined);
+    expect(normalOpts.name).toBe(undefined);
+    expect(normalOpts.exclusive).toBe(undefined);
+    expect(normalOpts.cascadeDelete).toBe(undefined);
+    expect(normalOpts.dontFragment).toBe(undefined);
   });
 
   it("should support name in options object", () => {
@@ -493,10 +496,16 @@ describe("Component Options", () => {
     const combinedComp = component({ cascadeDelete: true, dontFragment: true });
 
     const options = getComponentOptions(combinedComp);
-    expect(options?.cascadeDelete).toBe(true);
-    expect(options?.dontFragment).toBe(true);
+    expect(options.cascadeDelete).toBe(true);
+    expect(options.dontFragment).toBe(true);
 
     expect(isCascadeDeleteComponent(combinedComp)).toBe(true);
     expect(isDontFragmentComponent(combinedComp)).toBe(true);
+  });
+
+  it("should throw error for invalid component ID", () => {
+    expect(() => getComponentOptions(0 as ComponentId)).toThrow("Invalid component ID");
+    expect(() => getComponentOptions(1025 as ComponentId)).toThrow("Invalid component ID");
+    expect(() => getComponentOptions(-1 as ComponentId)).toThrow("Invalid component ID");
   });
 });

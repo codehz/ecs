@@ -438,7 +438,6 @@ export class ComponentIdAllocator {
 
 const globalComponentIdAllocator = new ComponentIdAllocator();
 
-const ComponentNames: Map<ComponentId<any>, string> = new Map();
 const ComponentIdForNames: Map<string, ComponentId<any>> = new Map();
 
 /**
@@ -472,7 +471,8 @@ export interface ComponentOptions {
   dontFragment?: boolean;
 }
 
-const ComponentOptions: Map<ComponentId<any>, ComponentOptions> = new Map();
+// Array for component names (Component ID range: 1-1023)
+const componentNames: (string | undefined)[] = new Array(COMPONENT_ID_MAX + 1);
 
 // BitSets for fast component option checks (Component ID range: 1-1023)
 const exclusiveFlags = new BitSet(COMPONENT_ID_MAX + 1);
@@ -513,13 +513,12 @@ export function component<T = void>(nameOrOptions?: string | ComponentOptions): 
       throw new Error(`Component name "${name}" is already registered`);
     }
 
-    ComponentNames.set(id, name);
+    componentNames[id] = name;
     ComponentIdForNames.set(name, id);
   }
 
   // Register options if provided
   if (options) {
-    ComponentOptions.set(id, options);
     // Set bitset flags for fast lookup
     if (options.exclusive) exclusiveFlags.set(id);
     if (options.cascadeDelete) cascadeDeleteFlags.set(id);
@@ -543,16 +542,28 @@ export function getComponentIdByName(name: string): ComponentId<any> | undefined
  * @returns The component name if found, undefined otherwise
  */
 export function getComponentNameById(id: ComponentId<any>): string | undefined {
-  return ComponentNames.get(id);
+  return componentNames[id];
 }
 
 /**
  * Get component options by its ID
  * @param id The component ID
- * @returns The component options if found, undefined otherwise
+ * @returns The component options
  */
-export function getComponentOptions(id: ComponentId<any>): ComponentOptions | undefined {
-  return ComponentOptions.get(id);
+export function getComponentOptions(id: ComponentId<any>): ComponentOptions {
+  if (!isComponentId(id)) {
+    throw new Error("Invalid component ID");
+  }
+  const hasName = componentNames[id] !== undefined;
+  const hasExclusive = exclusiveFlags.has(id);
+  const hasCascadeDelete = cascadeDeleteFlags.has(id);
+  const hasDontFragment = dontFragmentFlags.has(id);
+  return {
+    name: hasName ? componentNames[id] : undefined,
+    exclusive: hasExclusive ? true : undefined,
+    cascadeDelete: hasCascadeDelete ? true : undefined,
+    dontFragment: hasDontFragment ? true : undefined,
+  };
 }
 
 /**
