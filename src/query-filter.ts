@@ -1,6 +1,6 @@
 import { Archetype } from "./archetype";
 import type { EntityId } from "./entity";
-import { decodeRelationId, getDetailedIdType, isRelationId } from "./entity";
+import { getComponentIdFromRelationId, getDetailedIdType, isRelationId } from "./entity";
 
 /**
  * Filter options for queries
@@ -29,8 +29,8 @@ export function matchesComponentTypes(archetype: Archetype, componentTypes: Enti
       // For wildcard relations, check if archetype contains the component relation
       return archetype.componentTypes.some((archetypeType) => {
         if (!isRelationId(archetypeType)) return false;
-        const decoded = decodeRelationId(archetypeType);
-        return decoded.componentId === detailedType.componentId;
+        const componentId = getComponentIdFromRelationId(archetypeType);
+        return componentId === detailedType.componentId;
       });
     } else {
       // For regular components, check direct inclusion
@@ -50,8 +50,8 @@ export function matchesFilter(archetype: Archetype, filter: QueryFilter): boolea
       // For wildcard relations in negative filter, exclude archetypes that contain ANY relation with the same component
       return !archetype.componentTypes.some((archetypeType) => {
         if (!isRelationId(archetypeType)) return false;
-        const decoded = decodeRelationId(archetypeType);
-        return decoded.componentId === detailedType.componentId;
+        const componentId = getComponentIdFromRelationId(archetypeType);
+        return componentId === detailedType.componentId;
       });
     } else {
       // For regular components, check direct exclusion

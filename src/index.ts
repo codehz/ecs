@@ -18,7 +18,6 @@ export {
   isEntityId,
   isRelationId,
   isWildcardRelationId,
-  decodeRelationId,
   getComponentIdByName,
   getComponentNameById,
 } from "./entity";

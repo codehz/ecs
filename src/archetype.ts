@@ -1,8 +1,9 @@
 import type { EntityId, RelationId, WildcardRelationId } from "./entity";
 import {
-  decodeRelationId,
+  getComponentIdFromRelationId,
   getDetailedIdType,
   getIdType,
+  getTargetIdFromRelationId,
   isDontFragmentComponent,
   isWildcardRelationId,
 } from "./entity";
@@ -278,8 +279,7 @@ export class Archetype {
     }
 
     if (isWildcardRelationId(componentType)) {
-      const decoded = decodeRelationId(componentType);
-      const componentId = decoded.componentId;
+      const componentId = getComponentIdFromRelationId(componentType);
       const relations: [EntityId<unknown>, any][] = [];
 
       // Check regular archetype components
@@ -507,14 +507,13 @@ export class Archetype {
     for (const relType of matchingRelations) {
       const dataArray = this.getComponentData(relType);
       const data = dataArray[entityIndex];
-      const decodedRel = decodeRelationId(relType as RelationId<any>);
-      relations.push([decodedRel.targetId, data === MISSING_COMPONENT ? undefined : data]);
+      const targetId = getTargetIdFromRelationId(relType)!;
+      relations.push([targetId, data === MISSING_COMPONENT ? undefined : data]);
     }
 
     // Add dontFragment relations for this entity
     // Get the component ID from the wildcard relation type
-    const wildcardDecoded = decodeRelationId(wildcardRelationType);
-    const targetComponentId = wildcardDecoded.componentId;
+    const targetComponentId = getComponentIdFromRelationId(wildcardRelationType);
 
     const dontFragmentData = this.dontFragmentRelations.get(entityId);
     if (dontFragmentData) {
@@ -533,9 +532,9 @@ export class Archetype {
     // If no relations found and not optional, this entity doesn't match
     if (relations.length === 0) {
       if (!optional) {
-        const wildcardDecoded = decodeRelationId(wildcardRelationType);
+        const componentId = getComponentIdFromRelationId(wildcardRelationType);
         throw new Error(
-          `No matching relations found for mandatory wildcard relation component ${wildcardDecoded.componentId} on entity ${entityId}`,
+          `No matching relations found for mandatory wildcard relation component ${componentId} on entity ${entityId}`,
         );
       }
       // For optional, return undefined when there are no relations
