@@ -202,32 +202,7 @@ export class World<UpdateParams extends any[] = []> {
         }
 
         // Non-cascade behavior: remove the relation component from the source entity
-        const currentComponents = new Map<EntityId<any>, any>();
-        let removedComponent = sourceArchetype.get(sourceEntityId, componentType);
-        for (const archetypeComponentType of sourceArchetype.componentTypes) {
-          if (archetypeComponentType !== componentType) {
-            const componentData = sourceArchetype.get(sourceEntityId, archetypeComponentType);
-            currentComponents.set(archetypeComponentType, componentData);
-          }
-        }
-
-        const newArchetype = this.ensureArchetype(currentComponents.keys());
-
-        // Remove from current archetype
-        sourceArchetype.removeEntity(sourceEntityId);
-        if (sourceArchetype.getEntities().length === 0) {
-          this.cleanupEmptyArchetype(sourceArchetype);
-        }
-
-        // Add to new archetype
-        newArchetype.addEntity(sourceEntityId, currentComponents);
-        this.entityToArchetype.set(sourceEntityId, newArchetype);
-
-        // Remove from component reverse index
-        this.untrackEntityReference(sourceEntityId, componentType, cur);
-
-        // Trigger component removed hooks
-        this.triggerLifecycleHooks(sourceEntityId, new Map(), new Map([[componentType, removedComponent]]));
+        this.removeComponentImmediate(sourceEntityId, componentType, cur);
       }
 
       // Clean up the reverse index for this entity
@@ -826,6 +801,61 @@ export class World<UpdateParams extends any[] = []> {
       const wildcardMarker = relation(baseComponentId, "*");
       changeset.delete(wildcardMarker);
     }
+  }
+
+  /**
+   * Remove a single component from an entity immediately, handling dontFragment relations correctly.
+   * Used by destroyEntityImmediate for non-cascade relation cleanup.
+   */
+  private removeComponentImmediate(entityId: EntityId, componentType: EntityId<any>, targetEntityId: EntityId): void {
+    const sourceArchetype = this.entityToArchetype.get(entityId);
+    if (!sourceArchetype) return;
+
+    // Build changeset for removing this component
+    const changeset = new ComponentChangeset();
+    const detailedType = getDetailedIdType(componentType);
+
+    changeset.delete(componentType);
+
+    // If removing a dontFragment relation, check if we should remove the wildcard marker
+    if (
+      (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
+      isDontFragmentComponent(detailedType.componentId!)
+    ) {
+      const wildcardMarker = relation(detailedType.componentId!, "*");
+      const entityData = sourceArchetype.getEntity(entityId);
+      let hasOtherRelations = false;
+
+      if (entityData) {
+        for (const [otherComponentType] of entityData) {
+          if (otherComponentType === componentType) continue;
+          const otherDetailedType = getDetailedIdType(otherComponentType);
+          if (
+            (otherDetailedType.type === "entity-relation" || otherDetailedType.type === "component-relation") &&
+            otherDetailedType.componentId === detailedType.componentId
+          ) {
+            hasOtherRelations = true;
+            break;
+          }
+        }
+      }
+
+      if (!hasOtherRelations) {
+        changeset.delete(wildcardMarker);
+      }
+    }
+
+    // Get removed component value before applying changeset
+    const removedComponent = sourceArchetype.get(entityId, componentType);
+
+    // Apply changeset using existing logic
+    this.applyChangeset(entityId, sourceArchetype, changeset);
+
+    // Remove from component reverse index
+    this.untrackEntityReference(entityId, componentType, targetEntityId);
+
+    // Trigger component removed hooks
+    this.triggerLifecycleHooks(entityId, new Map(), new Map([[componentType, removedComponent]]));
   }
 
   /**
