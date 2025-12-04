@@ -934,85 +934,71 @@ export class World<UpdateParams extends any[] = []> {
     changeset: ComponentChangeset,
     removedComponents: Map<EntityId<any>, any>,
   ): void {
-    const currentComponents = currentArchetype.getEntity(entityId)!;
-    const hasDontFragmentChanges = this.hasDontFragmentChanges(changeset);
+    // Process dontFragment relation changes directly on World's storage
+    this.applyDontFragmentChanges(entityId, changeset, removedComponents);
 
-    // Track removed dontFragment components
-    if (hasDontFragmentChanges) {
-      for (const componentType of changeset.removes) {
-        const detailedType = getDetailedIdType(componentType);
-        if (
-          (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
-          isDontFragmentComponent(detailedType.componentId!)
-        ) {
-          removedComponents.set(componentType, currentComponents.get(componentType));
-        }
+    // Direct update for regular components in archetype
+    for (const [componentType, component] of changeset.adds) {
+      const detailedType = getDetailedIdType(componentType);
+      // Skip dontFragment relations - already handled above
+      if (
+        (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
+        isDontFragmentComponent(detailedType.componentId!)
+      ) {
+        continue;
       }
-    }
-
-    if (hasDontFragmentChanges) {
-      // Re-add entity with updated components
-      this.readdEntityWithUpdatedComponents(entityId, currentArchetype, currentComponents, changeset);
-    } else {
-      // Direct update for non-dontFragment components
-      for (const [componentType, component] of changeset.adds) {
-        currentArchetype.set(entityId, componentType, component);
-      }
+      currentArchetype.set(entityId, componentType, component);
     }
   }
 
   /**
-   * Check if changeset contains dontFragment relation changes
+   * Apply dontFragment relation changes directly to World's storage
+   * This is much more efficient than the removeEntity + addEntity approach
    */
-  private hasDontFragmentChanges(changeset: ComponentChangeset): boolean {
+  private applyDontFragmentChanges(
+    entityId: EntityId,
+    changeset: ComponentChangeset,
+    removedComponents: Map<EntityId<any>, any>,
+  ): void {
+    // Get or create the entity's dontFragment relations map
+    let entityRelations = this.dontFragmentRelations.get(entityId);
+
+    // Process removals
     for (const componentType of changeset.removes) {
       const detailedType = getDetailedIdType(componentType);
       if (
         (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
         isDontFragmentComponent(detailedType.componentId!)
       ) {
-        return true;
+        if (entityRelations) {
+          const removedValue = entityRelations.get(componentType);
+          if (removedValue !== undefined || entityRelations.has(componentType)) {
+            removedComponents.set(componentType, removedValue);
+            entityRelations.delete(componentType);
+          }
+        }
       }
     }
 
-    for (const [componentType] of changeset.adds) {
+    // Process additions
+    for (const [componentType, component] of changeset.adds) {
       const detailedType = getDetailedIdType(componentType);
       if (
         (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
         isDontFragmentComponent(detailedType.componentId!)
       ) {
-        return true;
+        if (!entityRelations) {
+          entityRelations = new Map();
+          this.dontFragmentRelations.set(entityId, entityRelations);
+        }
+        entityRelations.set(componentType, component);
       }
     }
 
-    return false;
-  }
-
-  /**
-   * Remove and re-add entity with updated components (for dontFragment changes)
-   */
-  private readdEntityWithUpdatedComponents(
-    entityId: EntityId,
-    archetype: Archetype,
-    currentComponents: Map<EntityId<any>, any>,
-    changeset: ComponentChangeset,
-  ): void {
-    const newComponents = new Map<EntityId<any>, any>();
-
-    // Copy current components except those marked for removal
-    for (const [ct, value] of currentComponents) {
-      if (!changeset.removes.has(ct)) {
-        newComponents.set(ct, value);
-      }
+    // Clean up empty map
+    if (entityRelations && entityRelations.size === 0) {
+      this.dontFragmentRelations.delete(entityId);
     }
-
-    // Add new components from changeset
-    for (const [ct, value] of changeset.adds) {
-      newComponents.set(ct, value);
-    }
-
-    archetype.removeEntity(entityId);
-    archetype.addEntity(entityId, newComponents);
   }
 
   /**
