@@ -1,3 +1,5 @@
+import { BitSet } from "./bit-set";
+
 /**
  * Unique symbol brand for associating component type information with EntityId
  */
@@ -460,6 +462,11 @@ export interface ComponentOptions {
 
 const ComponentOptions: Map<ComponentId<any>, ComponentOptions> = new Map();
 
+// BitSets for fast component option checks (Component ID range: 1-1023)
+const exclusiveFlags = new BitSet(COMPONENT_ID_MAX + 1);
+const cascadeDeleteFlags = new BitSet(COMPONENT_ID_MAX + 1);
+const dontFragmentFlags = new BitSet(COMPONENT_ID_MAX + 1);
+
 /**
  * Allocate a new component ID from the global allocator.
  * @param nameOrOptions Optional name for the component (for serialization/debugging) or options object
@@ -501,6 +508,10 @@ export function component<T = void>(nameOrOptions?: string | ComponentOptions): 
   // Register options if provided
   if (options) {
     ComponentOptions.set(id, options);
+    // Set bitset flags for fast lookup
+    if (options.exclusive) exclusiveFlags.set(id);
+    if (options.cascadeDelete) cascadeDeleteFlags.set(id);
+    if (options.dontFragment) dontFragmentFlags.set(id);
   }
 
   return id;
@@ -538,7 +549,7 @@ export function getComponentOptions(id: ComponentId<any>): ComponentOptions | un
  * @returns true if the component is exclusive, false otherwise
  */
 export function isExclusiveComponent(id: ComponentId<any>): boolean {
-  return ComponentOptions.get(id)?.exclusive ?? false;
+  return exclusiveFlags.has(id);
 }
 
 /**
@@ -547,7 +558,7 @@ export function isExclusiveComponent(id: ComponentId<any>): boolean {
  * @returns true if the component is cascade delete, false otherwise
  */
 export function isCascadeDeleteComponent(id: ComponentId<any>): boolean {
-  return ComponentOptions.get(id)?.cascadeDelete ?? false;
+  return cascadeDeleteFlags.has(id);
 }
 
 /**
@@ -556,5 +567,143 @@ export function isCascadeDeleteComponent(id: ComponentId<any>): boolean {
  * @returns true if the component is dontFragment, false otherwise
  */
 export function isDontFragmentComponent(id: ComponentId<any>): boolean {
-  return ComponentOptions.get(id)?.dontFragment ?? false;
+  return dontFragmentFlags.has(id);
+}
+
+/**
+ * Check if a relation ID is a dontFragment relation (entity-relation or component-relation with dontFragment component)
+ * This is an optimized function that avoids the overhead of getDetailedIdType
+ * @param id The entity/relation ID to check
+ * @returns true if this is a dontFragment relation, false otherwise
+ */
+export function isDontFragmentRelation(id: EntityId<any>): boolean {
+  // Only relation IDs are negative; non-relations return false immediately
+  if (id >= 0) return false;
+
+  // Extract componentId directly from the relation encoding: -(componentId * RELATION_SHIFT + targetId)
+  // componentId = floor(absId / RELATION_SHIFT)
+  const absId = -id;
+  const componentId = Math.floor(absId / RELATION_SHIFT);
+
+  // Wildcard relations (targetId === 0) are not considered dontFragment relations for this check
+  const targetId = absId % RELATION_SHIFT;
+  if (targetId === WILDCARD_TARGET_ID) return false;
+
+  // Check if componentId is valid and has dontFragment flag
+  return componentId >= 1 && componentId <= COMPONENT_ID_MAX && dontFragmentFlags.has(componentId);
+}
+
+/**
+ * Check if an ID is a wildcard relation with dontFragment component
+ * This is an optimized function for filtering archetype component types
+ * @param id The entity/relation ID to check
+ * @returns true if this is a wildcard relation with dontFragment component, false otherwise
+ */
+export function isDontFragmentWildcard(id: EntityId<any>): boolean {
+  // Only relation IDs are negative
+  if (id >= 0) return false;
+
+  const absId = -id;
+  const targetId = absId % RELATION_SHIFT;
+
+  // Must be a wildcard relation (targetId === 0)
+  if (targetId !== WILDCARD_TARGET_ID) return false;
+
+  const componentId = Math.floor(absId / RELATION_SHIFT);
+  return componentId >= 1 && componentId <= COMPONENT_ID_MAX && dontFragmentFlags.has(componentId);
+}
+
+/**
+ * Check if a relation ID is an exclusive relation (entity-relation or component-relation with exclusive component)
+ * This avoids the full getDetailedIdType overhead for hot paths
+ * @param id The entity/relation ID to check
+ * @returns true if this is an exclusive relation, false otherwise
+ */
+export function isExclusiveRelation(id: EntityId<any>): boolean {
+  if (id >= 0) return false;
+  const absId = -id;
+  const targetId = absId % RELATION_SHIFT;
+  if (targetId === WILDCARD_TARGET_ID) return false; // not an exclusive-specific relation
+  const componentId = Math.floor(absId / RELATION_SHIFT);
+  return componentId >= 1 && componentId <= COMPONENT_ID_MAX && exclusiveFlags.has(componentId);
+}
+
+/**
+ * Check if a relation ID is a wildcard relation with exclusive component
+ */
+export function isExclusiveWildcard(id: EntityId<any>): boolean {
+  if (id >= 0) return false;
+  const absId = -id;
+  const targetId = absId % RELATION_SHIFT;
+  if (targetId !== WILDCARD_TARGET_ID) return false;
+  const componentId = Math.floor(absId / RELATION_SHIFT);
+  return componentId >= 1 && componentId <= COMPONENT_ID_MAX && exclusiveFlags.has(componentId);
+}
+
+/**
+ * Check if a relation ID is a cascade delete entity-relation
+ * This is an optimized function that avoids the overhead of getDetailedIdType
+ * Note: Cascade delete only applies to entity-relations (not component-relations or wildcards)
+ * @param id The entity/relation ID to check
+ * @returns true if this is an entity-relation with cascade delete, false otherwise
+ */
+export function isCascadeDeleteRelation(id: EntityId<any>): boolean {
+  if (id >= 0) return false;
+  const absId = -id;
+  const targetId = absId % RELATION_SHIFT;
+  // Wildcard relations (targetId === 0) don't cascade
+  if (targetId === WILDCARD_TARGET_ID) return false;
+  // Only entity-relations cascade (targetId >= ENTITY_ID_START)
+  if (targetId < ENTITY_ID_START) return false;
+  const componentId = Math.floor(absId / RELATION_SHIFT);
+  return componentId >= 1 && componentId <= COMPONENT_ID_MAX && cascadeDeleteFlags.has(componentId);
+}
+
+/**
+ * Get the componentId from a relation ID without fully decoding the relation.
+ * Returns undefined for non-relation IDs or invalid component IDs.
+ */
+export function getComponentIdFromRelationId<T>(id: EntityId<T>): ComponentId<T> | undefined {
+  if (id >= 0) return undefined;
+  const absId = -id;
+  const componentId = Math.floor(absId / RELATION_SHIFT);
+  if (componentId < 1 || componentId > COMPONENT_ID_MAX) return undefined;
+  return componentId as ComponentId<T>;
+}
+
+/**
+ * Get the targetId from a relation ID without fully decoding the relation.
+ * Returns undefined for non-relation IDs.
+ */
+export function getTargetIdFromRelationId(id: EntityId<any>): EntityId<any> | undefined {
+  if (id >= 0) return undefined;
+  const absId = -id;
+  return (absId % RELATION_SHIFT) as EntityId<any>;
+}
+
+/**
+ * Check if an ID is an entity-relation (relation targeting an entity, not a component or wildcard)
+ */
+export function isEntityRelation(id: EntityId<any>): boolean {
+  if (id >= 0) return false;
+  const absId = -id;
+  const targetId = absId % RELATION_SHIFT;
+  return targetId >= ENTITY_ID_START;
+}
+
+/**
+ * Check if an ID is a component-relation (relation targeting a component)
+ */
+export function isComponentRelation(id: EntityId<any>): boolean {
+  if (id >= 0) return false;
+  const absId = -id;
+  const targetId = absId % RELATION_SHIFT;
+  return targetId >= 1 && targetId <= COMPONENT_ID_MAX;
+}
+
+/**
+ * Check if an ID is any type of relation (entity, component, or wildcard)
+ */
+export function isAnyRelation(id: EntityId<any>): boolean {
+  return id < 0;
 }

@@ -8,8 +8,17 @@ import {
   getComponentNameById,
   getDetailedIdType,
   isCascadeDeleteComponent,
+  isCascadeDeleteRelation,
   isDontFragmentComponent,
+  isDontFragmentRelation,
+  isDontFragmentWildcard,
   isExclusiveComponent,
+  isExclusiveRelation,
+  getComponentIdFromRelationId,
+  getTargetIdFromRelationId,
+  isEntityRelation,
+  isWildcardRelationId,
+  isAnyRelation,
   relation,
 } from "./entity";
 import { MultiMap } from "./multi-map";
@@ -191,9 +200,8 @@ export class World<UpdateParams extends any[] = []> {
         const sourceArchetype = this.entityToArchetype.get(sourceEntityId);
         if (!sourceArchetype) continue;
 
-        const detailedType = getDetailedIdType(componentType);
         // Cascade only applies to entity relations (not component-relation)
-        if (detailedType.type === "entity-relation" && isCascadeDeleteComponent(detailedType.componentId!)) {
+        if (isCascadeDeleteRelation(componentType)) {
           // Enqueue the referencing entity for deletion (cascade)
           if (!visited.has(sourceEntityId)) {
             queue.push(sourceEntityId);
@@ -285,13 +293,7 @@ export class World<UpdateParams extends any[] = []> {
       return true;
     }
 
-    // Check dontFragment relations
-    const detailedType = getDetailedIdType(componentType);
-    if (
-      (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
-      isDontFragmentComponent(detailedType.componentId!)
-    ) {
-      // Check if entity has this dontFragment relation in the shared storage
+    if (isDontFragmentRelation(componentType)) {
       return this.dontFragmentRelations.get(entityId)?.has(componentType) ?? false;
     }
 
@@ -321,17 +323,15 @@ export class World<UpdateParams extends any[] = []> {
 
     // Check if entity has the component before attempting to get it
     // Note: undefined is a valid component value, so we cannot use undefined to check existence
-    const detailedType = getDetailedIdType(componentType);
-    if (detailedType.type !== "wildcard-relation") {
-      // For regular components, check if the component type exists in the archetype or dontFragmentRelations
+    // Skip check for wildcard relations (componentType >= 0 means not a relation)
+    if (componentType >= 0 || componentType % 2 ** 42 !== 0) {
+      // Not a wildcard relation - check existence
       const inArchetype = archetype.componentTypes.includes(componentType);
-      const isDontFragment =
-        (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
-        isDontFragmentComponent(detailedType.componentId!);
+      const hasDontFragment = isDontFragmentRelation(componentType);
 
       // For dontFragment relations, check if it exists in the dontFragmentRelations storage
       const hasComponent =
-        inArchetype || (isDontFragment && this.dontFragmentRelations.get(entityId)?.has(componentType));
+        inArchetype || (hasDontFragment && this.dontFragmentRelations.get(entityId)?.has(componentType));
 
       if (!hasComponent) {
         throw new Error(
@@ -476,12 +476,14 @@ export class World<UpdateParams extends any[] = []> {
     const wildcardRelations: { componentId: ComponentId<any>; relationId: EntityId<any> }[] = [];
 
     for (const componentType of componentTypes) {
-      const detailedType = getDetailedIdType(componentType);
-      if (detailedType.type === "wildcard-relation") {
-        wildcardRelations.push({
-          componentId: detailedType.componentId!,
-          relationId: componentType,
-        });
+      if (isWildcardRelationId(componentType)) {
+        const componentId = getComponentIdFromRelationId(componentType);
+        if (componentId !== undefined) {
+          wildcardRelations.push({
+            componentId,
+            relationId: componentType,
+          });
+        }
       } else {
         regularComponents.push(componentType);
       }
@@ -655,25 +657,21 @@ export class World<UpdateParams extends any[] = []> {
     component: any,
     changeset: ComponentChangeset,
   ): void {
-    const detailedType = getDetailedIdType(componentType);
+    // Extract componentId if it's a relation (fast path)
+    const componentId = getComponentIdFromRelationId(componentType);
+    if (componentId !== undefined) {
+      // Handle exclusive relations by removing existing relations with the same base component
+      if (componentId !== undefined && isExclusiveComponent(componentId)) {
+        this.removeExclusiveRelations(entityId, currentArchetype, componentId, changeset);
+      }
 
-    // Handle exclusive relations by removing existing relations with the same base component
-    if (
-      (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
-      isExclusiveComponent(detailedType.componentId!)
-    ) {
-      this.removeExclusiveRelations(entityId, currentArchetype, detailedType.componentId!, changeset);
-    }
-
-    // For dontFragment relations, ensure wildcard marker is in archetype signature
-    if (
-      (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
-      isDontFragmentComponent(detailedType.componentId!)
-    ) {
-      const wildcardMarker = relation(detailedType.componentId!, "*");
-      // Add wildcard marker to changeset if not already in archetype
-      if (!currentArchetype.componentTypes.includes(wildcardMarker)) {
-        changeset.set(wildcardMarker, undefined);
+      // For dontFragment relations, ensure wildcard marker is in archetype signature
+      if (componentId !== undefined && isDontFragmentComponent(componentId)) {
+        const wildcardMarker = relation(componentId, "*");
+        // Add wildcard marker to changeset if not already in archetype
+        if (!currentArchetype.componentTypes.includes(wildcardMarker)) {
+          changeset.set(wildcardMarker, undefined);
+        }
       }
     }
 
@@ -708,15 +706,10 @@ export class World<UpdateParams extends any[] = []> {
     }
   }
 
-  /**
-   * Check if a component type is a relation with the given base component
-   */
   private isRelationWithComponent(componentType: EntityId<any>, baseComponentId: ComponentId<any>): boolean {
-    const detailedType = getDetailedIdType(componentType);
-    return (
-      (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
-      detailedType.componentId === baseComponentId
-    );
+    const componentId = getComponentIdFromRelationId(componentType);
+    // componentId is defined only for relations (negative IDs), and excludes wildcards by matching baseComponentId
+    return componentId === baseComponentId;
   }
 
   /**
@@ -728,33 +721,28 @@ export class World<UpdateParams extends any[] = []> {
     componentType: EntityId<any>,
     changeset: ComponentChangeset,
   ): void {
-    const detailedType = getDetailedIdType(componentType);
+    const componentId = getComponentIdFromRelationId(componentType);
 
-    if (detailedType.type === "wildcard-relation") {
-      this.removeWildcardRelations(entityId, currentArchetype, detailedType.componentId!, changeset);
+    if (isWildcardRelationId(componentType) && componentId !== undefined) {
+      this.removeWildcardRelations(entityId, currentArchetype, componentId, changeset);
     } else {
       changeset.delete(componentType);
 
       // If removing a dontFragment relation, check if we should remove the wildcard marker
-      if (
-        (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
-        isDontFragmentComponent(detailedType.componentId!)
-      ) {
+      if (componentId !== undefined && isDontFragmentComponent(componentId)) {
         // Check if there are any other dontFragment relations with the same component ID
-        const wildcardMarker = relation(detailedType.componentId!, "*");
+        const wildcardMarker = relation(componentId, "*");
         const entityData = currentArchetype.getEntity(entityId);
         let hasOtherRelations = false;
 
         if (entityData) {
           for (const [otherComponentType] of entityData) {
             if (otherComponentType === componentType) continue; // Skip the one being removed
+            if (otherComponentType === wildcardMarker) continue; // Skip wildcard marker itself
             if (changeset.removes.has(otherComponentType)) continue; // Skip if also being removed
 
-            const otherDetailedType = getDetailedIdType(otherComponentType);
-            if (
-              (otherDetailedType.type === "entity-relation" || otherDetailedType.type === "component-relation") &&
-              otherDetailedType.componentId === detailedType.componentId
-            ) {
+            const otherComponentId = getComponentIdFromRelationId(otherComponentType);
+            if (otherComponentId === componentId) {
               hasOtherRelations = true;
               break;
             }
@@ -813,27 +801,23 @@ export class World<UpdateParams extends any[] = []> {
 
     // Build changeset for removing this component
     const changeset = new ComponentChangeset();
-    const detailedType = getDetailedIdType(componentType);
+    const componentId = getComponentIdFromRelationId(componentType);
 
     changeset.delete(componentType);
 
     // If removing a dontFragment relation, check if we should remove the wildcard marker
-    if (
-      (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
-      isDontFragmentComponent(detailedType.componentId!)
-    ) {
-      const wildcardMarker = relation(detailedType.componentId!, "*");
+    if (componentId !== undefined && isDontFragmentComponent(componentId)) {
+      const wildcardMarker = relation(componentId, "*");
       const entityData = sourceArchetype.getEntity(entityId);
       let hasOtherRelations = false;
 
       if (entityData) {
         for (const [otherComponentType] of entityData) {
           if (otherComponentType === componentType) continue;
-          const otherDetailedType = getDetailedIdType(otherComponentType);
-          if (
-            (otherDetailedType.type === "entity-relation" || otherDetailedType.type === "component-relation") &&
-            otherDetailedType.componentId === detailedType.componentId
-          ) {
+          // Skip wildcard marker itself
+          if (otherComponentType === wildcardMarker) continue;
+          const otherComponentId = getComponentIdFromRelationId(otherComponentType);
+          if (otherComponentId === componentId) {
             hasOtherRelations = true;
             break;
           }
@@ -939,12 +923,7 @@ export class World<UpdateParams extends any[] = []> {
 
     // Direct update for regular components in archetype
     for (const [componentType, component] of changeset.adds) {
-      const detailedType = getDetailedIdType(componentType);
-      // Skip dontFragment relations - already handled above
-      if (
-        (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
-        isDontFragmentComponent(detailedType.componentId!)
-      ) {
+      if (isDontFragmentRelation(componentType)) {
         continue;
       }
       currentArchetype.set(entityId, componentType, component);
@@ -963,13 +942,8 @@ export class World<UpdateParams extends any[] = []> {
     // Get or create the entity's dontFragment relations map
     let entityRelations = this.dontFragmentRelations.get(entityId);
 
-    // Process removals
     for (const componentType of changeset.removes) {
-      const detailedType = getDetailedIdType(componentType);
-      if (
-        (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
-        isDontFragmentComponent(detailedType.componentId!)
-      ) {
+      if (isDontFragmentRelation(componentType)) {
         if (entityRelations) {
           const removedValue = entityRelations.get(componentType);
           if (removedValue !== undefined || entityRelations.has(componentType)) {
@@ -980,13 +954,8 @@ export class World<UpdateParams extends any[] = []> {
       }
     }
 
-    // Process additions
     for (const [componentType, component] of changeset.adds) {
-      const detailedType = getDetailedIdType(componentType);
-      if (
-        (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
-        isDontFragmentComponent(detailedType.componentId!)
-      ) {
+      if (isDontFragmentRelation(componentType)) {
         if (!entityRelations) {
           entityRelations = new Map();
           this.dontFragmentRelations.set(entityId, entityRelations);
@@ -1007,20 +976,22 @@ export class World<UpdateParams extends any[] = []> {
   private updateEntityReferences(entityId: EntityId, changeset: ComponentChangeset): void {
     // Remove references for removed components
     for (const componentType of changeset.removes) {
-      const detailedType = getDetailedIdType(componentType);
-      if (detailedType.type === "entity-relation") {
-        this.untrackEntityReference(entityId, componentType, detailedType.targetId!);
-      } else if (detailedType.type === "entity") {
+      if (isEntityRelation(componentType)) {
+        const targetId = getTargetIdFromRelationId(componentType)!;
+        this.untrackEntityReference(entityId, componentType, targetId);
+      } else if (componentType >= 1024) {
+        // Entity used as component type
         this.untrackEntityReference(entityId, componentType, componentType);
       }
     }
 
     // Add references for added components
     for (const [componentType] of changeset.adds) {
-      const detailedType = getDetailedIdType(componentType);
-      if (detailedType.type === "entity-relation") {
-        this.trackEntityReference(entityId, componentType, detailedType.targetId!);
-      } else if (detailedType.type === "entity") {
+      if (isEntityRelation(componentType)) {
+        const targetId = getTargetIdFromRelationId(componentType)!;
+        this.trackEntityReference(entityId, componentType, targetId);
+      } else if (componentType >= 1024) {
+        // Entity used as component type
         this.trackEntityReference(entityId, componentType, componentType);
       }
     }
@@ -1056,19 +1027,14 @@ export class World<UpdateParams extends any[] = []> {
     const regularTypes: EntityId<any>[] = [];
 
     for (const componentType of componentTypes) {
-      const detailedType = getDetailedIdType(componentType);
-
       // Keep wildcard markers for dontFragment components (they mark the archetype)
-      if (detailedType.type === "wildcard-relation" && isDontFragmentComponent(detailedType.componentId!)) {
+      if (isDontFragmentWildcard(componentType)) {
         regularTypes.push(componentType);
         continue;
       }
 
       // Skip specific dontFragment relations from archetype signature
-      if (
-        (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
-        isDontFragmentComponent(detailedType.componentId!)
-      ) {
+      if (isDontFragmentRelation(componentType)) {
         continue;
       }
 
@@ -1229,14 +1195,9 @@ export class World<UpdateParams extends any[] = []> {
         }
       }
 
-      // Trigger wildcard relation hooks for added components
-      const detailedType = getDetailedIdType(componentType);
-      if (
-        detailedType.type === "entity-relation" ||
-        detailedType.type === "component-relation" ||
-        detailedType.type === "wildcard-relation"
-      ) {
-        const wildcardRelationId = relation(detailedType.componentId!, "*");
+      const componentId = getComponentIdFromRelationId(componentType);
+      if (componentId !== undefined) {
+        const wildcardRelationId = relation(componentId, "*");
         const wildcardHooks = this.hooks.get(wildcardRelationId);
         if (wildcardHooks) {
           for (const lifecycleHook of wildcardHooks) {
@@ -1256,14 +1217,9 @@ export class World<UpdateParams extends any[] = []> {
         }
       }
 
-      // Trigger wildcard relation hooks for removed components
-      const detailedType = getDetailedIdType(componentType);
-      if (
-        detailedType.type === "entity-relation" ||
-        detailedType.type === "component-relation" ||
-        detailedType.type === "wildcard-relation"
-      ) {
-        const wildcardRelationId = relation(detailedType.componentId!, "*");
+      const componentId = getComponentIdFromRelationId(componentType);
+      if (componentId !== undefined) {
+        const wildcardRelationId = relation(componentId, "*");
         const wildcardHooks = this.hooks.get(wildcardRelationId);
         if (wildcardHooks) {
           for (const hook of wildcardHooks) {
