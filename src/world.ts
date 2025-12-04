@@ -218,9 +218,7 @@ export class World<UpdateParams extends any[] = []> {
 
       // Remove the entity itself
       archetype.removeEntity(cur);
-      if (archetype.getEntities().length === 0) {
-        this.cleanupEmptyArchetype(archetype);
-      }
+      this.cleanupEmptyArchetype(archetype);
       this.entityToArchetype.delete(cur);
       this.entityIdManager.deallocate(cur);
     }
@@ -904,9 +902,7 @@ export class World<UpdateParams extends any[] = []> {
     this.entityToArchetype.set(entityId, newArchetype);
 
     // Cleanup empty archetype
-    if (currentArchetype.getEntities().length === 0) {
-      this.cleanupEmptyArchetype(currentArchetype);
-    }
+    this.cleanupEmptyArchetype(currentArchetype);
   }
 
   /**
