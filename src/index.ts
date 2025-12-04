@@ -20,6 +20,7 @@ export {
   isWildcardRelationId,
   getComponentIdByName,
   getComponentNameById,
+  decodeRelationId,
 } from "./entity";
 
 // World class
