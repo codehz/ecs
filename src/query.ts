@@ -9,13 +9,13 @@ import type { World } from "./world";
  * Query class for efficient entity queries with cached archetypes
  */
 export class Query {
-  private world: World<any[]>;
+  private world: World;
   private componentTypes: EntityId<any>[];
   private filter: QueryFilter;
   private cachedArchetypes: Archetype[] = [];
   private isDisposed = false;
 
-  constructor(world: World<any[]>, componentTypes: EntityId<any>[], filter: QueryFilter = {}) {
+  constructor(world: World, componentTypes: EntityId<any>[], filter: QueryFilter = {}) {
     this.world = world;
     this.componentTypes = [...componentTypes].sort((a, b) => a - b);
     this.filter = filter;

@@ -389,59 +389,6 @@ describe("World", () => {
     });
   });
 
-  describe("System Management", () => {
-    it("should register systems", () => {
-      const world = new World<[deltaTime: number]>();
-      const system = { update: (_dt: number) => {} };
-
-      world.registerSystem(system);
-      // Update should not throw
-      world.update(0.016);
-    });
-
-    it("should call system update methods", async () => {
-      const world = new World<[deltaTime: number]>();
-      let updateCalled = false;
-      const system = {
-        update: (dt: number) => {
-          updateCalled = true;
-          expect(dt).toBe(0.016);
-        },
-      };
-
-      world.registerSystem(system);
-      world.update(0.016);
-
-      expect(updateCalled).toBe(true);
-    });
-
-    it("should execute systems in dependency order", async () => {
-      const world = new World<[deltaTime: number]>();
-      const executionOrder: string[] = [];
-
-      const systemA = {
-        update: (_dt: number) => void executionOrder.push("A"),
-      };
-      const systemB = {
-        update: (_dt: number) => void executionOrder.push("B"),
-        dependencies: [systemA],
-      };
-      const systemC = {
-        update: (_dt: number) => void executionOrder.push("C"),
-        dependencies: [systemB],
-      };
-
-      // C depends on B, B depends on A
-      world.registerSystem(systemA);
-      world.registerSystem(systemB);
-      world.registerSystem(systemC);
-
-      world.update(0.016);
-
-      expect(executionOrder).toEqual(["A", "B", "C"]);
-    });
-  });
-
   describe("Query", () => {
     type Position = { x: number; y: number };
     type Velocity = { x: number; y: number };

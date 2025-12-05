@@ -6,11 +6,10 @@
 
 - 🚀 高性能：基于 Archetype 的组件存储和高效的查询系统
 - 🔧 类型安全：完整的 TypeScript 支持
-- 🏗️ 模块化：清晰的架构，支持自定义系统和组件
+- 🏗️ 模块化：清晰的架构，支持自定义组件
 - 📦 轻量级：零依赖，易于集成
 - ⚡ 内存高效：连续内存布局，优化的迭代性能
 - 🎣 生命周期钩子：支持组件和通配符关系的事件监听
-- 🔄 系统调度：支持系统依赖关系和拓扑排序执行
 
 ## 安装
 
@@ -180,11 +179,9 @@ bun run examples/simple/demo.ts
 - `delete(entity, componentId)`: 从实体移除组件
 - `setExclusive(componentId)`: 将组件标记为独占关系
 - `createQuery(componentIds)`: 创建查询
-- `registerSystem(system, dependencies?)`: 注册系统
 - `hook(componentId, hook)`: 注册组件或通配符关系生命周期钩子
 - `unhook(componentId, hook)`: 注销组件或通配符关系生命周期钩子
-- `update(...params)`: 更新世界（参数取决于泛型配置）
-- `sync()`: 应用命令缓冲区
+- `sync()`: 执行所有延迟命令
 
 ### 序列化（快照）
 
@@ -258,7 +255,7 @@ const restored = World.deserialize(readySnapshot);
 注意事项
 
 - **重要警告**：`get()` 方法只能获取实体已设置的组件。如果尝试获取不存在的组件，会抛出错误。由于 `undefined` 是组件的有效值，不能使用 `get()` 的返回值是否为 `undefined` 来判断组件是否存在。请在使用 `get()` 之前先用 `has()` 方法检查组件是否存在。
-- 快照只包含实体、组件、以及 `EntityIdManager` 的分配器状态（用于保留下一次分配的 ID）；并不会自动恢复已注册的系统、查询缓存或生命周期钩子。恢复后应由应用负责重新注册系统与钩子。
+- 快照只包含实体、组件、以及 `EntityIdManager` 的分配器状态（用于保留下一次分配的 ID）；并不会自动恢复查询缓存或生命周期钩子。恢复后应由应用负责重新注册钩子。
 - 若需要跨版本兼容，建议在持久化格式中包含 `version` 字段，并在恢复时进行格式兼容性检查与迁移。
 
 ### Entity
@@ -271,57 +268,81 @@ const restored = World.deserialize(readySnapshot);
 - `getEntities()`: 获取所有匹配实体的ID列表
 - `getEntitiesWithComponents(componentIds)`: 获取实体及其组件数据
 
-### System
+## 从 System 迁移到 Pipeline
 
-实现 `System` 接口来创建自定义系统：
+从 v0.4.0 开始，本库移除了内置的 `System` 和 `SystemScheduler` 功能。推荐使用 `@codehz/pipeline` 作为替代方案来组织游戏循环逻辑。
 
-```typescript
-class MySystem implements System {
-  update(): void {
-    // 系统逻辑
-  }
-}
-```
+### 为什么移除 System？
 
-如果需要接收额外参数（如时间增量），可以指定泛型参数：
+- **简化库的维护**：System 调度器增加了代码复杂度，但其功能可以通过更通用的 pipeline 模式实现
+- **更灵活的执行控制**：Pipeline 模式允许更细粒度的控制，支持异步操作和条件执行
+- **更好的关注点分离**：ECS 库专注于实体和组件管理，系统调度由外部库处理
 
-```typescript
-class MovementSystem implements System<[deltaTime: number]> {
-  update(deltaTime: number): void {
-    // 使用 deltaTime 更新位置
-  }
-}
-```
+### 迁移示例
 
-系统支持依赖关系排序，确保正确的执行顺序。依赖关系可以通过系统的 `dependencies` 属性指定：
+**旧代码（使用 System）**：
 
 ```typescript
-class InputSystem implements System<[deltaTime: number]> {
-  readonly dependencies: readonly System<[deltaTime: number]>[] = [];
-  update(deltaTime: number): void {
-    // 处理输入
-  }
-}
+import { World, component } from "@codehz/ecs";
+import type { System } from "@codehz/ecs";
 
 class MovementSystem implements System<[deltaTime: number]> {
-  readonly dependencies: readonly System<[deltaTime: number]>[];
+  private query: Query;
 
-  constructor(inputSystem: InputSystem) {
-    this.dependencies = [inputSystem]; // 指定依赖
+  constructor(world: World<[deltaTime: number]>) {
+    this.query = world.createQuery([PositionId, VelocityId]);
   }
 
   update(deltaTime: number): void {
-    // 更新位置
+    this.query.forEach([PositionId, VelocityId], (entity, position, velocity) => {
+      position.x += velocity.x * deltaTime;
+      position.y += velocity.y * deltaTime;
+    });
   }
 }
 
-// 注册系统
-const inputSystem = new InputSystem();
-world.registerSystem(inputSystem);
-world.registerSystem(new MovementSystem(inputSystem), [inputSystem]); // 也可以在注册时指定额外依赖
+const world = new World<[deltaTime: number]>();
+world.registerSystem(new MovementSystem(world));
+world.update(0.016); // 自动调用 sync()
 ```
 
-系统将按照拓扑排序执行，依赖系统始终在被依赖系统之前运行。
+**新代码（使用 Pipeline）**：
+
+```typescript
+import { pipeline } from "@codehz/pipeline";
+import { World, component } from "@codehz/ecs";
+
+const world = new World();
+const movementQuery = world.createQuery([PositionId, VelocityId]);
+
+const gameLoop = pipeline<{ deltaTime: number }>()
+  .addPass((env) => {
+    movementQuery.forEach([PositionId, VelocityId], (entity, position, velocity) => {
+      position.x += velocity.x * env.deltaTime;
+      position.y += velocity.y * env.deltaTime;
+    });
+  })
+  // 重要：world.sync() 必须作为最后一个 pass 调用，以还原之前 world.update() 的自动提交行为
+  .addPass(() => {
+    world.sync();
+  })
+  .build();
+
+gameLoop({ deltaTime: 0.016 });
+```
+
+### 关键变化
+
+1. **移除泛型参数**：`World` 不再需要 `UpdateParams` 泛型参数
+2. **移除的方法**：`registerSystem()` 和 `update()` 方法已移除
+3. **手动调用 sync()**：之前 `world.update()` 会自动调用 `sync()`，现在需要在 pipeline 末尾显式调用
+4. **执行顺序**：Pass 的执行顺序由添加顺序决定，无需手动声明依赖关系
+
+### 安装 Pipeline
+
+```bash
+bun add @codehz/pipeline
+```
 
 ## 性能特点
 
@@ -354,8 +375,6 @@ src/
 ├── archetype.ts          # Archetype 系统（高效组件存储）
 ├── query.ts              # 查询系统
 ├── query-filter.ts       # 查询过滤器
-├── system.ts             # 系统接口
-├── system-scheduler.ts   # 系统调度器
 ├── command-buffer.ts     # 命令缓冲区
 ├── types.ts              # 类型定义
 ├── utils.ts              # 工具函数
@@ -364,9 +383,11 @@ src/
 └── *.perf.test.ts        # 性能测试
 
 examples/
-└── simple/
-    ├── demo.ts           # 基本示例
-    └── README.md         # 示例说明
+├── simple/
+│   ├── demo.ts           # 基本示例
+│   └── README.md         # 示例说明
+└── advanced-scheduling/
+    └── demo.ts           # Pipeline 调度示例
 
 scripts/
 ├── build.ts             # 构建脚本

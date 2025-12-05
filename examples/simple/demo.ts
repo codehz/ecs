@@ -1,6 +1,6 @@
+import { pipeline } from "@codehz/pipeline";
 import { component, relation } from "../../src/entity";
 import type { Query } from "../../src/query";
-import type { System } from "../../src/system";
 import { World } from "../../src/world";
 
 // 定义组件类型
@@ -12,35 +12,30 @@ const PositionId = component<Position>();
 const VelocityId = component<Velocity>();
 const ChildOf = component({ exclusive: true }); // Exclusive relation component
 
-// 移动系统
-class MovementSystem implements System<[deltaTime: number]> {
-  private query: Query; // 缓存查询
+// 创建世界
+const world = new World();
 
-  constructor(world: World<[deltaTime: number]>) {
-    // 在构造函数中预先创建并缓存查询
-    this.query = world.createQuery([PositionId, VelocityId]);
-  }
+// 预先缓存查询
+const movementQuery: Query = world.createQuery([PositionId, VelocityId]);
 
-  update(deltaTime: number): void {
-    // 使用缓存的查询的forEach方法，直接获取组件数据
-    this.query.forEach([PositionId, VelocityId], (entity, position, velocity) => {
-      // 更新位置
-      position.x += velocity.x * deltaTime;
-      position.y += velocity.y * deltaTime;
-
+// 使用 pipeline 构建游戏循环
+const gameLoop = pipeline<{ deltaTime: number }>()
+  // Movement pass
+  .addPass((env) => {
+    movementQuery.forEach([PositionId, VelocityId], (entity, position, velocity) => {
+      position.x += velocity.x * env.deltaTime;
+      position.y += velocity.y * env.deltaTime;
       console.log(`Entity ${entity}: Position (${position.x.toFixed(2)}, ${position.y.toFixed(2)})`);
     });
-  }
-}
+  })
+  // Sync pass - 必须作为最后一个 pass 调用以执行所有延迟命令
+  .addPass(() => {
+    world.sync();
+  })
+  .build();
 
 function main() {
   console.log("ECS Simple Demo");
-
-  // 创建世界
-  const world = new World<[deltaTime: number]>();
-
-  // 注册系统（传递world参数）
-  world.registerSystem(new MovementSystem(world));
 
   // 创建实体1
   const entity1 = world.new();
@@ -95,7 +90,7 @@ function main() {
   const deltaTime = 1.0; // 1秒
   for (let i = 0; i < 5; i++) {
     console.log(`\nUpdate ${i + 1}:`);
-    world.update(deltaTime);
+    gameLoop({ deltaTime });
   }
 
   // 演示组件移除钩子

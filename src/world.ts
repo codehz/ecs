@@ -21,16 +21,14 @@ import {
 import { MultiMap } from "./multi-map";
 import { Query } from "./query";
 import { serializeQueryFilter, type QueryFilter } from "./query-filter";
-import type { System } from "./system";
-import { SystemScheduler } from "./system-scheduler";
 import type { ComponentTuple, LifecycleHook } from "./types";
 import { getOrCreateWithSideEffect } from "./utils";
 
 /**
  * World class for ECS architecture
- * Manages entities, components, and systems
+ * Manages entities and components
  */
-export class World<UpdateParams extends any[] = []> {
+export class World {
   // Core data structures for entity and archetype management
   /** Manages allocation and deallocation of entity IDs */
   private entityIdManager = new EntityIdManager();
@@ -59,10 +57,6 @@ export class World<UpdateParams extends any[] = []> {
 
   /** Cache for queries keyed by component types and filter signatures */
   private queryCache = new Map<string, { query: Query; refCount: number }>();
-
-  // System management
-  /** Schedules and executes systems in dependency order */
-  private systemScheduler = new SystemScheduler<UpdateParams>();
 
   // Command execution
   /** Buffers structural changes for deferred execution */
@@ -340,13 +334,6 @@ export class World<UpdateParams extends any[] = []> {
   }
 
   /**
-   * Register a system with optional dependencies
-   */
-  registerSystem(system: System<UpdateParams>, additionalDeps: System<UpdateParams>[] = []): void {
-    this.systemScheduler.addSystem(system, additionalDeps);
-  }
-
-  /**
    * Register a lifecycle hook for component or wildcard relation events
    */
   hook<T>(componentType: EntityId<T>, hook: LifecycleHook<T>): void {
@@ -382,21 +369,7 @@ export class World<UpdateParams extends any[] = []> {
   }
 
   /**
-   * Update the world (run all systems in dependency order)
-   * This function is synchronous when all systems are synchronous,
-   * and asynchronous (returns a Promise) when any system is asynchronous.
-   */
-  update(...params: UpdateParams): Promise<void> | void {
-    const result = this.systemScheduler.update(...params);
-    if (result instanceof Promise) {
-      return result.then(() => this.commandBuffer.execute());
-    } else {
-      this.commandBuffer.execute();
-    }
-  }
-
-  /**
-   * Execute all deferred commands immediately without running systems
+   * Execute all deferred commands immediately
    */
   sync(): void {
     this.commandBuffer.execute();

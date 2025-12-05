@@ -4,6 +4,8 @@
 
 This is a high-performance Entity Component System (ECS) library built with TypeScript and Bun runtime. The library implements an archetype-based architecture for optimal memory layout and query performance, with support for entity relationships, lifecycle hooks, and deferred command execution.
 
+**Note**: This library does not include a built-in system scheduler. For game loop organization, use `@codehz/pipeline` (dev dependency) or any similar pattern.
+
 ## Runtime & Environment
 
 - **Runtime**: Bun (not Node.js) - use `bun` commands instead of `npm`/`yarn`
@@ -25,12 +27,11 @@ This is a high-performance Entity Component System (ECS) library built with Type
 
 ### Core ECS Components
 
-- **World**: Central coordinator managing entities, components, archetypes, and systems
+- **World**: Central coordinator managing entities, components, and archetypes
 - **Archetype**: Groups entities with identical component combinations for contiguous memory access
 - **Entity**: Unique identifiers (starting from 1024) representing game objects
 - **Component**: Data structures attached to entities (IDs 1-1023)
 - **Query**: Cached entity queries with `forEach()` and `getEntitiesWithComponents()` methods
-- **System**: Update logic implementing `System` interface with `update(world, deltaTime)` method
 - **CommandBuffer**: Deferred execution system for batched structural changes
 
 ### Key Design Patterns
@@ -59,22 +60,29 @@ query.forEach([PositionId, VelocityId], (entity, position, velocity) => {
 });
 ```
 
-**System Implementation**:
+**Pipeline-based Game Loop** (using `@codehz/pipeline`):
 
 ```typescript
-class MovementSystem implements System {
-  private query: Query;
+import { pipeline } from "@codehz/pipeline";
 
-  constructor(world: World) {
-    this.query = world.createQuery([PositionId, VelocityId]); // Cache query
-  }
+const world = new World();
+const movementQuery = world.createQuery([PositionId, VelocityId]);
 
-  update(world: World, deltaTime: number): void {
-    this.query.forEach([PositionId, VelocityId], (entity, position, velocity) => {
-      position.x += velocity.x * deltaTime;
+const gameLoop = pipeline<{ deltaTime: number }>()
+  .addPass((env) => {
+    movementQuery.forEach([PositionId, VelocityId], (entity, position, velocity) => {
+      position.x += velocity.x * env.deltaTime;
+      position.y += velocity.y * env.deltaTime;
     });
-  }
-}
+  })
+  // IMPORTANT: world.sync() must be called as the last pass to execute deferred commands
+  .addPass(() => {
+    world.sync();
+  })
+  .build();
+
+// Run game loop
+gameLoop({ deltaTime: 0.016 });
 ```
 
 **Entity Relationships**:
@@ -142,6 +150,7 @@ world.registerLifecycleHook(wildcardPosition, { onAdded: callback });
 - `src/entity.ts`: Entity/component ID system with relation encoding
 - `src/query.ts`: Query caching and iteration over matching entities
 - `src/command-buffer.ts`: Deferred execution for structural changes
-- `examples/simple/demo.ts`: Basic usage example with movement system
+- `examples/simple/demo.ts`: Basic usage example with pipeline-based game loop
+- `examples/advanced-scheduling/demo.ts`: Advanced pipeline scheduling example
 - `tsconfig.json`: Modern TypeScript config with bundler mode
 - `package.json`: Library configuration with Bun-specific settings
