@@ -40,26 +40,24 @@ pkg.version = version;
 
 // 运行构建
 console.log("🔨 Running build process...");
+const entries = ["index", "testing"];
 await build({
-  entry: ["src/index.ts", "src/testing.ts"],
+  entry: entries.map((e) => `src/${e}.ts`),
   outDir: "dist",
   dts: true,
   sourcemap: true,
 });
 
 // 生成 exports
-console.log("📋 Generating package exports...");
-const distFiles = readdirSync("dist", { recursive: true }).filter((f) => typeof f === "string" && f.endsWith(".mjs"));
-const exports: Record<string, any> = {};
-for (const file of distFiles) {
-  if (typeof file !== "string") continue;
-  const normalizedFile = file.replace(/\\/g, "/");
-  const key = normalizedFile === "index.mjs" ? "." : `./${normalizedFile.replace(/\.mjs$/, "")}`;
-  exports[key] = {
-    types: `./${normalizedFile.replace(/\.mjs$/, ".d.mts")}`,
-    import: `./${normalizedFile}`,
-  };
-}
+const exports: Record<string, any> = Object.fromEntries(
+  entries.map((e) => [
+    `./${e}`,
+    {
+      types: `./${e}.d.mts`,
+      import: `./${e}.mjs`,
+    },
+  ]),
+);
 console.log(`📦 Generated exports for ${Object.keys(exports).length} files`);
 
 // 创建 dist/package.json
