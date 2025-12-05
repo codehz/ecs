@@ -5,20 +5,17 @@ import type { ComponentId, EntityId, WildcardRelationId } from "./entity";
 import {
   EntityIdManager,
   getComponentIdByName,
+  getComponentIdFromRelationId,
   getComponentNameById,
   getDetailedIdType,
-  isCascadeDeleteComponent,
+  getTargetIdFromRelationId,
   isCascadeDeleteRelation,
   isDontFragmentComponent,
   isDontFragmentRelation,
   isDontFragmentWildcard,
-  isExclusiveComponent,
-  isExclusiveRelation,
-  getComponentIdFromRelationId,
-  getTargetIdFromRelationId,
   isEntityRelation,
+  isExclusiveComponent,
   isWildcardRelationId,
-  isAnyRelation,
   relation,
 } from "./entity";
 import { MultiMap } from "./multi-map";

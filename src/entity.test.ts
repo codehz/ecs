@@ -1,29 +1,29 @@
 import { describe, expect, it } from "bun:test";
 import type { ComponentId, EntityId } from "./entity";
 import {
+  component,
   COMPONENT_ID_MAX,
   ComponentIdAllocator,
   createComponentId,
   createEntityId,
-  relation,
   decodeRelationId,
   ENTITY_ID_START,
   EntityIdManager,
+  getComponentIdByName,
+  getComponentNameById,
+  getComponentOptions,
   getDetailedIdType,
   getIdType,
   inspectEntityId,
   INVALID_COMPONENT_ID,
+  isCascadeDeleteComponent,
   isComponentId,
+  isDontFragmentComponent,
   isEntityId,
+  isExclusiveComponent,
   isRelationId,
   isWildcardRelationId,
-  component,
-  getComponentOptions,
-  isExclusiveComponent,
-  isCascadeDeleteComponent,
-  isDontFragmentComponent,
-  getComponentNameById,
-  getComponentIdByName,
+  relation,
 } from "./entity";
 
 describe("Entity ID System", () => {

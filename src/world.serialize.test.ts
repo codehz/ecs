@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { component, relation, createEntityId, type EntityId } from "./entity";
+import { component, relation, type EntityId } from "./entity";
 import { World } from "./world";
 
 describe("World serialization", () => {

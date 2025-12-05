@@ -1,4 +1,4 @@
-import type { EntityId, RelationId, WildcardRelationId } from "./entity";
+import type { EntityId, WildcardRelationId } from "./entity";
 import {
   getComponentIdFromRelationId,
   getDetailedIdType,

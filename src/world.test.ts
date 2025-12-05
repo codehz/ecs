@@ -1,4 +1,4 @@
-import { describe, expect, it, mock } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { component, createEntityId, relation, type EntityId } from "./entity";
 import { World } from "./world";
 

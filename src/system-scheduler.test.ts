@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { SystemScheduler } from "./system-scheduler";
 import type { System } from "./system";
+import { SystemScheduler } from "./system-scheduler";
 
 describe("SystemScheduler", () => {
   it("should add systems correctly", () => {

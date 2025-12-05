@@ -2,25 +2,25 @@
 
 // Entity ID types and utilities
 export type {
-  EntityId,
   ComponentId,
-  EntityRelationId,
-  ComponentRelationId,
-  WildcardRelationId,
-  RelationId,
   ComponentOptions,
+  ComponentRelationId,
+  EntityId,
+  EntityRelationId,
+  RelationId,
+  WildcardRelationId,
 } from "./entity";
 
 export {
   component,
-  relation,
+  decodeRelationId,
+  getComponentIdByName,
+  getComponentNameById,
   isComponentId,
   isEntityId,
   isRelationId,
   isWildcardRelationId,
-  getComponentIdByName,
-  getComponentNameById,
-  decodeRelationId,
+  relation,
 } from "./entity";
 
 // World class
@@ -34,4 +34,4 @@ export { Query } from "./query";
 export type { System } from "./system";
 
 // Type utilities
-export type { LifecycleHook, ComponentType, ComponentTuple } from "./types";
+export type { ComponentTuple, ComponentType, LifecycleHook } from "./types";

@@ -1,5 +1,3 @@
-import type { World } from "./world";
-
 /**
  * Base System interface
  */

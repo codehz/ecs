@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { component } from "./entity";
 import { ComponentChangeset } from "./changeset";
+import { component } from "./entity";
 
 describe("ComponentChangeset", () => {
   const PositionId = component<{ x: number; y: number }>();
