@@ -24,6 +24,7 @@ describe("testing module", () => {
     it("should spawn entities with fluent API", () => {
       const fixture = new WorldFixture();
       const entity = fixture.spawn().with(PositionId, { x: 10, y: 20 }).build();
+      fixture.sync();
 
       expect(fixture.world.exists(entity)).toBe(true);
       expect(fixture.world.has(entity, PositionId)).toBe(true);
@@ -35,6 +36,7 @@ describe("testing module", () => {
       const entities = fixture.spawnMany(3, (builder, index) =>
         builder.with(PositionId, { x: index * 10, y: index * 20 }),
       );
+      fixture.sync();
 
       expect(entities).toHaveLength(3);
       expect(fixture.world.get(entities[0]!, PositionId)).toEqual({ x: 0, y: 0 });
@@ -56,6 +58,7 @@ describe("testing module", () => {
     it("should track and dispose queries on reset", () => {
       const fixture = new WorldFixture();
       fixture.spawn().with(PositionId, { x: 0, y: 0 }).build();
+      fixture.sync();
 
       const query = fixture.createQuery([PositionId]);
       expect(query.getEntities()).toHaveLength(1);
@@ -67,6 +70,7 @@ describe("testing module", () => {
     it("should support Symbol.dispose", () => {
       const fixture = new WorldFixture();
       fixture.spawn().with(PositionId, { x: 0, y: 0 }).build();
+      fixture.sync();
       const query = fixture.createQuery([PositionId]);
 
       fixture[Symbol.dispose]();
@@ -82,6 +86,7 @@ describe("testing module", () => {
         .with(VelocityId, { x: 3, y: 4 })
         .with(HealthId, { current: 100, max: 100 })
         .build();
+      world.sync();
 
       expect(world.has(entity, PositionId)).toBe(true);
       expect(world.has(entity, VelocityId)).toBe(true);
@@ -91,6 +96,7 @@ describe("testing module", () => {
     it("should support tag components", () => {
       const world = new World();
       const entity = new EntityBuilder(world).withTag(TagId).build();
+      world.sync();
 
       expect(world.has(entity, TagId)).toBe(true);
     });
@@ -98,11 +104,13 @@ describe("testing module", () => {
     it("should support relations", () => {
       const world = new World();
       const parent = new EntityBuilder(world).with(PositionId, { x: 0, y: 0 }).build();
+      // Defer sync until after child is built
 
       const child = new EntityBuilder(world)
         .with(PositionId, { x: 10, y: 10 })
         .withRelation(ParentId, parent, { offset: { x: 5, y: 5 } })
         .build();
+      world.sync();
 
       const parentRelationId = relation(ParentId, parent);
       expect(world.has(child, parentRelationId)).toBe(true);
@@ -116,6 +124,7 @@ describe("testing module", () => {
       world.sync();
 
       const child = new EntityBuilder(world).withRelationTag(ChildOfId, parent).build();
+      world.sync();
 
       const relationId = relation(ChildOfId, parent);
       expect(world.has(child, relationId)).toBe(true);
@@ -123,8 +132,8 @@ describe("testing module", () => {
 
     it("should support deferred build", () => {
       const world = new World();
-      const e1 = new EntityBuilder(world).with(PositionId, { x: 1, y: 1 }).buildDeferred();
-      const e2 = new EntityBuilder(world).with(PositionId, { x: 2, y: 2 }).buildDeferred();
+      const e1 = new EntityBuilder(world).with(PositionId, { x: 1, y: 1 }).build();
+      const e2 = new EntityBuilder(world).with(PositionId, { x: 2, y: 2 }).build();
 
       // Components not yet applied
       expect(world.has(e1, PositionId)).toBe(false);
@@ -142,7 +151,7 @@ describe("testing module", () => {
       it("should return true when entity has component", () => {
         const fixture = new WorldFixture();
         const entity = fixture.spawn().with(PositionId, { x: 0, y: 0 }).build();
-
+        fixture.sync();
         expect(Assertions.hasComponent(fixture.world, entity, PositionId)).toBe(true);
         expect(Assertions.lacksComponent(fixture.world, entity, PositionId)).toBe(false);
       });
@@ -150,7 +159,7 @@ describe("testing module", () => {
       it("should return false when entity lacks component", () => {
         const fixture = new WorldFixture();
         const entity = fixture.spawn().with(PositionId, { x: 0, y: 0 }).build();
-
+        fixture.sync();
         expect(Assertions.hasComponent(fixture.world, entity, VelocityId)).toBe(false);
         expect(Assertions.lacksComponent(fixture.world, entity, VelocityId)).toBe(true);
       });
@@ -170,14 +179,14 @@ describe("testing module", () => {
       it("should return component value", () => {
         const fixture = new WorldFixture();
         const entity = fixture.spawn().with(PositionId, { x: 42, y: 84 }).build();
-
+        fixture.sync();
         expect(Assertions.getComponent(fixture.world, entity, PositionId)).toEqual({ x: 42, y: 84 });
       });
 
       it("should return undefined for missing component", () => {
         const fixture = new WorldFixture();
         const entity = fixture.spawn().build();
-
+        fixture.sync();
         expect(Assertions.getComponent(fixture.world, entity, PositionId)).toBeUndefined();
       });
     });
@@ -186,7 +195,7 @@ describe("testing module", () => {
       it("should return true for existing entity", () => {
         const fixture = new WorldFixture();
         const entity = fixture.spawn().build();
-
+        fixture.sync();
         expect(Assertions.entityExists(fixture.world, entity)).toBe(true);
       });
 
@@ -206,6 +215,7 @@ describe("testing module", () => {
         const e1 = fixture.spawn().with(PositionId, { x: 0, y: 0 }).build();
         const e2 = fixture.spawn().with(PositionId, { x: 1, y: 1 }).build();
         const e3 = fixture.spawn().with(VelocityId, { x: 0, y: 0 }).build();
+        fixture.sync();
 
         const query = fixture.createQuery([PositionId]);
 
@@ -218,6 +228,7 @@ describe("testing module", () => {
         const fixture = new WorldFixture();
         const e1 = fixture.spawn().with(PositionId, { x: 0, y: 0 }).build();
         const e2 = fixture.spawn().with(PositionId, { x: 1, y: 1 }).build();
+        fixture.sync();
 
         const query = fixture.createQuery([PositionId]);
 
@@ -228,7 +239,9 @@ describe("testing module", () => {
       it("should count query entities", () => {
         const fixture = new WorldFixture();
         fixture.spawn().with(PositionId, { x: 0, y: 0 }).build();
+        fixture.sync();
         fixture.spawn().with(PositionId, { x: 1, y: 1 }).build();
+        fixture.sync();
 
         const query = fixture.createQuery([PositionId]);
 
@@ -247,21 +260,21 @@ describe("testing module", () => {
       it("assertHasComponent should not throw for existing component", () => {
         const fixture = new WorldFixture();
         const entity = fixture.spawn().with(PositionId, { x: 0, y: 0 }).build();
-
+        fixture.sync();
         expect(() => Assertions.assertHasComponent(fixture.world, entity, PositionId)).not.toThrow();
       });
 
       it("assertLacksComponent should throw for existing component", () => {
         const fixture = new WorldFixture();
         const entity = fixture.spawn().with(PositionId, { x: 0, y: 0 }).build();
-
+        fixture.sync();
         expect(() => Assertions.assertLacksComponent(fixture.world, entity, PositionId)).toThrow(AssertionError);
       });
 
       it("assertComponentEquals should throw for mismatched value", () => {
         const fixture = new WorldFixture();
         const entity = fixture.spawn().with(PositionId, { x: 1, y: 2 }).build();
-
+        fixture.sync();
         expect(() => Assertions.assertComponentEquals(fixture.world, entity, PositionId, { x: 99, y: 99 })).toThrow(
           AssertionError,
         );
@@ -270,7 +283,7 @@ describe("testing module", () => {
       it("assertComponentEquals should not throw for matching value", () => {
         const fixture = new WorldFixture();
         const entity = fixture.spawn().with(PositionId, { x: 1, y: 2 }).build();
-
+        fixture.sync();
         expect(() => Assertions.assertComponentEquals(fixture.world, entity, PositionId, { x: 1, y: 2 })).not.toThrow();
       });
 
@@ -294,6 +307,7 @@ describe("testing module", () => {
         const fixture = new WorldFixture();
         const e1 = fixture.spawn().with(PositionId, { x: 0, y: 0 }).build();
         const e2 = fixture.spawn().with(VelocityId, { x: 0, y: 0 }).build();
+        fixture.sync();
 
         const query = fixture.createQuery([PositionId]);
 
@@ -304,6 +318,7 @@ describe("testing module", () => {
       it("assertQueryNotContains should throw when entity present", () => {
         const fixture = new WorldFixture();
         const e1 = fixture.spawn().with(PositionId, { x: 0, y: 0 }).build();
+        fixture.sync();
 
         const query = fixture.createQuery([PositionId]);
 
@@ -319,6 +334,7 @@ describe("testing module", () => {
           .spawn()
           .withRelation(ParentId, parent, { offset: { x: 0, y: 0 } })
           .build();
+        fixture.sync();
 
         expect(Assertions.hasRelation(fixture.world, child, ParentId, parent)).toBe(true);
         expect(Assertions.hasRelation(fixture.world, parent, ParentId, child)).toBe(false);
@@ -333,6 +349,7 @@ describe("testing module", () => {
           .withRelation(ParentId, target1, { offset: { x: 1, y: 1 } })
           .withRelation(ParentId, target2, { offset: { x: 2, y: 2 } })
           .build();
+        fixture.sync();
 
         const relations = Assertions.getRelations(fixture.world, entity, ParentId);
         expect(relations).toHaveLength(2);
@@ -344,7 +361,7 @@ describe("testing module", () => {
     it("should capture entity state", () => {
       const fixture = new WorldFixture();
       const entity = fixture.spawn().with(PositionId, { x: 10, y: 20 }).with(VelocityId, { x: 1, y: 2 }).build();
-
+      fixture.sync();
       const snapshot = Snapshot.capture(fixture.world, [entity], [PositionId, VelocityId]);
 
       expect(snapshot.entities).toHaveLength(1);
@@ -357,6 +374,7 @@ describe("testing module", () => {
       const fixture = new WorldFixture();
       const e1 = fixture.spawn().with(PositionId, { x: 1, y: 1 }).build();
       const e2 = fixture.spawn().with(PositionId, { x: 2, y: 2 }).build();
+      fixture.sync();
 
       const snapshot = Snapshot.capture(fixture.world, [e1, e2], [PositionId]);
 
@@ -378,6 +396,7 @@ describe("testing module", () => {
       const before: WorldSnapshot = { entities: [] };
       const fixture = new WorldFixture();
       const entity = fixture.spawn().with(PositionId, { x: 0, y: 0 }).build();
+      fixture.sync();
       const after = Snapshot.capture(fixture.world, [entity], [PositionId]);
 
       const diff = Snapshot.compare(before, after);
@@ -389,6 +408,7 @@ describe("testing module", () => {
     it("should detect removed entities in diff", () => {
       const fixture = new WorldFixture();
       const entity = fixture.spawn().with(PositionId, { x: 0, y: 0 }).build();
+      fixture.sync();
       const before = Snapshot.capture(fixture.world, [entity], [PositionId]);
 
       fixture.world.delete(entity);
@@ -404,7 +424,7 @@ describe("testing module", () => {
     it("should detect component changes in diff", () => {
       const fixture = new WorldFixture();
       const entity = fixture.spawn().with(PositionId, { x: 0, y: 0 }).build();
-
+      fixture.sync();
       const before = Snapshot.capture(fixture.world, [entity], [PositionId]);
 
       // Modify component
@@ -423,7 +443,7 @@ describe("testing module", () => {
     it("should detect added components in diff", () => {
       const fixture = new WorldFixture();
       const entity = fixture.spawn().with(PositionId, { x: 0, y: 0 }).build();
-
+      fixture.sync();
       const before = Snapshot.capture(fixture.world, [entity], [PositionId, VelocityId]);
 
       fixture.world.set(entity, VelocityId, { x: 1, y: 1 });
@@ -440,7 +460,7 @@ describe("testing module", () => {
     it("should detect removed components in diff", () => {
       const fixture = new WorldFixture();
       const entity = fixture.spawn().with(PositionId, { x: 0, y: 0 }).with(VelocityId, { x: 1, y: 1 }).build();
-
+      fixture.sync();
       const before = Snapshot.capture(fixture.world, [entity], [PositionId, VelocityId]);
 
       fixture.world.remove(entity, VelocityId);
@@ -457,7 +477,7 @@ describe("testing module", () => {
     it("should check snapshot equality", () => {
       const fixture = new WorldFixture();
       const entity = fixture.spawn().with(PositionId, { x: 0, y: 0 }).build();
-
+      fixture.sync();
       const snapshot1 = Snapshot.capture(fixture.world, [entity], [PositionId]);
       const snapshot2 = Snapshot.capture(fixture.world, [entity], [PositionId]);
 
@@ -467,7 +487,7 @@ describe("testing module", () => {
     it("should isolate snapshots from mutations", () => {
       const fixture = new WorldFixture();
       const entity = fixture.spawn().with(PositionId, { x: 0, y: 0 }).build();
-
+      fixture.sync();
       const snapshot = Snapshot.capture(fixture.world, [entity], [PositionId]);
 
       // Mutate original component

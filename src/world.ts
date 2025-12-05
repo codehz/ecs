@@ -397,6 +397,29 @@ export class World {
   }
 
   /**
+   * Create an EntityBuilder for convenient entity creation.
+   * @returns EntityBuilder
+   */
+  spawn(): EntityBuilder {
+    return new EntityBuilder(this);
+  }
+
+  /**
+   * Spawn multiple entities using an EntityBuilder configuration callback
+   * @param count number of entities
+   * @param configure builder configuration callback
+   * @returns Created entity IDs
+   */
+  spawnMany(count: number, configure: (builder: EntityBuilder, index: number) => EntityBuilder): EntityId[] {
+    const entities: EntityId[] = [];
+    for (let i = 0; i < count; i++) {
+      const builder = new EntityBuilder(this);
+      entities.push(configure(builder, i).build());
+    }
+    return entities;
+  }
+
+  /**
    * @internal Register a query for archetype update notifications
    */
   _registerQuery(query: Query): void {
@@ -1295,3 +1318,64 @@ export type SerializedComponent = {
   type: number | string | { component: string; target: number | string };
   value: any;
 };
+
+// =============================================================================
+// EntityBuilder - Fluent Entity Creation (moved from testing utilities)
+// =============================================================================
+
+/**
+ * A component definition for entity building, supporting both regular components and relations
+ */
+export type ComponentDef<T = unknown> =
+  | { type: "component"; id: EntityId<T>; value: T }
+  | { type: "relation"; componentId: ComponentId<T>; targetId: EntityId<any>; value: T };
+
+export class EntityBuilder {
+  private world: World;
+  private components: ComponentDef[] = [];
+
+  constructor(world: World) {
+    this.world = world;
+  }
+
+  with<T>(componentId: EntityId<T>, value: T): this {
+    this.components.push({ type: "component", id: componentId, value });
+    return this;
+  }
+
+  withTag(componentId: EntityId<void>): this {
+    this.components.push({ type: "component", id: componentId, value: undefined as void });
+    return this;
+  }
+
+  withRelation<T>(componentId: ComponentId<T>, targetEntity: EntityId<any>, value: T): this {
+    this.components.push({ type: "relation", componentId, targetId: targetEntity, value });
+    return this;
+  }
+
+  withRelationTag(componentId: ComponentId<void>, targetEntity: EntityId<any>): this {
+    this.components.push({ type: "relation", componentId, targetId: targetEntity, value: undefined as void });
+    return this;
+  }
+
+  /**
+   * Create an entity and enqueue components to be applied. This method
+   * does NOT call `world.sync()` automatically; callers must invoke
+   * `world.sync()` to apply deferred commands.
+   * (Previously auto-synced; now a breaking change — buildDeferred() removed.)
+   */
+  build(): EntityId {
+    const entity = this.world.new();
+
+    for (const def of this.components) {
+      if (def.type === "component") {
+        this.world.set(entity, def.id, def.value as any);
+      } else {
+        const relationId = relation(def.componentId, def.targetId);
+        this.world.set(entity, relationId, def.value as any);
+      }
+    }
+
+    return entity;
+  }
+}

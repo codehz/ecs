@@ -24,8 +24,8 @@ export {
 } from "./entity";
 
 // World class
-export { World } from "./world";
-export type { SerializedWorld } from "./world";
+export { EntityBuilder, World } from "./world";
+export type { ComponentDef, SerializedWorld } from "./world";
 
 // Query class
 export { Query } from "./query";

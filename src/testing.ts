@@ -37,6 +37,8 @@ import type { ComponentId, EntityId, WildcardRelationId } from "./entity";
 import { isWildcardRelationId, relation } from "./entity";
 import type { Query } from "./query";
 import { World } from "./world";
+export { EntityBuilder } from "./world";
+export type { ComponentDef } from "./world";
 
 // =============================================================================
 // Types
@@ -45,9 +47,7 @@ import { World } from "./world";
 /**
  * A component definition for entity building, supporting both regular components and relations
  */
-export type ComponentDef<T = unknown> =
-  | { type: "component"; id: EntityId<T>; value: T }
-  | { type: "relation"; componentId: ComponentId<T>; targetId: EntityId<any>; value: T };
+import type { EntityBuilder } from "./world";
 
 /**
  * Snapshot of a single entity's component state
@@ -127,7 +127,7 @@ export class WorldFixture {
    * Create a new EntityBuilder for spawning an entity with components
    */
   spawn(): EntityBuilder {
-    return new EntityBuilder(this._world);
+    return this._world.spawn();
   }
 
   /**
@@ -137,12 +137,7 @@ export class WorldFixture {
    * @returns Array of created entity IDs
    */
   spawnMany(count: number, configure: (builder: EntityBuilder, index: number) => EntityBuilder): EntityId[] {
-    const entities: EntityId[] = [];
-    for (let i = 0; i < count; i++) {
-      const builder = new EntityBuilder(this._world);
-      entities.push(configure(builder, i).build());
-    }
-    return entities;
+    return this._world.spawnMany(count, configure);
   }
 
   /**
@@ -203,16 +198,21 @@ export class WorldFixture {
  * @example
  * ```typescript
  * // Basic usage
+ * // Note: build() will enqueue component commands but will NOT call world.sync().
+ * // You must call world.sync() or fixture.sync() manually to apply commands.
  * const entity = new EntityBuilder(world)
  *   .with(PositionId, { x: 10, y: 20 })
  *   .with(VelocityId, { x: 1, y: 0 })
  *   .build();
+ *   // Apply pending changes
+ *   world.sync();
  *
  * // With relations
  * const child = new EntityBuilder(world)
  *   .with(PositionId, { x: 0, y: 0 })
  *   .withRelation(ParentId, parentEntity, { offset: { x: 5, y: 5 } })
  *   .build();
+ *   world.sync();
  *
  * // Tag component (void type)
  * const tagged = new EntityBuilder(world)
@@ -220,98 +220,7 @@ export class WorldFixture {
  *   .build();
  * ```
  */
-export class EntityBuilder {
-  private world: World;
-  private components: ComponentDef[] = [];
-
-  constructor(world: World) {
-    this.world = world;
-  }
-
-  /**
-   * Add a component to the entity being built
-   * @param componentId The component ID
-   * @param value The component value
-   */
-  with<T>(componentId: EntityId<T>, value: T): this {
-    this.components.push({ type: "component", id: componentId, value });
-    return this;
-  }
-
-  /**
-   * Add a tag component (void type) to the entity being built
-   * @param componentId The component ID (must be void type)
-   */
-  withTag(componentId: EntityId<void>): this {
-    this.components.push({ type: "component", id: componentId, value: undefined as void });
-    return this;
-  }
-
-  /**
-   * Add a relation component targeting another entity
-   * @param componentId The base component ID for the relation
-   * @param targetEntity The target entity
-   * @param value The component value
-   */
-  withRelation<T>(componentId: ComponentId<T>, targetEntity: EntityId<any>, value: T): this {
-    this.components.push({ type: "relation", componentId, targetId: targetEntity, value });
-    return this;
-  }
-
-  /**
-   * Add a relation tag (void type) targeting another entity
-   * @param componentId The base component ID for the relation
-   * @param targetEntity The target entity
-   */
-  withRelationTag(componentId: ComponentId<void>, targetEntity: EntityId<any>): this {
-    this.components.push({
-      type: "relation",
-      componentId,
-      targetId: targetEntity,
-      value: undefined as void,
-    });
-    return this;
-  }
-
-  /**
-   * Build the entity and return its ID.
-   * This creates the entity, sets all components, and calls sync().
-   */
-  build(): EntityId {
-    const entity = this.world.new();
-
-    for (const def of this.components) {
-      if (def.type === "component") {
-        this.world.set(entity, def.id, def.value);
-      } else {
-        const relationId = relation(def.componentId, def.targetId);
-        this.world.set(entity, relationId, def.value);
-      }
-    }
-
-    this.world.sync();
-    return entity;
-  }
-
-  /**
-   * Build the entity without calling sync().
-   * Useful when batching multiple entity creations.
-   */
-  buildDeferred(): EntityId {
-    const entity = this.world.new();
-
-    for (const def of this.components) {
-      if (def.type === "component") {
-        this.world.set(entity, def.id, def.value);
-      } else {
-        const relationId = relation(def.componentId, def.targetId);
-        this.world.set(entity, relationId, def.value);
-      }
-    }
-
-    return entity;
-  }
-}
+// EntityBuilder is exported from world.ts; testing utilities will use world.spawn()
 
 // =============================================================================
 // Assertions - Test Assertion Helpers
