@@ -41,7 +41,7 @@ pkg.version = version;
 // 运行构建
 console.log("🔨 Running build process...");
 await build({
-  entry: "src/index.ts",
+  entry: ["src/index.ts", "src/testing.ts"],
   outDir: "dist",
   dts: true,
   sourcemap: true,
