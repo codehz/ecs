@@ -1,4 +1,4 @@
-import { Archetype } from "./archetype";
+import type { Archetype } from "./archetype";
 import type { EntityId, WildcardRelationId } from "./entity";
 import { getDetailedIdType } from "./entity";
 import { matchesComponentTypes, matchesFilter, type QueryFilter } from "./query-filter";

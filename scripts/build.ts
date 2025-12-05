@@ -15,7 +15,7 @@ export async function build() {
 
   // 使用 Bun.build 构建所有入口点
   console.log("🔨 Building workflow library...");
-  const result = await tsdownBuild({
+  await tsdownBuild({
     entry: entrypoints,
     outDir: "dist",
     dts: true,

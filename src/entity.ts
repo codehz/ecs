@@ -211,7 +211,8 @@ export function getIdType(
         case "wildcard":
           return "wildcard-relation";
       }
-    } catch (error) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    } catch (_error) {
       return "invalid"; // fallback for invalid relation IDs
     }
   }
@@ -274,7 +275,8 @@ export function getDetailedIdType(id: EntityId<any>):
         componentId: decoded.componentId,
         targetId: decoded.targetId as any,
       };
-    } catch (error) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    } catch (_error) {
       // Invalid relation ID
       return { type: "invalid" };
     }
@@ -317,7 +319,8 @@ export function inspectEntityId(id: EntityId<any>): string {
             ? `Component ID (${decoded.targetId})`
             : "Wildcard (*)";
       return `Relation ID: ${componentStr} -> ${targetStr}`;
-    } catch (error) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    } catch (_error) {
       return `Invalid Relation ID (${id})`;
     }
   }

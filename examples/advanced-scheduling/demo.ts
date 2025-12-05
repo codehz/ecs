@@ -17,7 +17,7 @@ const HealthId = component<Health>();
 class InputSystem implements System<[deltaTime: number]> {
   readonly dependencies: readonly System<[deltaTime: number]>[] = [];
 
-  update(deltaTime: number): void {
+  update(_deltaTime: number): void {
     console.log(`[InputSystem] Processing input at ${Date.now()}`);
     // 这里可以处理键盘/鼠标输入等
   }
@@ -54,7 +54,7 @@ class DamageSystem implements System<[deltaTime: number]> {
     this.query = world.createQuery([PositionId, HealthId]);
   }
 
-  update(deltaTime: number): void {
+  update(_deltaTime: number): void {
     console.log(`[DamageSystem] Applying damage based on position`);
 
     this.query.forEach([PositionId, HealthId], (entity, position, health) => {
@@ -76,7 +76,7 @@ class RenderSystem implements System<[deltaTime: number]> {
     this.query = world.createQuery([PositionId]);
   }
 
-  update(deltaTime: number): void {
+  update(_deltaTime: number): void {
     console.log(`[RenderSystem] Rendering entities`);
 
     this.query.forEach([PositionId], (entity, position) => {

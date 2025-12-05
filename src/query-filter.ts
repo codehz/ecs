@@ -1,4 +1,4 @@
-import { Archetype } from "./archetype";
+import type { Archetype } from "./archetype";
 import type { EntityId } from "./entity";
 import { getComponentIdFromRelationId, getDetailedIdType, isRelationId } from "./entity";
 

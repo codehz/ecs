@@ -61,7 +61,7 @@ function performanceTest() {
   let totalTime = 0;
   for (let i = 0; i < iterations; i++) {
     const start = performance.now();
-    const entities = positionVelocityQuery.getEntitiesWithComponents([positionComponent, velocityComponent]);
+    positionVelocityQuery.getEntitiesWithComponents([positionComponent, velocityComponent]);
     const end = performance.now();
     totalTime += end - start;
   }
@@ -71,7 +71,7 @@ function performanceTest() {
   totalTime = 0;
   for (let i = 0; i < iterations; i++) {
     const start = performance.now();
-    positionVelocityQuery.forEach([positionComponent, velocityComponent], (entity, position, velocity) => {
+    positionVelocityQuery.forEach([positionComponent, velocityComponent], (_entity, _position, _velocity) => {
       // 空操作，只是为了测量遍历性能
     });
     const end = performance.now();

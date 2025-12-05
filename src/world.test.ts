@@ -392,7 +392,7 @@ describe("World", () => {
   describe("System Management", () => {
     it("should register systems", () => {
       const world = new World<[deltaTime: number]>();
-      const system = { update: (dt: number) => {} };
+      const system = { update: (_dt: number) => {} };
 
       world.registerSystem(system);
       // Update should not throw
@@ -420,14 +420,14 @@ describe("World", () => {
       const executionOrder: string[] = [];
 
       const systemA = {
-        update: (dt: number) => void executionOrder.push("A"),
+        update: (_dt: number) => void executionOrder.push("A"),
       };
       const systemB = {
-        update: (dt: number) => void executionOrder.push("B"),
+        update: (_dt: number) => void executionOrder.push("B"),
         dependencies: [systemA],
       };
       const systemC = {
-        update: (dt: number) => void executionOrder.push("C"),
+        update: (_dt: number) => void executionOrder.push("C"),
         dependencies: [systemB],
       };
 
@@ -639,10 +639,8 @@ describe("World", () => {
 
   describe("Component Hooks", () => {
     type Position = { x: number; y: number };
-    type Velocity = { x: number; y: number };
 
     const positionComponent = component<Position>();
-    const velocityComponent = component<Velocity>();
 
     it("should trigger component initialized hooks", () => {
       const world = new World();
@@ -850,7 +848,7 @@ describe("World", () => {
 
       // Register a wildcard relation hook for positionComponent
       world.hook(wildcardRelationId, {
-        on_set: (entityId, componentType, component) => {
+        on_set: (entityId, componentType, _component) => {
           addedCalled = true;
           addedComponentType = componentType;
         },
@@ -880,7 +878,6 @@ describe("World", () => {
       const positionComponent = component<{ x: number; y: number }>();
       const velocityComponent = component<{ vx: number; vy: number }>();
       const entity1 = world.new();
-      const entity2 = world.new();
 
       // Create a wildcard relation ID for positionComponent
       const wildcardRelationId = relation(positionComponent, "*");

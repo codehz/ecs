@@ -69,7 +69,7 @@ describe("World serialization", () => {
 
   it("should preserve entity id allocator state across serialization", () => {
     const world = new World();
-    const a = world.new();
+    world.new();
     const b = world.new();
     world.sync();
 

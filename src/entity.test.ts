@@ -288,9 +288,9 @@ describe("EntityIdManager", () => {
 
     it("should reuse IDs from freelist before allocating new ones", () => {
       const manager = new EntityIdManager();
-      const id1 = manager.allocate(); // 1024
+      manager.allocate(); // 1024
       const id2 = manager.allocate(); // 1025
-      const id3 = manager.allocate(); // 1026
+      manager.allocate(); // 1026
 
       manager.deallocate(id2);
       expect(manager.allocate()).toBe(id2); // Should reuse 1025

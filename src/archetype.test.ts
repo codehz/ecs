@@ -115,7 +115,7 @@ describe("Archetype", () => {
     archetype.addEntity(entity2, new Map([[positionComponent, { x: 2, y: 2 }]]));
 
     const iteratedEntities: EntityId[] = [];
-    archetype.forEach((entityId, components) => {
+    archetype.forEach((entityId, _components) => {
       iteratedEntities.push(entityId);
     });
 
@@ -138,7 +138,6 @@ describe("Archetype", () => {
 
   it("should handle wildcard relations in forEachWithComponents", () => {
     // Create a relation component type: position relation from entity to entity
-    const positionRelation = relation(positionComponent, createEntityId(1026)); // Dummy target for type
     const wildcardPositionRelation = relation(positionComponent, "*");
 
     const entity1 = createEntityId(1024);

@@ -322,10 +322,6 @@ describe("Query", () => {
     it("should support mixed queries with components and wildcard relations", () => {
       const world = new World();
 
-      // Create a wildcard relation for position component
-      const wildcardPositionRelation = relation(positionComponent, "*");
-      const query = world.createQuery([velocityComponent, wildcardPositionRelation]);
-
       const entity1 = world.new();
       const entity2 = world.new();
       const entity3 = world.new();
