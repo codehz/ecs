@@ -46,6 +46,7 @@ await build({
   outDir: "dist",
   dts: true,
   sourcemap: true,
+  hash: false,
 });
 
 // 生成 exports
