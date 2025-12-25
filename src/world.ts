@@ -157,13 +157,13 @@ export class World {
    * Create a new entity
    * @returns The ID of the newly created entity
    */
-  new(): EntityId {
+  new<T = void>(): EntityId<T> {
     const entityId = this.entityIdManager.allocate();
     // Create empty archetype for entities with no components
     let emptyArchetype = this.ensureArchetype([]);
     emptyArchetype.addEntity(entityId, new Map());
     this.entityToArchetype.set(entityId, emptyArchetype);
-    return entityId;
+    return entityId as EntityId<T>;
   }
 
   /**

@@ -17,7 +17,7 @@ declare const __entityIdTypeTag: unique symbol;
  * - Entity IDs: 1024+
  * - Relation IDs: negative numbers encoding component and entity associations
  */
-export type EntityId<T = void, U = unknown> = number & {
+export type EntityId<T = unknown, U = unknown> = number & {
   readonly [__componentTypeMarker]: T;
   readonly [__entityIdTypeTag]: U;
 };
