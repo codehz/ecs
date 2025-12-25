@@ -18,6 +18,11 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
 
@@ -32,4 +37,4 @@ jobs:
 
       - name: Publish
         working-directory: dist
-        run: bun publish --access public
+        run: npm publish
