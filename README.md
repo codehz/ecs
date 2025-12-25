@@ -55,7 +55,11 @@ query.forEach([PositionId, VelocityId], (entity, position, velocity) => {
 
 ### 组件生命周期钩子
 
-ECS 支持在组件添加或移除时执行回调函数：
+ECS 支持在组件添加或移除时执行回调函数。钩子回调函数的参数如下：
+
+- `entityId`: 实体的 ID (number)
+- `componentType`: 组件类型 ID (EntityId)
+- `component`: 组件数据值 (T)
 
 ```typescript
 // 注册组件生命周期钩子
@@ -130,14 +134,11 @@ ECS 支持 Exclusive Relations，确保实体对于指定的组件类型最多�
 ```typescript
 import { World, component, relation } from "@codehz/ecs";
 
-// 定义组件ID
-const ChildOf = component(); // 空组件，用于关系
+// 定义组件ID，设置为独占关系
+const ChildOf = component({ exclusive: true }); // 空组件，用于关系
 
 // 创建世界
 const world = new World();
-
-// 设置 ChildOf 为独占关系
-world.setExclusive(ChildOf);
 
 // 创建实体
 const child = world.new();
@@ -173,22 +174,27 @@ bun run examples/simple/demo.ts
 ### World
 
 - `new()`: 创建新实体
+- `spawn()`: 创建 EntityBuilder 用于流式实体创建
+- `spawnMany(count, configure)`: 批量创建多个实体
+- `exists(entity)`: 检查实体是否存在
 - `set(entity, componentId, data)`: 向实体添加组件
 - `get(entity, componentId)`: 获取实体的组件数据（注意：只能获取已设置的组件，使用前请先用 `has()` 检查组件是否存在）
 - `has(entity, componentId)`: 检查实体是否拥有指定组件
-- `delete(entity, componentId)`: 从实体移除组件
-- `setExclusive(componentId)`: 将组件标记为独占关系
-- `createQuery(componentIds)`: 创建查询
+- `remove(entity, componentId)`: 从实体移除组件
+- `delete(entity)`: 销毁实体及其所有组件
+- `query(componentIds)`: 快速查询具有指定组件的实体
+- `createQuery(componentIds)`: 创建可重用的查询对象
 - `hook(componentId, hook)`: 注册组件或通配符关系生命周期钩子
 - `unhook(componentId, hook)`: 注销组件或通配符关系生命周期钩子
+- `serialize()`: 序列化世界状态为快照对象
 - `sync()`: 执行所有延迟命令
 
 ### 序列化（快照）
 
 库提供了对世界状态的「内存快照」序列化接口，用于保存/恢复实体与组件的数据。注意关键点：
 
-- `World.serialize()` 返回一个内存中的快照对象（snapshot），快照会按引用保存组件的实际值；它不会对数据做 JSON.stringify 操作，也不会尝试把组件值转换为可序列化格式。
-- `World.deserialize(snapshot)` 接受由 `World.serialize()` 生成的快照对象并重建世界状态。它期望一个内存对象（非 JSON 字符串）。
+- `world.serialize()` 返回一个内存中的快照对象（snapshot），快照会按引用保存组件的实际值；它不会对数据做 JSON.stringify 操作，也不会尝试把组件值转换为可序列化格式。
+- `new World(snapshot)` 通过构造函数接受由 `world.serialize()` 生成的快照对象并重建世界状态。它期望一个内存对象（非 JSON 字符串）。
 
 为什么采用这种设计？很多情况下组件值可能包含函数、类实例、循环引用或其他无法用 JSON 表示的值。库不对组件值强行进行序列化/字符串化，以避免数据丢失或不可信的自动转换。
 
@@ -199,7 +205,7 @@ bun run examples/simple/demo.ts
 const snapshot = world.serialize();
 
 // 在同一进程内直接恢复
-const restored = World.deserialize(snapshot);
+const restored = new World(snapshot);
 ```
 
 持久化到磁盘或跨进程传输
@@ -220,7 +226,7 @@ const text = JSON.stringify(snapshot);
 
 // 恢复：parse -> deserialize
 const parsed = JSON.parse(text);
-const restored = World.deserialize(parsed);
+const restored = new World(parsed);
 ```
 
 示例：带自定义编码的持久化（伪代码）
@@ -249,7 +255,7 @@ const readySnapshot = {
   })),
 };
 
-const restored = World.deserialize(readySnapshot);
+const restored = new World(readySnapshot);
 ```
 
 注意事项
@@ -264,11 +270,24 @@ const restored = World.deserialize(readySnapshot);
 
 ### Query
 
-- `forEach(componentIds, callback)`: 遍历匹配的实体
+- `forEach(componentIds, callback)`: 遍历匹配的实体，为每个实体调用回调函数
 - `getEntities()`: 获取所有匹配实体的ID列表
-- `getEntitiesWithComponents(componentIds)`: 获取实体及其组件数据
+- `getEntitiesWithComponents(componentIds)`: 获取实体及其组件数据的对象数组
+- `iterate(componentIds)`: 返回一个生成器，用于遍历匹配的实体及其组件数据
+- `getComponentData(componentType)`: 获取指定组件类型的所有匹配实体的数据数组
+- `dispose()`: 释放查询资源，停止接收世界更新通知
 
-## 从 System 迁移到 Pipeline
+### EntityBuilder
+
+EntityBuilder 提供流式 API 用于便捷的实体创建：
+
+- `with(componentId, value)`: 添加组件到构建器
+- `withTag(componentId)`: 添加标记组件（无值）到构建器
+- `withRelation(componentId, targetEntity, value)`: 添加关系组件到构建器
+- `withRelationTag(componentId, targetEntity)`: 添加关系标记（无值）到构建器
+- `build()`: 创建实体并应用所有组件（需要手动调用 `world.sync()`）
+
+### World
 
 从 v0.4.0 开始，本库移除了内置的 `System` 和 `SystemScheduler` 功能。推荐使用 `@codehz/pipeline` 作为替代方案来组织游戏循环逻辑。
 
