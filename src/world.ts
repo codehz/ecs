@@ -1209,20 +1209,6 @@ export class World {
   }
 
   /**
-   * Remove an empty archetype from all internal data structures
-   */
-  private cleanupEmptyArchetype(archetype: Archetype): void {
-    if (archetype.getEntities().length > 0) {
-      return;
-    }
-
-    this.removeArchetypeFromList(archetype);
-    this.removeArchetypeFromSignatureMap(archetype);
-    this.removeArchetypeFromComponentIndex(archetype);
-    this.removeArchetypeFromQueries(archetype);
-  }
-
-  /**
    * Remove archetype from the main archetypes list
    */
   private removeArchetypeFromList(archetype: Archetype): void {

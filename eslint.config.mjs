@@ -43,6 +43,8 @@ export default [
       "no-unused-vars": "off",
       "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
 
+      "@typescript-eslint/no-unused-private-class-members": "error",
+
       // Type-only import enforcement for consistency
       "@typescript-eslint/consistent-type-imports": "error",
 
