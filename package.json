@@ -15,6 +15,9 @@
     "prettier-plugin-organize-imports": "^4.3.0",
     "tsdown": "^0.16.6"
   },
+  "repository": {
+    "url": "https://github.com/codehz/ecs"
+  },
   "scripts": {
     "test": "bun test",
     "demo": "bun run examples/simple/demo.ts",
