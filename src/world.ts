@@ -24,6 +24,107 @@ import { serializeQueryFilter, type QueryFilter } from "./query-filter";
 import type { ComponentTuple, LifecycleHook } from "./types";
 import { getOrCreateWithSideEffect } from "./utils";
 
+// -----------------------------------------------------------------------------
+// Serialization helpers for IDs
+// -----------------------------------------------------------------------------
+
+export type SerializedEntityId = number | string | { component: string; target: number | string | "*" };
+
+/**
+ * Encode an internal EntityId into a SerializedEntityId for snapshots
+ */
+function encodeEntityId(id: EntityId<any>): SerializedEntityId {
+  const detailed = getDetailedIdType(id);
+  switch (detailed.type) {
+    case "component": {
+      const name = getComponentNameById(id as ComponentId);
+      if (!name) {
+        // Warn if component doesn't have a name; keep numeric fallback
+        console.warn(`Component ID ${id} has no registered name, serializing as number`);
+      }
+      return name || (id as number);
+    }
+    case "entity-relation": {
+      const componentName = getComponentNameById(detailed.componentId);
+      if (!componentName) {
+        console.warn(`Component ID ${detailed.componentId} in relation has no registered name`);
+      }
+      return { component: componentName || (detailed.componentId as number).toString(), target: detailed.targetId! };
+    }
+    case "component-relation": {
+      const componentName = getComponentNameById(detailed.componentId);
+      const targetName = getComponentNameById(detailed.targetId! as ComponentId);
+      if (!componentName) {
+        console.warn(`Component ID ${detailed.componentId} in relation has no registered name`);
+      }
+      if (!targetName) {
+        console.warn(`Target component ID ${detailed.targetId} in relation has no registered name`);
+      }
+      return {
+        component: componentName || (detailed.componentId as number).toString(),
+        target: targetName || (detailed.targetId as number),
+      };
+    }
+    case "wildcard-relation": {
+      const componentName = getComponentNameById(detailed.componentId);
+      if (!componentName) {
+        console.warn(`Component ID ${detailed.componentId} in relation has no registered name`);
+      }
+      return { component: componentName || (detailed.componentId as number).toString(), target: "*" };
+    }
+    default:
+      return id as number;
+  }
+}
+
+/**
+ * Decode a SerializedEntityId back into an internal EntityId
+ */
+function decodeSerializedId(sid: SerializedEntityId): EntityId<any> {
+  if (typeof sid === "number") {
+    return sid as EntityId<any>;
+  }
+  if (typeof sid === "string") {
+    const id = getComponentIdByName(sid);
+    if (id === undefined) {
+      const num = parseInt(sid, 10);
+      if (!isNaN(num)) return num as EntityId<any>;
+      throw new Error(`Unknown component name in snapshot: ${sid}`);
+    }
+    return id;
+  }
+  if (typeof sid === "object" && sid !== null && typeof sid.component === "string") {
+    let compId = getComponentIdByName(sid.component);
+    if (compId === undefined) {
+      const num = parseInt(sid.component, 10);
+      if (!isNaN(num)) compId = num as ComponentId;
+    }
+    if (compId === undefined) {
+      throw new Error(`Unknown component name in snapshot: ${sid.component}`);
+    }
+
+    if (sid.target === "*") {
+      return relation(compId, "*");
+    }
+
+    let targetId: EntityId<any>;
+    if (typeof sid.target === "string") {
+      const tid = getComponentIdByName(sid.target);
+      if (tid === undefined) {
+        const num = parseInt(sid.target, 10);
+        if (!isNaN(num)) targetId = num as EntityId<any>;
+        else throw new Error(`Unknown target component name in snapshot: ${sid.target}`);
+      } else {
+        targetId = tid;
+      }
+    } else {
+      targetId = sid.target as EntityId<any>;
+    }
+    return relation(compId, targetId as any);
+  }
+  throw new Error(`Invalid ID in snapshot: ${JSON.stringify(sid)}`);
+}
+
 /**
  * World class for ECS architecture
  * Manages entities and components
@@ -81,47 +182,14 @@ export class World {
       // Restore entities and their components
       if (Array.isArray(snapshot.entities)) {
         for (const entry of snapshot.entities) {
-          const entityId = entry.id as EntityId;
+          const entityId = decodeSerializedId(entry.id);
           const componentsArray: SerializedComponent[] = entry.components || [];
 
           const componentMap = new Map<EntityId<any>, any>();
           const componentTypes: EntityId<any>[] = [];
 
           for (const componentEntry of componentsArray) {
-            const componentTypeRaw = componentEntry.type;
-            let componentType: EntityId<any>;
-
-            if (typeof componentTypeRaw === "number") {
-              componentType = componentTypeRaw as EntityId<any>;
-            } else if (typeof componentTypeRaw === "string") {
-              // Component name lookup
-              const compId = getComponentIdByName(componentTypeRaw);
-              if (compId === undefined) {
-                throw new Error(`Unknown component name in snapshot: ${componentTypeRaw}`);
-              }
-              componentType = compId;
-            } else if (
-              typeof componentTypeRaw === "object" &&
-              componentTypeRaw !== null &&
-              typeof componentTypeRaw.component === "string"
-            ) {
-              // Component name lookup
-              const compId = getComponentIdByName(componentTypeRaw.component);
-              if (compId === undefined) {
-                throw new Error(`Unknown component name in snapshot: ${componentTypeRaw.component}`);
-              }
-              if (typeof componentTypeRaw.target === "string") {
-                const targetCompId = getComponentIdByName(componentTypeRaw.target);
-                if (targetCompId === undefined) {
-                  throw new Error(`Unknown target component name in snapshot: ${componentTypeRaw.target}`);
-                }
-                componentType = relation(compId, targetCompId);
-              } else {
-                componentType = relation(compId, componentTypeRaw.target as EntityId);
-              }
-            } else {
-              throw new Error(`Invalid component type in snapshot: ${JSON.stringify(componentTypeRaw)}`);
-            }
+            const componentType = decodeSerializedId(componentEntry.type);
             componentMap.set(componentType, componentEntry.value);
             componentTypes.push(componentType);
           }
@@ -1264,33 +1332,11 @@ export class World {
       const dumpedEntities = archetype.dump();
       for (const { entity, components } of dumpedEntities) {
         entities.push({
-          id: entity,
-          components: Array.from(components.entries()).map(([rawType, value]) => {
-            const detailedType = getDetailedIdType(rawType);
-            let type: SerializedComponent["type"] = rawType;
-            let componentName;
-            switch (detailedType.type) {
-              case "component":
-                type = getComponentNameById(rawType as ComponentId) || rawType;
-                break;
-              case "entity-relation":
-                componentName = getComponentNameById(detailedType.componentId);
-                if (componentName) {
-                  type = { component: componentName, target: detailedType.targetId! };
-                }
-                break;
-              case "component-relation":
-                componentName = getComponentNameById(detailedType.componentId);
-                if (componentName) {
-                  type = {
-                    component: componentName,
-                    target: getComponentNameById(detailedType.targetId!) || detailedType.targetId!,
-                  };
-                }
-                break;
-            }
-            return { type, value: value === MISSING_COMPONENT ? undefined : value };
-          }),
+          id: encodeEntityId(entity),
+          components: Array.from(components.entries()).map(([rawType, value]) => ({
+            type: encodeEntityId(rawType),
+            value: value === MISSING_COMPONENT ? undefined : value,
+          })),
         });
       }
     }
@@ -1310,12 +1356,12 @@ export type SerializedWorld = {
 };
 
 export type SerializedEntity = {
-  id: number;
+  id: SerializedEntityId;
   components: SerializedComponent[];
 };
 
 export type SerializedComponent = {
-  type: number | string | { component: string; target: number | string };
+  type: SerializedEntityId;
   value: any;
 };
 
