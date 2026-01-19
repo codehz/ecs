@@ -107,7 +107,7 @@ export class Archetype {
     // Add component data for regular components (those in the archetype signature)
     for (const componentType of this.componentTypes) {
       const data = componentData.get(componentType);
-      this.getComponentData(componentType).push(data === undefined ? MISSING_COMPONENT : data);
+      this.getComponentData(componentType).push(!componentData.has(componentType) ? MISSING_COMPONENT : data);
     }
 
     // Add dontFragment relations separately
@@ -316,7 +316,10 @@ export class Archetype {
       // First check if it's in the archetype signature
       if (this.componentTypes.includes(componentType)) {
         const data = this.getComponentData(componentType)[index]!;
-        return data === MISSING_COMPONENT ? (undefined as T) : data;
+        if (data === MISSING_COMPONENT) {
+          throw new Error(`Component type ${componentType} not found for entity ${entityId}`);
+        }
+        return data as T;
       }
 
       // Check dontFragment relations
@@ -327,6 +330,36 @@ export class Archetype {
 
       throw new Error(`Component type ${componentType} not found for entity ${entityId}`);
     }
+  }
+
+  /**
+   * Get optional component data for a specific entity and component type
+   * @param entityId The entity
+   * @param componentType The component type
+   * @returns { value: T } if component exists, undefined otherwise
+   */
+  getOptional<T>(entityId: EntityId, componentType: EntityId<T>): { value: T } | undefined {
+    const index = this.entityToIndex.get(entityId);
+    if (index === undefined) {
+      throw new Error(`Entity ${entityId} is not in this archetype`);
+    }
+
+    // First check if it's in the archetype signature
+    if (this.componentTypes.includes(componentType)) {
+      const data = this.getComponentData(componentType)[index]!;
+      if (data === MISSING_COMPONENT) {
+        return undefined;
+      }
+      return { value: data as T };
+    }
+
+    // Check dontFragment relations
+    const dontFragmentData = this.dontFragmentRelations.get(entityId);
+    if (dontFragmentData && dontFragmentData.has(componentType)) {
+      return { value: dontFragmentData.get(componentType) };
+    }
+
+    return undefined;
   }
 
   /**

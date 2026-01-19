@@ -402,6 +402,25 @@ export class World {
   }
 
   /**
+   * Get optional component data for a specific entity and component type
+   * @param entityId The entity
+   * @param componentType The component type
+   * @returns { value: T } if component exists, undefined otherwise
+   */
+  getOptional<T>(entityId: EntityId, componentType: EntityId<T>): { value: T } | undefined {
+    const archetype = this.entityToArchetype.get(entityId);
+    if (!archetype) {
+      throw new Error(`Entity ${entityId} does not exist`);
+    }
+
+    if (isWildcardRelationId(componentType)) {
+      return undefined;
+    }
+
+    return archetype.getOptional(entityId, componentType);
+  }
+
+  /**
    * Register a lifecycle hook for component or wildcard relation events
    */
   hook<T>(componentType: EntityId<T>, hook: LifecycleHook<T>): void {
