@@ -36,11 +36,18 @@ This is a high-performance Entity Component System (ECS) library built with Type
 
 ### Key Design Patterns
 
-**Component Creation**:
+**Component Creation** (IDs are auto-allocated, see [src/entity.ts](src/entity.ts)):
 
 ```typescript
-const PositionId = component<Position>(1);
-const VelocityId = component<Velocity>(2);
+// Simple component with auto-allocated ID
+const PositionId = component<Position>();
+const VelocityId = component<Velocity>();
+
+// Component with name (for serialization/debugging)
+const HealthId = component<Health>("Health");
+
+// Component with options
+const ChildOf = component({ name: "ChildOf", exclusive: true, cascadeDelete: true });
 ```
 
 **Deferred Operations** (always call `world.sync()` after):
@@ -94,14 +101,82 @@ world.set(entity1, positionRelation, { x: 10, y: 20 });
 
 // Wildcard relation: Listen to all Position relations
 const wildcardPosition = relation(PositionId, "*");
-world.registerLifecycleHook(wildcardPosition, { onAdded: callback });
+world.hook(wildcardPosition, {
+  on_set: (entityId, componentType, component) => {
+    /* ... */
+  },
+  on_remove: (entityId, componentType, component) => {
+    /* ... */
+  },
+});
 ```
 
 ### Component ID Constraints
 
-- Component IDs: 1-1023 (allocated via `component<T>(id)`)
-- Entity IDs: 1024+ (auto-generated)
-- Relation IDs: Negative encoded values (created via `relation()`)
+See [src/entity.ts](src/entity.ts) and [README.md](README.md) for details:
+
+- Component IDs: 1-1023 (auto-allocated via `component<T>()` or `component(options)`, max 1022 components)
+- Entity IDs: 1024+ (auto-generated via `world.new()`)
+- Relation IDs: Negative encoded values (created via `relation(componentId, targetId)`)
+
+### 重要警告：get() 方法使用须知
+
+参见 [src/world.ts](src/world.ts) 第 376-400 行：
+
+- **调用 `get()` 前必须确认组件存在**：若实体没有该组件，`get()` 会抛出异常
+- **`undefined` 是有效的组件值**：不能用返回值判断组件是否存在
+- **推荐做法**：使用 `has()` 检查，或使用 `getOptional()` 返回 `{ value: T } | undefined`
+
+```typescript
+// ❌ 错误用法：直接 get() 可能抛异常
+const pos = world.get(entity, PositionId); // 若无 PositionId 则报错
+
+// ✅ 正确用法：先检查，再获取
+if (world.has(entity, PositionId)) {
+  const pos = world.get(entity, PositionId);
+}
+
+// ✅ 或使用 getOptional
+const result = world.getOptional(entity, PositionId);
+if (result) {
+  const pos = result.value;
+}
+```
+
+### 序列化与快照
+
+参见 [src/world.ts](src/world.ts) 第 1333-1353 行：
+
+- **导出快照**：`world.serialize()` 返回内存结构（非 JSON 字符串）
+- **恢复世界**：`new World(snapshot)` 从快照创建新实例
+- **注意**：组件必须有名称（`component<T>("Name")`）才能正确序列化
+
+```typescript
+// 保存快照
+const snapshot = world.serialize();
+const json = JSON.stringify(snapshot); // 自行转换为 JSON 字符串
+
+// 恢复快照
+const restored = new World(JSON.parse(json));
+```
+
+### EntityBuilder / 流式创建
+
+参见 [src/world.ts](src/world.ts) 第 1384-1433 行：
+
+- **流式 API**：`world.spawn().with(...).build()` 链式创建实体
+- **同步要求**：`build()` 只入队命令，必须调用 `world.sync()` 才能生效
+
+```typescript
+const entity = world
+  .spawn()
+  .with(PositionId, { x: 0, y: 0 })
+  .with(VelocityId, { x: 1, y: 0 })
+  .withRelation(ChildOf, parentEntity, {})
+  .build();
+
+world.sync(); // 必须调用才能应用组件
+```
 
 ### Memory Optimization
 
@@ -133,15 +208,14 @@ world.registerLifecycleHook(wildcardPosition, { onAdded: callback });
 
 ### Build System
 
-- **Primary Build**: `scripts/build.ts` uses `Bun.build()` for bundling
-- **Type Generation**: `tsconfig.build.json` generates `.d.ts` files only
-- **Release Process**: `scripts/release.ts` handles versioning and packaging
+- **Primary Build**: [scripts/build.ts](scripts/build.ts) uses `tsdown` for bundling and type generation
+- **Release Process**: [scripts/release.ts](scripts/release.ts) handles versioning and packaging
 
 ### Development Tools
 
+- **Linting**: ESLint with TypeScript parser (`@typescript-eslint/eslint-plugin`)
 - **Formatting**: Prettier with lint-staged (auto-formats on commit)
 - **Git Hooks**: Husky manages pre-commit validation
-- **Type Validation**: Typia transform plugin for runtime type checking
 
 ## Key Files Reference
 
@@ -152,5 +226,16 @@ world.registerLifecycleHook(wildcardPosition, { onAdded: callback });
 - `src/command-buffer.ts`: Deferred execution for structural changes
 - `examples/simple/demo.ts`: Basic usage example with pipeline-based game loop
 - `examples/advanced-scheduling/demo.ts`: Advanced pipeline scheduling example
-- `tsconfig.json`: Modern TypeScript config with bundler mode
+- `tsconfig.json`: Modern TypeScript config with bundler mode (no emit, type checking only)
+- `eslint.config.mjs`: ESLint flat config with TypeScript and Prettier integration
 - `package.json`: Library configuration with Bun-specific settings
+
+## 注意事项
+
+在为此项目编写或修改代码时，**请避免**以下行为：
+
+- **不要硬编码敏感信息**：如 API 密钥、密码、令牌等，应使用环境变量
+- **不要修改生产配置**：如 `package.json` 的 `name`/`version` 字段，除非明确要求
+- **不要删除或重命名公共 API**：如 `World`、`component`、`relation` 等导出，避免破坏兼容性
+- **不要跳过类型检查**：禁止使用 `@ts-ignore` 或 `any` 来绕过 TypeScript 错误
+- **不要在测试中使用真实外部服务**：测试应保持独立、可重复运行
