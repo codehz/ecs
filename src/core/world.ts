@@ -521,10 +521,7 @@ export class World {
       if (isWildcardRelationId(componentType)) {
         const componentId = getComponentIdFromRelationId(componentType);
         if (componentId !== undefined) {
-          wildcardRelations.push({
-            componentId,
-            relationId: componentType,
-          });
+          wildcardRelations.push({ componentId, relationId: componentType });
         }
       } else {
         regularComponents.push(componentType);
@@ -532,66 +529,41 @@ export class World {
     }
 
     // Get archetypes for regular components
-    let matchingArchetypes: Archetype[] = [];
-
-    if (regularComponents.length > 0) {
-      const sortedRegularTypes = [...regularComponents].sort((a, b) => a - b);
-
-      if (sortedRegularTypes.length === 1) {
-        const componentType = sortedRegularTypes[0]!;
-        matchingArchetypes = this.archetypesByComponent.get(componentType) || [];
-      } else {
-        // Multi-component query - find intersection of archetypes
-        const archetypeLists = sortedRegularTypes.map((type) => this.archetypesByComponent.get(type) || []);
-        const firstList = archetypeLists[0] || [];
-        const intersection = new Set<Archetype>();
-
-        // Find archetypes that contain all required components
-        for (const archetype of firstList) {
-          let hasAllComponents = true;
-          for (let listIndex = 1; listIndex < archetypeLists.length; listIndex++) {
-            const otherList = archetypeLists[listIndex]!;
-            if (!otherList.includes(archetype)) {
-              hasAllComponents = false;
-              break;
-            }
-          }
-          if (hasAllComponents) {
-            intersection.add(archetype);
-          }
-        }
-
-        matchingArchetypes = Array.from(intersection);
-      }
-    } else {
-      // No regular components, start with all archetypes
-      matchingArchetypes = [...this.archetypes];
-    }
+    let matchingArchetypes = this.getArchetypesWithComponents(regularComponents);
 
     // Filter by wildcard relations
-    for (const wildcard of wildcardRelations) {
-      // For dontFragment components, check if wildcard marker is in archetypesByComponent
-      if (isDontFragmentComponent(wildcard.componentId)) {
-        // Use the wildcard marker for efficient lookup
-        const archetypesWithMarker = this.archetypesByComponent.get(wildcard.relationId) || [];
-
-        if (matchingArchetypes.length === 0) {
-          // No regular components, use all archetypes with the wildcard marker
-          matchingArchetypes = archetypesWithMarker;
-        } else {
-          // Filter to only include archetypes that have the wildcard marker
-          matchingArchetypes = matchingArchetypes.filter((archetype) => archetypesWithMarker.includes(archetype));
-        }
+    for (const { componentId, relationId } of wildcardRelations) {
+      if (isDontFragmentComponent(componentId)) {
+        const archetypesWithMarker = this.archetypesByComponent.get(relationId) || [];
+        matchingArchetypes =
+          matchingArchetypes.length === 0
+            ? archetypesWithMarker
+            : matchingArchetypes.filter((a) => archetypesWithMarker.includes(a));
       } else {
-        // For regular (non-dontFragment) relations, fall back to entity-level checking
-        // This is necessary because non-dontFragment relations are in the archetype signature
-        matchingArchetypes = matchingArchetypes.filter((archetype) =>
-          archetype.hasRelationWithComponentId(wildcard.componentId),
-        );
+        matchingArchetypes = matchingArchetypes.filter((a) => a.hasRelationWithComponentId(componentId));
       }
     }
 
     return matchingArchetypes;
+  }
+
+  /**
+   * Get archetypes containing all specified regular components
+   */
+  private getArchetypesWithComponents(componentTypes: EntityId<any>[]): Archetype[] {
+    if (componentTypes.length === 0) {
+      return [...this.archetypes];
+    }
+
+    if (componentTypes.length === 1) {
+      return this.archetypesByComponent.get(componentTypes[0]!) || [];
+    }
+
+    // Multi-component query - find intersection of archetypes
+    const archetypeLists = componentTypes.map((type) => this.archetypesByComponent.get(type) || []);
+    const firstList = archetypeLists[0]!;
+
+    return firstList.filter((archetype) => archetypeLists.slice(1).every((list) => list.includes(archetype)));
   }
 
   /**
@@ -729,29 +701,35 @@ export class World {
     baseComponentId: ComponentId<any>,
     changeset: ComponentChangeset,
   ): void {
+    this.removeMatchingRelations(entityId, currentArchetype, baseComponentId, changeset);
+  }
+
+  /**
+   * Remove all relations matching a specific component ID from both archetype and entity data
+   */
+  private removeMatchingRelations(
+    entityId: EntityId,
+    archetype: Archetype,
+    baseComponentId: ComponentId<any>,
+    changeset: ComponentChangeset,
+  ): void {
     // Check archetype components
-    for (const componentType of currentArchetype.componentTypes) {
-      if (this.isRelationWithComponent(componentType, baseComponentId)) {
+    for (const componentType of archetype.componentTypes) {
+      if (getComponentIdFromRelationId(componentType) === baseComponentId) {
         changeset.delete(componentType);
       }
     }
 
-    // Check dontFragment relations
-    const entityData = currentArchetype.getEntity(entityId);
+    // Check dontFragment relations stored on entity
+    const entityData = archetype.getEntity(entityId);
     if (entityData) {
       for (const [componentType] of entityData) {
-        if (currentArchetype.componentTypes.includes(componentType)) continue;
-        if (this.isRelationWithComponent(componentType, baseComponentId)) {
+        if (archetype.componentTypes.includes(componentType)) continue;
+        if (getComponentIdFromRelationId(componentType) === baseComponentId) {
           changeset.delete(componentType);
         }
       }
     }
-  }
-
-  private isRelationWithComponent(componentType: EntityId<any>, baseComponentId: ComponentId<any>): boolean {
-    const componentId = getComponentIdFromRelationId(componentType);
-    // componentId is defined only for relations (negative IDs), and excludes wildcards by matching baseComponentId
-    return componentId === baseComponentId;
   }
 
   /**
@@ -769,34 +747,43 @@ export class World {
       this.removeWildcardRelations(entityId, currentArchetype, componentId, changeset);
     } else {
       changeset.delete(componentType);
+      this.maybeRemoveWildcardMarker(entityId, currentArchetype, componentType, componentId, changeset);
+    }
+  }
 
-      // If removing a dontFragment relation, check if we should remove the wildcard marker
-      if (componentId !== undefined && isDontFragmentComponent(componentId)) {
-        // Check if there are any other dontFragment relations with the same component ID
-        const wildcardMarker = relation(componentId, "*");
-        const entityData = currentArchetype.getEntity(entityId);
-        let hasOtherRelations = false;
+  /**
+   * Check if wildcard marker should be removed when removing a dontFragment relation
+   */
+  private maybeRemoveWildcardMarker(
+    entityId: EntityId,
+    archetype: Archetype,
+    removedComponentType: EntityId<any>,
+    componentId: ComponentId<any> | undefined,
+    changeset: ComponentChangeset,
+  ): void {
+    if (componentId === undefined || !isDontFragmentComponent(componentId)) {
+      return;
+    }
 
-        if (entityData) {
-          for (const [otherComponentType] of entityData) {
-            if (otherComponentType === componentType) continue; // Skip the one being removed
-            if (otherComponentType === wildcardMarker) continue; // Skip wildcard marker itself
-            if (changeset.removes.has(otherComponentType)) continue; // Skip if also being removed
+    const wildcardMarker = relation(componentId, "*");
+    const entityData = archetype.getEntity(entityId);
+    if (!entityData) {
+      changeset.delete(wildcardMarker);
+      return;
+    }
 
-            const otherComponentId = getComponentIdFromRelationId(otherComponentType);
-            if (otherComponentId === componentId) {
-              hasOtherRelations = true;
-              break;
-            }
-          }
-        }
+    // Check if there are any other relations with the same component ID
+    for (const [otherComponentType] of entityData) {
+      if (otherComponentType === removedComponentType) continue;
+      if (otherComponentType === wildcardMarker) continue;
+      if (changeset.removes.has(otherComponentType)) continue;
 
-        // If no other relations exist, remove the wildcard marker
-        if (!hasOtherRelations) {
-          changeset.delete(wildcardMarker);
-        }
+      if (getComponentIdFromRelationId(otherComponentType) === componentId) {
+        return; // Found another relation, keep the marker
       }
     }
+
+    changeset.delete(wildcardMarker);
   }
 
   /**
@@ -808,28 +795,11 @@ export class World {
     baseComponentId: ComponentId<any>,
     changeset: ComponentChangeset,
   ): void {
-    // Check archetype components
-    for (const componentType of currentArchetype.componentTypes) {
-      if (this.isRelationWithComponent(componentType, baseComponentId)) {
-        changeset.delete(componentType);
-      }
-    }
-
-    // Check dontFragment relations
-    const entityData = currentArchetype.getEntity(entityId);
-    if (entityData) {
-      for (const [componentType] of entityData) {
-        if (currentArchetype.componentTypes.includes(componentType)) continue;
-        if (this.isRelationWithComponent(componentType, baseComponentId)) {
-          changeset.delete(componentType);
-        }
-      }
-    }
+    this.removeMatchingRelations(entityId, currentArchetype, baseComponentId, changeset);
 
     // If removing dontFragment relations, also remove the wildcard marker
     if (isDontFragmentComponent(baseComponentId)) {
-      const wildcardMarker = relation(baseComponentId, "*");
-      changeset.delete(wildcardMarker);
+      changeset.delete(relation(baseComponentId, "*"));
     }
   }
 
@@ -841,46 +811,19 @@ export class World {
     const sourceArchetype = this.entityToArchetype.get(entityId);
     if (!sourceArchetype) return;
 
-    // Build changeset for removing this component
     const changeset = new ComponentChangeset();
-    const componentId = getComponentIdFromRelationId(componentType);
-
     changeset.delete(componentType);
+    this.maybeRemoveWildcardMarker(
+      entityId,
+      sourceArchetype,
+      componentType,
+      getComponentIdFromRelationId(componentType),
+      changeset,
+    );
 
-    // If removing a dontFragment relation, check if we should remove the wildcard marker
-    if (componentId !== undefined && isDontFragmentComponent(componentId)) {
-      const wildcardMarker = relation(componentId, "*");
-      const entityData = sourceArchetype.getEntity(entityId);
-      let hasOtherRelations = false;
-
-      if (entityData) {
-        for (const [otherComponentType] of entityData) {
-          if (otherComponentType === componentType) continue;
-          // Skip wildcard marker itself
-          if (otherComponentType === wildcardMarker) continue;
-          const otherComponentId = getComponentIdFromRelationId(otherComponentType);
-          if (otherComponentId === componentId) {
-            hasOtherRelations = true;
-            break;
-          }
-        }
-      }
-
-      if (!hasOtherRelations) {
-        changeset.delete(wildcardMarker);
-      }
-    }
-
-    // Get removed component value before applying changeset
     const removedComponent = sourceArchetype.get(entityId, componentType);
-
-    // Apply changeset using existing logic
     this.applyChangeset(entityId, sourceArchetype, changeset);
-
-    // Remove from component reverse index
     this.untrackEntityReference(entityId, componentType, targetEntityId);
-
-    // Trigger component removed hooks
     this.triggerLifecycleHooks(entityId, new Map(), new Map([[componentType, removedComponent]]));
   }
 
@@ -1160,18 +1103,9 @@ export class World {
    * (via entity-relation targeting the entity, or using entity as component type)
    */
   private archetypeReferencesEntity(archetype: Archetype, entityId: EntityId): boolean {
-    for (const componentType of archetype.componentTypes) {
-      if (componentType === entityId) {
-        return true;
-      }
-      if (isEntityRelation(componentType)) {
-        const targetId = getTargetIdFromRelationId(componentType);
-        if (targetId === entityId) {
-          return true;
-        }
-      }
-    }
-    return false;
+    return archetype.componentTypes.some(
+      (ct) => ct === entityId || (isEntityRelation(ct) && getTargetIdFromRelationId(ct) === entityId),
+    );
   }
 
   /**
@@ -1182,36 +1116,25 @@ export class World {
     for (let i = this.archetypes.length - 1; i >= 0; i--) {
       const archetype = this.archetypes[i]!;
       if (archetype.getEntities().length === 0 && this.archetypeReferencesEntity(archetype, entityId)) {
-        this.removeArchetypeFromList(archetype);
-        this.removeArchetypeFromSignatureMap(archetype);
-        this.removeArchetypeFromComponentIndex(archetype);
-        this.removeArchetypeFromQueries(archetype);
+        this.removeArchetype(archetype);
       }
     }
   }
 
   /**
-   * Remove archetype from the main archetypes list
+   * Remove archetype from all tracking structures
    */
-  private removeArchetypeFromList(archetype: Archetype): void {
+  private removeArchetype(archetype: Archetype): void {
+    // Remove from main list
     const index = this.archetypes.indexOf(archetype);
     if (index !== -1) {
       this.archetypes.splice(index, 1);
     }
-  }
 
-  /**
-   * Remove archetype from the signature-to-archetype map
-   */
-  private removeArchetypeFromSignatureMap(archetype: Archetype): void {
-    const hashKey = this.createArchetypeSignature(archetype.componentTypes);
-    this.archetypeBySignature.delete(hashKey);
-  }
+    // Remove from signature map
+    this.archetypeBySignature.delete(this.createArchetypeSignature(archetype.componentTypes));
 
-  /**
-   * Remove archetype from the component-to-archetypes index
-   */
-  private removeArchetypeFromComponentIndex(archetype: Archetype): void {
+    // Remove from component index
     for (const componentType of archetype.componentTypes) {
       const archetypes = this.archetypesByComponent.get(componentType);
       if (archetypes) {
@@ -1224,12 +1147,8 @@ export class World {
         }
       }
     }
-  }
 
-  /**
-   * Remove archetype from all queries
-   */
-  private removeArchetypeFromQueries(archetype: Archetype): void {
+    // Remove from queries
     for (const query of this.queries) {
       query.removeArchetype(archetype);
     }
@@ -1243,52 +1162,39 @@ export class World {
     addedComponents: Map<EntityId<any>, any>,
     removedComponents: Map<EntityId<any>, any>,
   ): void {
-    // Trigger component added hooks
-    for (const [componentType, component] of addedComponents) {
+    this.invokeHooksForComponents(entityId, addedComponents, "on_set");
+    this.invokeHooksForComponents(entityId, removedComponents, "on_remove");
+    this.triggerMultiComponentHooks(entityId, addedComponents, removedComponents);
+  }
+
+  /**
+   * Invoke lifecycle hooks for a set of components
+   */
+  private invokeHooksForComponents(
+    entityId: EntityId,
+    components: Map<EntityId<any>, any>,
+    hookType: "on_set" | "on_remove",
+  ): void {
+    for (const [componentType, component] of components) {
       // Trigger direct component hooks
       const directHooks = this.hooks.get(componentType);
       if (directHooks) {
-        for (const lifecycleHook of directHooks) {
-          lifecycleHook.on_set?.(entityId, componentType, component);
+        for (const hook of directHooks) {
+          hook[hookType]?.(entityId, componentType, component);
         }
       }
 
+      // Trigger wildcard relation hooks
       const componentId = getComponentIdFromRelationId(componentType);
       if (componentId !== undefined) {
-        const wildcardRelationId = relation(componentId, "*");
-        const wildcardHooks = this.hooks.get(wildcardRelationId);
-        if (wildcardHooks) {
-          for (const lifecycleHook of wildcardHooks) {
-            lifecycleHook.on_set?.(entityId, componentType, component);
-          }
-        }
-      }
-    }
-
-    // Trigger component removed hooks
-    for (const [componentType, component] of removedComponents) {
-      // Trigger direct component hooks
-      const directHooks = this.hooks.get(componentType);
-      if (directHooks) {
-        for (const lifecycleHook of directHooks) {
-          lifecycleHook.on_remove?.(entityId, componentType, component);
-        }
-      }
-
-      const componentId = getComponentIdFromRelationId(componentType);
-      if (componentId !== undefined) {
-        const wildcardRelationId = relation(componentId, "*");
-        const wildcardHooks = this.hooks.get(wildcardRelationId);
+        const wildcardHooks = this.hooks.get(relation(componentId, "*"));
         if (wildcardHooks) {
           for (const hook of wildcardHooks) {
-            hook.on_remove?.(entityId, componentType, component);
+            hook[hookType]?.(entityId, componentType, component);
           }
         }
       }
     }
-
-    // Trigger multi-component hooks
-    this.triggerMultiComponentHooks(entityId, addedComponents, removedComponents);
   }
 
   /**
@@ -1299,45 +1205,26 @@ export class World {
     addedComponents: Map<EntityId<any>, any>,
     removedComponents: Map<EntityId<any>, any>,
   ): void {
-    for (const entry of this.multiHooks) {
-      const { componentTypes, requiredComponents, hook } = entry;
-
-      // Check if any of the required components were added
-      let anyRequiredAdded = false;
-      for (const reqComp of requiredComponents) {
-        if (addedComponents.has(reqComp)) {
-          anyRequiredAdded = true;
-          break;
-        }
-      }
-
-      // Check if any of the required components were removed
-      let anyRequiredRemoved = false;
-      for (const reqComp of requiredComponents) {
-        if (removedComponents.has(reqComp)) {
-          anyRequiredRemoved = true;
-          break;
-        }
-      }
+    for (const { componentTypes, requiredComponents, hook } of this.multiHooks) {
+      const anyRequiredAdded = requiredComponents.some((c) => addedComponents.has(c));
+      const anyRequiredRemoved = requiredComponents.some((c) => removedComponents.has(c));
 
       // Handle on_set: trigger if any required component was added and entity has all required components now
-      if (anyRequiredAdded && hook.on_set) {
-        const hasAllRequired = this.entityHasAllComponents(entityId, requiredComponents);
-        if (hasAllRequired) {
-          const components = this.collectMultiHookComponents(entityId, componentTypes);
-          hook.on_set(entityId, componentTypes, components);
-        }
+      if (anyRequiredAdded && hook.on_set && this.entityHasAllComponents(entityId, requiredComponents)) {
+        hook.on_set(entityId, componentTypes, this.collectMultiHookComponents(entityId, componentTypes));
       }
 
-      // Handle on_remove: trigger if any required component was removed and entity had all required components before removal
-      if (anyRequiredRemoved && hook.on_remove) {
-        // Check if entity had all required components before removal
-        const hadAllRequiredBefore = this.entityHadAllComponentsBefore(entityId, requiredComponents, removedComponents);
-        if (hadAllRequiredBefore) {
-          // Collect components snapshot from before removal
-          const components = this.collectMultiHookComponentsWithRemoved(entityId, componentTypes, removedComponents);
-          hook.on_remove(entityId, componentTypes, components);
-        }
+      // Handle on_remove: trigger if any required component was removed and entity had all required components before
+      if (
+        anyRequiredRemoved &&
+        hook.on_remove &&
+        this.entityHadAllComponentsBefore(entityId, requiredComponents, removedComponents)
+      ) {
+        hook.on_remove(
+          entityId,
+          componentTypes,
+          this.collectMultiHookComponentsWithRemoved(entityId, componentTypes, removedComponents),
+        );
       }
     }
   }
@@ -1346,12 +1233,7 @@ export class World {
    * Check if entity currently has all required components
    */
   private entityHasAllComponents(entityId: EntityId, requiredComponents: EntityId<any>[]): boolean {
-    for (const reqComp of requiredComponents) {
-      if (!this.has(entityId, reqComp)) {
-        return false;
-      }
-    }
-    return true;
+    return requiredComponents.every((c) => this.has(entityId, c));
   }
 
   /**
@@ -1362,31 +1244,16 @@ export class World {
     requiredComponents: EntityId<any>[],
     removedComponents: Map<EntityId<any>, any>,
   ): boolean {
-    for (const reqComp of requiredComponents) {
-      // Component was either present before (and now removed) or still present
-      const wasRemoved = removedComponents.has(reqComp);
-      const stillHas = this.has(entityId, reqComp);
-      if (!wasRemoved && !stillHas) {
-        return false;
-      }
-    }
-    return true;
+    return requiredComponents.every((c) => removedComponents.has(c) || this.has(entityId, c));
   }
 
   /**
    * Collect component values for multi-component hook (current state)
    */
   private collectMultiHookComponents(entityId: EntityId, componentTypes: readonly ComponentType<any>[]): any[] {
-    const result: any[] = [];
-    for (const ct of componentTypes) {
-      if (isOptionalEntityId(ct)) {
-        const optionalId = ct.optional;
-        result.push(this.getOptional(entityId, optionalId));
-      } else {
-        result.push(this.get(entityId, ct as EntityId<any>));
-      }
-    }
-    return result;
+    return componentTypes.map((ct) =>
+      isOptionalEntityId(ct) ? this.getOptional(entityId, ct.optional) : this.get(entityId, ct as EntityId<any>),
+    );
   }
 
   /**
@@ -1397,25 +1264,16 @@ export class World {
     componentTypes: readonly ComponentType<any>[],
     removedComponents: Map<EntityId<any>, any>,
   ): any[] {
-    const result: any[] = [];
-    for (const ct of componentTypes) {
+    return componentTypes.map((ct) => {
       if (isOptionalEntityId(ct)) {
         const optionalId = ct.optional;
-        if (removedComponents.has(optionalId)) {
-          result.push({ value: removedComponents.get(optionalId) });
-        } else {
-          result.push(this.getOptional(entityId, optionalId));
-        }
-      } else {
-        const compId = ct as EntityId<any>;
-        if (removedComponents.has(compId)) {
-          result.push(removedComponents.get(compId));
-        } else {
-          result.push(this.get(entityId, compId));
-        }
+        return removedComponents.has(optionalId)
+          ? { value: removedComponents.get(optionalId) }
+          : this.getOptional(entityId, optionalId);
       }
-    }
-    return result;
+      const compId = ct as EntityId<any>;
+      return removedComponents.has(compId) ? removedComponents.get(compId) : this.get(entityId, compId);
+    });
   }
 
   /**
