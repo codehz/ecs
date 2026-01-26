@@ -14,11 +14,17 @@ export class Query {
   private filter: QueryFilter;
   private cachedArchetypes: Archetype[] = [];
   private isDisposed = false;
+  /** Cached wildcard component types for faster entity filtering */
+  private wildcardTypes: WildcardRelationId<any>[];
 
   constructor(world: World, componentTypes: EntityId<any>[], filter: QueryFilter = {}) {
     this.world = world;
     this.componentTypes = [...componentTypes].sort((a, b) => a - b);
     this.filter = filter;
+    // Pre-compute wildcard types once
+    this.wildcardTypes = this.componentTypes.filter(
+      (ct) => getDetailedIdType(ct).type === "wildcard-relation",
+    ) as WildcardRelationId<any>[];
     this.updateCache();
     // Register with world for archetype updates
     world._registerQuery(this);
@@ -38,46 +44,41 @@ export class Query {
    */
   getEntities(): EntityId[] {
     this.ensureNotDisposed();
-    const result: EntityId[] = [];
 
-    // Check if any component types are wildcard relations
-    const hasWildcardRelations = this.componentTypes.some((ct) => {
-      const detailed = getDetailedIdType(ct);
-      return detailed.type === "wildcard-relation";
-    });
-
-    // If there are wildcard relations, we need to filter entities that actually have them
-    // This is necessary for dontFragment components where an archetype can contain entities
-    // with and without the relation
-    if (hasWildcardRelations) {
-      for (const archetype of this.cachedArchetypes) {
-        for (const entity of archetype.getEntities()) {
-          // Check if entity has all required wildcard relations
-          let hasAllRelations = true;
-          for (const componentType of this.componentTypes) {
-            const detailed = getDetailedIdType(componentType);
-            if (detailed.type === "wildcard-relation") {
-              // Check if entity has at least one relation matching this wildcard
-              const relations = archetype.get(entity, componentType as WildcardRelationId<any>);
-              if (!relations || relations.length === 0) {
-                hasAllRelations = false;
-                break;
-              }
-            }
-          }
-          if (hasAllRelations) {
-            result.push(entity);
-          }
-        }
-      }
-    } else {
-      // No wildcard relations, can just return all entities from matching archetypes
+    // Fast path: no wildcard relations
+    if (this.wildcardTypes.length === 0) {
+      const result: EntityId[] = [];
       for (const archetype of this.cachedArchetypes) {
         result.push(...archetype.getEntities());
       }
+      return result;
     }
 
+    // Slow path: need to filter entities that actually have wildcard relations
+    // This is necessary for dontFragment components where an archetype can contain
+    // entities with and without the relation
+    const result: EntityId[] = [];
+    for (const archetype of this.cachedArchetypes) {
+      for (const entity of archetype.getEntities()) {
+        if (this.entityHasAllWildcards(archetype, entity)) {
+          result.push(entity);
+        }
+      }
+    }
     return result;
+  }
+
+  /**
+   * Check if entity has all required wildcard relations
+   */
+  private entityHasAllWildcards(archetype: Archetype, entity: EntityId): boolean {
+    for (const wildcardType of this.wildcardTypes) {
+      const relations = archetype.get(entity, wildcardType);
+      if (!relations || relations.length === 0) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**
@@ -188,9 +189,6 @@ export class Query {
     }
   }
 
-  /**
-   * Dispose the query and disconnect from world
-   */
   /**
    * Request disposal of this query.
    * This will decrement the world's reference count for the query.
