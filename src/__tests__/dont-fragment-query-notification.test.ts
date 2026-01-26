@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { component, relation } from "./entity";
-import { World } from "./world";
+import { component, relation } from "../entity";
+import { World } from "../world";
 
 describe("DontFragment Query Notification Issue", () => {
   it("should notify queries when new archetypes with dontFragment relations are created", () => {

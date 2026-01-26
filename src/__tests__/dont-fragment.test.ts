@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { component, relation, type EntityId } from "./entity";
-import { World } from "./world";
+import { component, relation, type EntityId } from "../entity";
+import { World } from "../world";
 
 describe("DontFragment Relations", () => {
   it("should prevent archetype fragmentation for dontFragment relations", () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { component, relation, type EntityId } from "./entity";
-import { World } from "./world";
+import { component, relation, type EntityId } from "../entity";
+import { World } from "../world";
 
 describe("World serialization", () => {
   it("should serialize and deserialize a world with components and relations", () => {

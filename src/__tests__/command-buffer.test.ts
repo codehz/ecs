@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { CommandBuffer, type Command } from "./command-buffer";
-import type { EntityId } from "./entity";
+import { CommandBuffer, type Command } from "../command-buffer";
+import type { EntityId } from "../entity";
 
 describe("CommandBuffer", () => {
   it("should buffer commands and execute them", () => {

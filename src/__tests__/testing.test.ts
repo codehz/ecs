@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { component, relation } from "./entity";
-import { AssertionError, Assertions, EntityBuilder, Snapshot, WorldFixture, type WorldSnapshot } from "./testing";
-import { World } from "./world";
+import { component, relation } from "../entity";
+import { AssertionError, Assertions, EntityBuilder, Snapshot, WorldFixture, type WorldSnapshot } from "../testing";
+import { World } from "../world";
 
 // Test components
 type Position = { x: number; y: number };
