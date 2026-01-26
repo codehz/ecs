@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { component, relation } from "../entity";
-import { World } from "../world";
+import { component, relation } from "../core/entity";
+import { World } from "../core/world";
 
 describe("World.getOptional", () => {
   it("should return { value: T } when component exists", () => {

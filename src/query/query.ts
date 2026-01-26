@@ -1,9 +1,9 @@
-import type { Archetype } from "./archetype";
-import type { EntityId, WildcardRelationId } from "./entity";
-import { getDetailedIdType } from "./entity";
-import { matchesComponentTypes, matchesFilter, type QueryFilter } from "./query-filter";
-import type { ComponentTuple, ComponentType } from "./types";
-import type { World } from "./world";
+import type { Archetype } from "../core/archetype";
+import type { EntityId, WildcardRelationId } from "../core/entity";
+import { getDetailedIdType } from "../core/entity";
+import type { ComponentTuple, ComponentType } from "../core/types";
+import type { World } from "../core/world";
+import { matchesComponentTypes, matchesFilter, type QueryFilter } from "./filter";
 
 /**
  * Query class for efficient entity queries with cached archetypes

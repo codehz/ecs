@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { Archetype } from "../archetype";
-import type { ComponentId, EntityId } from "../entity";
-import { relation } from "../entity";
-import { matchesComponentTypes, matchesFilter, type QueryFilter } from "../query-filter";
+import { Archetype } from "../core/archetype";
+import type { ComponentId, EntityId } from "../core/entity";
+import { relation } from "../core/entity";
+import { matchesComponentTypes, matchesFilter, type QueryFilter } from "../query/filter";
 
 // Mock component IDs for testing
 const positionComponent = 1 as ComponentId<{ x: number; y: number }>;

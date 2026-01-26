@@ -1,4 +1,4 @@
-import { World, component } from "./index";
+import { World, component } from "../index";
 
 // 定义组件类型
 type Position = { x: number; y: number };

@@ -1,4 +1,4 @@
-import type { EntityId } from "./entity";
+import type { EntityId } from "../core/entity";
 
 /**
  * @internal Represents a set of component changes to be applied to an entity

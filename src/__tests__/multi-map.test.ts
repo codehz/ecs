@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { MultiMap } from "../multi-map";
+import { MultiMap } from "../utils/multi-map";
 
 describe("MultiMap", () => {
   test("add and get values", () => {

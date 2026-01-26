@@ -1,4 +1,4 @@
-import { BitSet } from "./bit-set";
+import { BitSet } from "../utils/bit-set";
 
 /**
  * Unique symbol brand for associating component type information with EntityId

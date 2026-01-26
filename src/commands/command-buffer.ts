@@ -1,4 +1,4 @@
-import type { EntityId } from "./entity";
+import type { EntityId } from "../core/entity";
 
 /**
  * Command for deferred execution

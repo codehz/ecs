@@ -9,7 +9,7 @@ export type {
   EntityRelationId,
   RelationId,
   WildcardRelationId,
-} from "./entity";
+} from "./core/entity";
 
 export {
   component,
@@ -21,14 +21,20 @@ export {
   isRelationId,
   isWildcardRelationId,
   relation,
-} from "./entity";
+} from "./core/entity";
 
 // World class
-export { EntityBuilder, World } from "./world";
-export type { ComponentDef, SerializedComponent, SerializedEntity, SerializedEntityId, SerializedWorld } from "./world";
+export { EntityBuilder, World } from "./core/world";
+export type {
+  ComponentDef,
+  SerializedComponent,
+  SerializedEntity,
+  SerializedEntityId,
+  SerializedWorld,
+} from "./core/world";
 
 // Query class
-export { Query } from "./query";
+export { Query } from "./query/query";
 
 // Type utilities
-export type { ComponentTuple, ComponentType, LifecycleHook } from "./types";
+export type { ComponentTuple, ComponentType, LifecycleHook } from "./core/types";

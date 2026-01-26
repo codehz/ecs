@@ -1,6 +1,6 @@
-import type { Archetype } from "./archetype";
-import type { EntityId } from "./entity";
-import { getComponentIdFromRelationId, getDetailedIdType, isRelationId } from "./entity";
+import type { Archetype } from "../core/archetype";
+import type { EntityId } from "../core/entity";
+import { getComponentIdFromRelationId, getDetailedIdType, isRelationId } from "../core/entity";
 
 /**
  * Filter options for queries

@@ -1,7 +1,5 @@
 import { pipeline } from "@codehz/pipeline";
-import { component, relation } from "../../src/entity";
-import type { Query } from "../../src/query";
-import { World } from "../../src/world";
+import { component, relation, World, type Query } from "../../src";
 
 // 定义组件类型
 type Position = { x: number; y: number };

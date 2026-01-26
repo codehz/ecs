@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { component } from "../entity";
-import { World } from "../world";
+import { component } from "../core/entity";
+import { World } from "../core/world";
 
 describe("World Performance", () => {
   it("should handle archetype creation efficiently", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { ComponentId, EntityId } from "../entity";
+import type { ComponentId, EntityId } from "../core/entity";
 import {
   component,
   COMPONENT_ID_MAX,
@@ -24,7 +24,7 @@ import {
   isRelationId,
   isWildcardRelationId,
   relation,
-} from "../entity";
+} from "../core/entity";
 
 describe("Entity ID System", () => {
   describe("Component IDs", () => {

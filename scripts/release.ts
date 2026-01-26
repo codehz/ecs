@@ -40,9 +40,12 @@ pkg.version = version;
 
 // 运行构建
 console.log("🔨 Running build process...");
-const entries = ["/index", "/testing"];
+const entries = [
+  { name: "/index", path: "/index.ts" },
+  { name: "/testing", path: "/testing/index.ts" },
+];
 await build({
-  entry: entries.map((e) => `src${e}.ts`),
+  entry: Object.fromEntries(entries.map((e) => [e.name, `src${e.path}`])),
   outDir: "dist",
   dts: true,
   sourcemap: true,
@@ -52,10 +55,10 @@ await build({
 // 生成 exports
 const exports: Record<string, any> = Object.fromEntries(
   entries.map((e) => [
-    `.${e === "/index" ? "" : e}`,
+    `.${e.name === "/index" ? "" : e.name}`,
     {
-      types: `.${e}.d.mts`,
-      import: `.${e}.mjs`,
+      types: `.${e.name}.d.mts`,
+      import: `.${e.name}.mjs`,
     },
   ]),
 );

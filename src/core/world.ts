@@ -1,6 +1,10 @@
+import { ComponentChangeset } from "../commands/changeset";
+import { CommandBuffer, type Command } from "../commands/command-buffer";
+import { serializeQueryFilter, type QueryFilter } from "../query/filter";
+import { Query } from "../query/query";
+import { MultiMap } from "../utils/multi-map";
+import { getOrCreateWithSideEffect } from "../utils/utils";
 import { Archetype, MISSING_COMPONENT } from "./archetype";
-import { ComponentChangeset } from "./changeset";
-import { CommandBuffer, type Command } from "./command-buffer";
 import type { ComponentId, EntityId, WildcardRelationId } from "./entity";
 import {
   EntityIdManager,
@@ -18,12 +22,8 @@ import {
   isWildcardRelationId,
   relation,
 } from "./entity";
-import { MultiMap } from "./multi-map";
-import { Query } from "./query";
-import { serializeQueryFilter, type QueryFilter } from "./query-filter";
 import type { ComponentTuple, ComponentType, LifecycleHook, MultiLifecycleHook } from "./types";
 import { isOptionalEntityId } from "./types";
-import { getOrCreateWithSideEffect } from "./utils";
 
 // -----------------------------------------------------------------------------
 // Serialization helpers for IDs

@@ -1,3 +1,4 @@
+import { getOrComputeCache } from "../utils/utils";
 import type { EntityId, WildcardRelationId } from "./entity";
 import {
   getComponentIdFromRelationId,
@@ -8,7 +9,6 @@ import {
   isWildcardRelationId,
 } from "./entity";
 import { isOptionalEntityId, type ComponentTuple, type ComponentType } from "./types";
-import { getOrComputeCache } from "./utils";
 
 /**
  * Special value to represent missing component data
