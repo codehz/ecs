@@ -5,12 +5,11 @@ import { Query } from "../query/query";
 import { MultiMap } from "../utils/multi-map";
 import { getOrCreateWithSideEffect } from "../utils/utils";
 import { Archetype, MISSING_COMPONENT } from "./archetype";
+import { EntityBuilder } from "./builder";
 import type { ComponentId, EntityId, WildcardRelationId } from "./entity";
 import {
   EntityIdManager,
-  getComponentIdByName,
   getComponentIdFromRelationId,
-  getComponentNameById,
   getDetailedIdType,
   getTargetIdFromRelationId,
   isCascadeDeleteRelation,
@@ -22,109 +21,10 @@ import {
   isWildcardRelationId,
   relation,
 } from "./entity";
+import type { SerializedComponent, SerializedEntity, SerializedWorld } from "./serialization";
+import { decodeSerializedId, encodeEntityId } from "./serialization";
 import type { ComponentTuple, ComponentType, LifecycleHook, MultiLifecycleHook } from "./types";
 import { isOptionalEntityId } from "./types";
-
-// -----------------------------------------------------------------------------
-// Serialization helpers for IDs
-// -----------------------------------------------------------------------------
-
-export type SerializedEntityId = number | string | { component: string; target: number | string | "*" };
-
-/**
- * Encode an internal EntityId into a SerializedEntityId for snapshots
- */
-function encodeEntityId(id: EntityId<any>): SerializedEntityId {
-  const detailed = getDetailedIdType(id);
-  switch (detailed.type) {
-    case "component": {
-      const name = getComponentNameById(id as ComponentId);
-      if (!name) {
-        // Warn if component doesn't have a name; keep numeric fallback
-        console.warn(`Component ID ${id} has no registered name, serializing as number`);
-      }
-      return name || (id as number);
-    }
-    case "entity-relation": {
-      const componentName = getComponentNameById(detailed.componentId);
-      if (!componentName) {
-        console.warn(`Component ID ${detailed.componentId} in relation has no registered name`);
-      }
-      return { component: componentName || (detailed.componentId as number).toString(), target: detailed.targetId! };
-    }
-    case "component-relation": {
-      const componentName = getComponentNameById(detailed.componentId);
-      const targetName = getComponentNameById(detailed.targetId! as ComponentId);
-      if (!componentName) {
-        console.warn(`Component ID ${detailed.componentId} in relation has no registered name`);
-      }
-      if (!targetName) {
-        console.warn(`Target component ID ${detailed.targetId} in relation has no registered name`);
-      }
-      return {
-        component: componentName || (detailed.componentId as number).toString(),
-        target: targetName || (detailed.targetId as number),
-      };
-    }
-    case "wildcard-relation": {
-      const componentName = getComponentNameById(detailed.componentId);
-      if (!componentName) {
-        console.warn(`Component ID ${detailed.componentId} in relation has no registered name`);
-      }
-      return { component: componentName || (detailed.componentId as number).toString(), target: "*" };
-    }
-    default:
-      return id as number;
-  }
-}
-
-/**
- * Decode a SerializedEntityId back into an internal EntityId
- */
-function decodeSerializedId(sid: SerializedEntityId): EntityId<any> {
-  if (typeof sid === "number") {
-    return sid as EntityId<any>;
-  }
-  if (typeof sid === "string") {
-    const id = getComponentIdByName(sid);
-    if (id === undefined) {
-      const num = parseInt(sid, 10);
-      if (!isNaN(num)) return num as EntityId<any>;
-      throw new Error(`Unknown component name in snapshot: ${sid}`);
-    }
-    return id;
-  }
-  if (typeof sid === "object" && sid !== null && typeof sid.component === "string") {
-    let compId = getComponentIdByName(sid.component);
-    if (compId === undefined) {
-      const num = parseInt(sid.component, 10);
-      if (!isNaN(num)) compId = num as ComponentId;
-    }
-    if (compId === undefined) {
-      throw new Error(`Unknown component name in snapshot: ${sid.component}`);
-    }
-
-    if (sid.target === "*") {
-      return relation(compId, "*");
-    }
-
-    let targetId: EntityId<any>;
-    if (typeof sid.target === "string") {
-      const tid = getComponentIdByName(sid.target);
-      if (tid === undefined) {
-        const num = parseInt(sid.target, 10);
-        if (!isNaN(num)) targetId = num as EntityId<any>;
-        else throw new Error(`Unknown target component name in snapshot: ${sid.target}`);
-      } else {
-        targetId = tid;
-      }
-    } else {
-      targetId = sid.target as EntityId<any>;
-    }
-    return relation(compId, targetId as any);
-  }
-  throw new Error(`Invalid ID in snapshot: ${JSON.stringify(sid)}`);
-}
 
 /**
  * World class for ECS architecture
@@ -1544,82 +1444,5 @@ export class World {
       entityManager: this.entityIdManager.serializeState(),
       entities,
     };
-  }
-}
-
-export type SerializedWorld = {
-  version: number;
-  entityManager: any;
-  entities: SerializedEntity[];
-};
-
-export type SerializedEntity = {
-  id: SerializedEntityId;
-  components: SerializedComponent[];
-};
-
-export type SerializedComponent = {
-  type: SerializedEntityId;
-  value: any;
-};
-
-// =============================================================================
-// EntityBuilder - Fluent Entity Creation (moved from testing utilities)
-// =============================================================================
-
-/**
- * A component definition for entity building, supporting both regular components and relations
- */
-export type ComponentDef<T = unknown> =
-  | { type: "component"; id: EntityId<T>; value: T }
-  | { type: "relation"; componentId: ComponentId<T>; targetId: EntityId<any>; value: T };
-
-export class EntityBuilder {
-  private world: World;
-  private components: ComponentDef[] = [];
-
-  constructor(world: World) {
-    this.world = world;
-  }
-
-  with<T>(componentId: EntityId<T>, value: T): this {
-    this.components.push({ type: "component", id: componentId, value });
-    return this;
-  }
-
-  withTag(componentId: EntityId<void>): this {
-    this.components.push({ type: "component", id: componentId, value: undefined as void });
-    return this;
-  }
-
-  withRelation<T>(componentId: ComponentId<T>, targetEntity: EntityId<any>, value: T): this {
-    this.components.push({ type: "relation", componentId, targetId: targetEntity, value });
-    return this;
-  }
-
-  withRelationTag(componentId: ComponentId<void>, targetEntity: EntityId<any>): this {
-    this.components.push({ type: "relation", componentId, targetId: targetEntity, value: undefined as void });
-    return this;
-  }
-
-  /**
-   * Create an entity and enqueue components to be applied. This method
-   * does NOT call `world.sync()` automatically; callers must invoke
-   * `world.sync()` to apply deferred commands.
-   * (Previously auto-synced; now a breaking change — buildDeferred() removed.)
-   */
-  build(): EntityId {
-    const entity = this.world.new();
-
-    for (const def of this.components) {
-      if (def.type === "component") {
-        this.world.set(entity, def.id, def.value as any);
-      } else {
-        const relationId = relation(def.componentId, def.targetId);
-        this.world.set(entity, relationId, def.value as any);
-      }
-    }
-
-    return entity;
   }
 }

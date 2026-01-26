@@ -24,14 +24,10 @@ export {
 } from "./core/entity";
 
 // World class
-export { EntityBuilder, World } from "./core/world";
-export type {
-  ComponentDef,
-  SerializedComponent,
-  SerializedEntity,
-  SerializedEntityId,
-  SerializedWorld,
-} from "./core/world";
+export { EntityBuilder } from "./core/builder";
+export type { ComponentDef } from "./core/builder";
+export type { SerializedComponent, SerializedEntity, SerializedEntityId, SerializedWorld } from "./core/serialization";
+export { World } from "./core/world";
 
 // Query class
 export { Query } from "./query/query";

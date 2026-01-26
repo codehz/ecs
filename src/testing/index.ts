@@ -37,8 +37,8 @@ import type { ComponentId, EntityId, WildcardRelationId } from "../core/entity";
 import { isWildcardRelationId, relation } from "../core/entity";
 import { World } from "../core/world";
 import type { Query } from "../query/query";
-export { EntityBuilder } from "../core/world";
-export type { ComponentDef } from "../core/world";
+export { EntityBuilder } from "../core/builder";
+export type { ComponentDef } from "../core/builder";
 
 // =============================================================================
 // Types
@@ -47,7 +47,7 @@ export type { ComponentDef } from "../core/world";
 /**
  * A component definition for entity building, supporting both regular components and relations
  */
-import type { EntityBuilder } from "../core/world";
+import type { EntityBuilder } from "../core/builder";
 
 /**
  * Snapshot of a single entity's component state
