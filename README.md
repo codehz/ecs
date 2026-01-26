@@ -88,6 +88,63 @@ world.set(entity, PositionId, { x: 0, y: 0 });
 world.sync(); // 钩子在这里被调用
 ```
 
+### 多组件生命周期钩子
+
+ECS 还支持多组件生命周期钩子，可以监听多个组件同时存在于实体时的事件。只有当所有必需组件都存在时才会触发回调。
+
+```typescript
+// 定义组件类型
+type Position = { x: number; y: number };
+type Velocity = { x: number; y: number };
+
+// 定义组件ID
+const PositionId = component<Position>();
+const VelocityId = component<Velocity>();
+
+// 注册多组件生命周期钩子
+world.hook([PositionId, VelocityId], {
+  on_init: (entityId, componentTypes, components) => {
+    // 当钩子注册时，为已同时拥有 Position 和 Velocity 组件的实体调用
+    console.log(`实体 ${entityId} 同时拥有 Position 和 Velocity 组件`);
+  },
+  on_set: (entityId, componentTypes, components) => {
+    // 当实体同时拥有 Position 和 Velocity 组件时调用
+    const [position, velocity] = components;
+    console.log(
+      `实体 ${entityId} 现在同时拥有 Position (${position.x}, ${position.y}) 和 Velocity (${velocity.x}, ${velocity.y})`,
+    );
+  },
+  on_remove: (entityId, componentTypes, components) => {
+    // 当实体失去 Position 或 Velocity 组件之一时调用（如果之前同时拥有两者）
+    const [position, velocity] = components; // 移除前的组件值快照
+    console.log(`实体 ${entityId} 失去了 Position 或 Velocity 组件`);
+  },
+});
+
+// 添加组件
+const entity = world.new();
+world.set(entity, PositionId, { x: 0, y: 0 });
+world.set(entity, VelocityId, { x: 1, y: 0.5 });
+world.sync(); // 多组件钩子在这里被调用
+```
+
+还可以使用可选组件，这样即使某些组件不存在也会触发钩子：
+
+```typescript
+// 注册包含可选组件的多组件生命周期钩子
+world.hook([PositionId, { optional: VelocityId }], {
+  on_set: (entityId, componentTypes, components) => {
+    // 当实体拥有 Position 组件时调用，Velocity 组件可选
+    const [position, velocity] = components;
+    if (velocity !== undefined) {
+      console.log(`实体 ${entityId} 拥有 Position 和 Velocity 组件`);
+    } else {
+      console.log(`实体 ${entityId} 仅拥有 Position 组件`);
+    }
+  },
+});
+```
+
 ### 通配符关系生命周期钩子
 
 ECS 还支持通配符关系生命周期钩子，可以监听特定组件的所有关系变化：
