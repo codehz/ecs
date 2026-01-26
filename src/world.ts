@@ -21,7 +21,8 @@ import {
 import { MultiMap } from "./multi-map";
 import { Query } from "./query";
 import { serializeQueryFilter, type QueryFilter } from "./query-filter";
-import type { ComponentTuple, LifecycleHook } from "./types";
+import type { ComponentTuple, ComponentType, LifecycleHook, MultiLifecycleHook } from "./types";
+import { isOptionalEntityId } from "./types";
 import { getOrCreateWithSideEffect } from "./utils";
 
 // -----------------------------------------------------------------------------
@@ -166,6 +167,13 @@ export class World {
   // Lifecycle and configuration
   /** Stores lifecycle hooks for component and relation events */
   private hooks = new Map<EntityId<any>, Set<LifecycleHook<any>>>();
+
+  /** Stores multi-component lifecycle hooks */
+  private multiHooks: Set<{
+    componentTypes: readonly ComponentType<any>[];
+    requiredComponents: EntityId<any>[];
+    hook: MultiLifecycleHook<any>;
+  }> = new Set();
 
   /**
    * Create a new World.
@@ -423,34 +431,89 @@ export class World {
   /**
    * Register a lifecycle hook for component or wildcard relation events
    */
-  hook<T>(componentType: EntityId<T>, hook: LifecycleHook<T>): void {
-    if (!this.hooks.has(componentType)) {
-      this.hooks.set(componentType, new Set());
-    }
-    this.hooks.get(componentType)!.add(hook);
-
-    if (hook.on_init !== undefined) {
-      this.archetypesByComponent.get(componentType)?.forEach((archetype) => {
-        const entities = archetype.getEntityToIndexMap();
-        const componentData = archetype.getComponentData<T>(componentType);
-        for (const [entity, index] of entities) {
-          const data = componentData[index];
-          const value = (data === MISSING_COMPONENT ? undefined : data) as T;
-          hook.on_init?.(entity, componentType, value);
+  hook<T>(componentType: EntityId<T>, hook: LifecycleHook<T>): void;
+  hook<const T extends readonly ComponentType<any>[]>(componentTypes: T, hook: MultiLifecycleHook<T>): void;
+  hook(
+    componentTypesOrSingle: EntityId<any> | readonly ComponentType<any>[],
+    hook: LifecycleHook<any> | MultiLifecycleHook<any>,
+  ): void {
+    if (Array.isArray(componentTypesOrSingle)) {
+      // Multi-component hook
+      const componentTypes = componentTypesOrSingle as readonly ComponentType<any>[];
+      const requiredComponents: EntityId<any>[] = [];
+      for (const ct of componentTypes) {
+        if (!isOptionalEntityId(ct)) {
+          requiredComponents.push(ct as EntityId<any>);
         }
-      });
+      }
+
+      const entry = {
+        componentTypes,
+        requiredComponents,
+        hook: hook as MultiLifecycleHook<any>,
+      };
+      this.multiHooks.add(entry);
+
+      // Handle on_init for existing entities
+      const multiHook = hook as MultiLifecycleHook<any>;
+      if (multiHook.on_init !== undefined) {
+        const matchingArchetypes = this.getMatchingArchetypes(requiredComponents);
+        for (const archetype of matchingArchetypes) {
+          for (const entityId of archetype.getEntities()) {
+            const components = this.collectMultiHookComponents(entityId, componentTypes);
+            multiHook.on_init(entityId, componentTypes, components);
+          }
+        }
+      }
+    } else {
+      // Single-component hook
+      const componentType = componentTypesOrSingle as EntityId<any>;
+      if (!this.hooks.has(componentType)) {
+        this.hooks.set(componentType, new Set());
+      }
+      this.hooks.get(componentType)!.add(hook as LifecycleHook<any>);
+
+      const singleHook = hook as LifecycleHook<any>;
+      if (singleHook.on_init !== undefined) {
+        this.archetypesByComponent.get(componentType)?.forEach((archetype) => {
+          const entities = archetype.getEntityToIndexMap();
+          const componentData = archetype.getComponentData<any>(componentType);
+          for (const [entity, index] of entities) {
+            const data = componentData[index];
+            const value = data === MISSING_COMPONENT ? undefined : data;
+            singleHook.on_init?.(entity, componentType, value);
+          }
+        });
+      }
     }
   }
 
   /**
    * Unregister a lifecycle hook for component or wildcard relation events
    */
-  unhook<T>(componentType: EntityId<T>, hook: LifecycleHook<T>): void {
-    const hooks = this.hooks.get(componentType);
-    if (hooks) {
-      hooks.delete(hook);
-      if (hooks.size === 0) {
-        this.hooks.delete(componentType);
+  unhook<T>(componentType: EntityId<T>, hook: LifecycleHook<T>): void;
+  unhook<const T extends readonly ComponentType<any>[]>(componentTypes: T, hook: MultiLifecycleHook<T>): void;
+  unhook(
+    componentTypesOrSingle: EntityId<any> | readonly ComponentType<any>[],
+    hook: LifecycleHook<any> | MultiLifecycleHook<any>,
+  ): void {
+    if (Array.isArray(componentTypesOrSingle)) {
+      // Multi-component hook
+      for (const entry of this.multiHooks) {
+        if (entry.hook === hook) {
+          this.multiHooks.delete(entry);
+          break;
+        }
+      }
+    } else {
+      // Single-component hook
+      const componentType = componentTypesOrSingle as EntityId<any>;
+      const hooks = this.hooks.get(componentType);
+      if (hooks) {
+        hooks.delete(hook as LifecycleHook<any>);
+        if (hooks.size === 0) {
+          this.hooks.delete(componentType);
+        }
       }
     }
   }
@@ -1323,6 +1386,136 @@ export class World {
         }
       }
     }
+
+    // Trigger multi-component hooks
+    this.triggerMultiComponentHooks(entityId, addedComponents, removedComponents);
+  }
+
+  /**
+   * Trigger multi-component hooks based on changes
+   */
+  private triggerMultiComponentHooks(
+    entityId: EntityId,
+    addedComponents: Map<EntityId<any>, any>,
+    removedComponents: Map<EntityId<any>, any>,
+  ): void {
+    for (const entry of this.multiHooks) {
+      const { componentTypes, requiredComponents, hook } = entry;
+
+      // Check if any of the required components were added
+      let anyRequiredAdded = false;
+      for (const reqComp of requiredComponents) {
+        if (addedComponents.has(reqComp)) {
+          anyRequiredAdded = true;
+          break;
+        }
+      }
+
+      // Check if any of the required components were removed
+      let anyRequiredRemoved = false;
+      for (const reqComp of requiredComponents) {
+        if (removedComponents.has(reqComp)) {
+          anyRequiredRemoved = true;
+          break;
+        }
+      }
+
+      // Handle on_set: trigger if any required component was added and entity has all required components now
+      if (anyRequiredAdded && hook.on_set) {
+        const hasAllRequired = this.entityHasAllComponents(entityId, requiredComponents);
+        if (hasAllRequired) {
+          const components = this.collectMultiHookComponents(entityId, componentTypes);
+          hook.on_set(entityId, componentTypes, components);
+        }
+      }
+
+      // Handle on_remove: trigger if any required component was removed and entity had all required components before removal
+      if (anyRequiredRemoved && hook.on_remove) {
+        // Check if entity had all required components before removal
+        const hadAllRequiredBefore = this.entityHadAllComponentsBefore(entityId, requiredComponents, removedComponents);
+        if (hadAllRequiredBefore) {
+          // Collect components snapshot from before removal
+          const components = this.collectMultiHookComponentsWithRemoved(entityId, componentTypes, removedComponents);
+          hook.on_remove(entityId, componentTypes, components);
+        }
+      }
+    }
+  }
+
+  /**
+   * Check if entity currently has all required components
+   */
+  private entityHasAllComponents(entityId: EntityId, requiredComponents: EntityId<any>[]): boolean {
+    for (const reqComp of requiredComponents) {
+      if (!this.has(entityId, reqComp)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Check if entity had all required components before removal
+   */
+  private entityHadAllComponentsBefore(
+    entityId: EntityId,
+    requiredComponents: EntityId<any>[],
+    removedComponents: Map<EntityId<any>, any>,
+  ): boolean {
+    for (const reqComp of requiredComponents) {
+      // Component was either present before (and now removed) or still present
+      const wasRemoved = removedComponents.has(reqComp);
+      const stillHas = this.has(entityId, reqComp);
+      if (!wasRemoved && !stillHas) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Collect component values for multi-component hook (current state)
+   */
+  private collectMultiHookComponents(entityId: EntityId, componentTypes: readonly ComponentType<any>[]): any[] {
+    const result: any[] = [];
+    for (const ct of componentTypes) {
+      if (isOptionalEntityId(ct)) {
+        const optionalId = ct.optional;
+        result.push(this.getOptional(entityId, optionalId));
+      } else {
+        result.push(this.get(entityId, ct as EntityId<any>));
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Collect component values for multi-component hook with removed components (snapshot before removal)
+   */
+  private collectMultiHookComponentsWithRemoved(
+    entityId: EntityId,
+    componentTypes: readonly ComponentType<any>[],
+    removedComponents: Map<EntityId<any>, any>,
+  ): any[] {
+    const result: any[] = [];
+    for (const ct of componentTypes) {
+      if (isOptionalEntityId(ct)) {
+        const optionalId = ct.optional;
+        if (removedComponents.has(optionalId)) {
+          result.push({ value: removedComponents.get(optionalId) });
+        } else {
+          result.push(this.getOptional(entityId, optionalId));
+        }
+      } else {
+        const compId = ct as EntityId<any>;
+        if (removedComponents.has(compId)) {
+          result.push(removedComponents.get(compId));
+        } else {
+          result.push(this.get(entityId, compId));
+        }
+      }
+    }
+    return result;
   }
 
   /**

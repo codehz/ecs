@@ -18,6 +18,12 @@ export interface LifecycleHook<T = unknown> {
   on_remove?: (entityId: EntityId, componentType: EntityId<T>, component: T) => void;
 }
 
+export interface MultiLifecycleHook<T extends readonly ComponentType<any>[]> {
+  on_init?: (entityId: EntityId, componentTypes: T, components: ComponentTuple<T>) => void;
+  on_set?: (entityId: EntityId, componentTypes: T, components: ComponentTuple<T>) => void;
+  on_remove?: (entityId: EntityId, componentTypes: T, components: ComponentTuple<T>) => void;
+}
+
 export type ComponentType<T> = EntityId<T> | OptionalEntityId<T>;
 
 export type OptionalEntityId<T> = { optional: EntityId<T> };

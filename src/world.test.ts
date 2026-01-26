@@ -845,4 +845,159 @@ describe("World", () => {
       expect(hookCalled).toBe(false);
     });
   });
+
+  describe("Multi-Component Hooks", () => {
+    it("should trigger on_set when all required components are present", () => {
+      const world = new World();
+      const A = component<number>();
+      const B = component<string>();
+      const calls: { entityId: EntityId; components: readonly [number, string] }[] = [];
+
+      world.hook([A, B], {
+        on_set: (entityId, _componentTypes, components) => {
+          calls.push({ entityId, components });
+        },
+      });
+
+      const entity = world.spawn().with(A, 42).with(B, "hello").build();
+      world.sync();
+
+      expect(calls.length).toBe(1);
+      expect(calls[0]!.entityId).toBe(entity);
+      expect(calls[0]!.components).toEqual([42, "hello"]);
+    });
+
+    it("should not trigger on_set when some required components are missing", () => {
+      const world = new World();
+      const A = component<number>();
+      const B = component<string>();
+      const calls: any[] = [];
+
+      world.hook([A, B], {
+        on_set: (entityId, _componentTypes, components) => {
+          calls.push({ entityId, components });
+        },
+      });
+
+      const entity = world.spawn().with(A, 42).build();
+      world.sync();
+
+      expect(calls.length).toBe(0);
+      expect(world.has(entity, A)).toBe(true);
+      expect(world.has(entity, B)).toBe(false);
+    });
+
+    it("should trigger on_set with optional component present", () => {
+      const world = new World();
+      const A = component<number>();
+      const B = component<string>();
+      const calls: { entityId: EntityId; components: readonly [number, { value: string } | undefined] }[] = [];
+
+      world.hook([A, { optional: B }], {
+        on_set: (entityId, _componentTypes, components) => {
+          calls.push({ entityId, components });
+        },
+      });
+
+      const entity = world.spawn().with(A, 42).with(B, "hello").build();
+      world.sync();
+
+      expect(calls.length).toBe(1);
+      expect(calls[0]!.entityId).toBe(entity);
+      expect(calls[0]!.components).toEqual([42, { value: "hello" }]);
+    });
+
+    it("should trigger on_set with optional component absent", () => {
+      const world = new World();
+      const A = component<number>();
+      const B = component<string>();
+      const calls: { entityId: EntityId; components: readonly [number, { value: string } | undefined] }[] = [];
+
+      world.hook([A, { optional: B }], {
+        on_set: (entityId, _componentTypes, components) => {
+          calls.push({ entityId, components });
+        },
+      });
+
+      const entity = world.spawn().with(A, 42).build();
+      world.sync();
+
+      expect(calls.length).toBe(1);
+      expect(calls[0]!.entityId).toBe(entity);
+      expect(calls[0]!.components).toEqual([42, undefined]);
+    });
+
+    it("should trigger on_remove with complete snapshot when required component is removed", () => {
+      const world = new World();
+      const A = component<number>();
+      const B = component<string>();
+      const removeCalls: { entityId: EntityId; components: readonly [number, string] }[] = [];
+
+      world.hook([A, B], {
+        on_remove: (entityId, _componentTypes, components) => {
+          removeCalls.push({ entityId, components });
+        },
+      });
+
+      const entity = world.spawn().with(A, 42).with(B, "hello").build();
+      world.sync();
+
+      world.remove(entity, A);
+      world.sync();
+
+      expect(removeCalls.length).toBe(1);
+      expect(removeCalls[0]!.entityId).toBe(entity);
+      expect(removeCalls[0]!.components).toEqual([42, "hello"]);
+    });
+
+    it("should trigger on_init for existing entities matching all required components", () => {
+      const world = new World();
+      const A = component<number>();
+      const B = component<string>();
+
+      const entity = world.spawn().with(A, 42).with(B, "hello").build();
+      world.sync();
+
+      const initCalls: { entityId: EntityId; components: readonly [number, string] }[] = [];
+
+      world.hook([A, B], {
+        on_init: (entityId, _componentTypes, components) => {
+          initCalls.push({ entityId, components });
+        },
+      });
+
+      expect(initCalls.length).toBe(1);
+      expect(initCalls[0]!.entityId).toBe(entity);
+      expect(initCalls[0]!.components).toEqual([42, "hello"]);
+    });
+
+    it("should stop triggering after unhook for multi-component hooks", () => {
+      const world = new World();
+      const A = component<number>();
+      const B = component<string>();
+      const calls: any[] = [];
+
+      const hook = {
+        on_set: (entityId: EntityId, _componentTypes: any, components: any) => {
+          calls.push({ entityId, components });
+        },
+      };
+
+      world.hook([A, B], hook);
+
+      const entity1 = world.spawn().with(A, 1).with(B, "first").build();
+      world.sync();
+
+      expect(calls.length).toBe(1);
+
+      world.unhook([A, B], hook);
+
+      const entity2 = world.spawn().with(A, 2).with(B, "second").build();
+      world.sync();
+
+      expect(calls.length).toBe(1);
+      expect(world.has(entity1, A)).toBe(true);
+      expect(world.has(entity2, A)).toBe(true);
+    });
+  });
 });
