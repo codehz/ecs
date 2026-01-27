@@ -1,6 +1,6 @@
 import type { Archetype } from "./archetype";
 import { getComponentIdFromRelationId, isWildcardRelationId, relation, type EntityId } from "./entity";
-import { isOptionalEntityId, type ComponentType, type LifecycleHook, type MultiHookEntry } from "./types";
+import { isOptionalEntityId, type ComponentType, type LegacyLifecycleHook, type MultiHookEntry } from "./types";
 
 /**
  * Check if a component change matches a hook component type.
@@ -50,7 +50,7 @@ function findMatchingComponent(
   return undefined;
 }
 
-export type HooksMap = Map<EntityId<any>, Set<LifecycleHook<any>>>;
+export type HooksMap = Map<EntityId<any>, Set<LegacyLifecycleHook<any>>>;
 
 export interface HooksContext {
   hooks: HooksMap;

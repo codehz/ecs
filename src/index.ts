@@ -37,7 +37,7 @@ export type {
   ComponentTuple,
   ComponentType,
   LifecycleCallback,
-  LifecycleHook,
+  LegacyLifecycleHook as LifecycleHook,
   MultiLifecycleCallback,
-  MultiLifecycleHook,
+  LifecycleHook as MultiLifecycleHook,
 } from "./core/types";

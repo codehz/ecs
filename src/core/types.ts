@@ -3,7 +3,7 @@ import type { EntityId, WildcardRelationId } from "./entity";
 /**
  * Hook types for component lifecycle events
  */
-export interface LifecycleHook<T = unknown> {
+export interface LegacyLifecycleHook<T = unknown> {
   /**
    * Called when a component is added to an entity
    */
@@ -18,7 +18,7 @@ export interface LifecycleHook<T = unknown> {
   on_remove?: (entityId: EntityId, componentType: EntityId<T>, component: T) => void;
 }
 
-export interface MultiLifecycleHook<T extends readonly ComponentType<any>[]> {
+export interface LifecycleHook<T extends readonly ComponentType<any>[]> {
   on_init?: (entityId: EntityId, componentTypes: T, components: ComponentTuple<T>) => void;
   on_set?: (entityId: EntityId, componentTypes: T, components: ComponentTuple<T>) => void;
   on_remove?: (entityId: EntityId, componentTypes: T, components: ComponentTuple<T>) => void;
@@ -73,5 +73,5 @@ export interface MultiHookEntry {
   componentTypes: readonly ComponentType<any>[];
   requiredComponents: EntityId<any>[];
   optionalComponents: EntityId<any>[];
-  hook: MultiLifecycleHook<any>;
+  hook: LifecycleHook<any>;
 }
