@@ -102,7 +102,7 @@ describe("testing module", () => {
 
     it("should support tag components", () => {
       const world = new World();
-      const entity = new EntityBuilder(world).withTag(TagId).build();
+      const entity = new EntityBuilder(world).with(TagId).build();
       world.sync();
 
       expect(world.has(entity, TagId)).toBe(true);
@@ -130,7 +130,7 @@ describe("testing module", () => {
       const parent = world.new();
       world.sync();
 
-      const child = new EntityBuilder(world).withRelationTag(ChildOfId, parent).build();
+      const child = new EntityBuilder(world).withRelation(ChildOfId, parent).build();
       world.sync();
 
       const relationId = relation(ChildOfId, parent);

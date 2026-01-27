@@ -322,10 +322,8 @@ const restored = new World(readySnapshot);
 
 EntityBuilder 提供流式 API 用于便捷的实体创建：
 
-- `with(componentId, value)`: 添加组件到构建器
-- `withTag(componentId)`: 添加标记组件（无值）到构建器
-- `withRelation(componentId, targetEntity, value)`: 添加关系组件到构建器
-- `withRelationTag(componentId, targetEntity)`: 添加关系标记（无值）到构建器
+- `with(componentId, value?)`: 添加组件到构建器（对于 `void` 类型组件，value 参数可省略）
+- `withRelation(componentId, targetEntity, value?)`: 添加关系组件到构建器（对于 `void` 类型关系，value 参数可省略）
 - `build()`: 创建实体并应用所有组件（需要手动调用 `world.sync()`）
 
 ### World

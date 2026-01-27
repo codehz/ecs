@@ -216,7 +216,7 @@ export class WorldFixture {
  *
  * // Tag component (void type)
  * const tagged = new EntityBuilder(world)
- *   .withTag(PlayerTagId)
+ *   .with(PlayerTagId)
  *   .build();
  * ```
  */
