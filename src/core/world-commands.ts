@@ -91,6 +91,9 @@ export function removeMatchingRelations(
 ): void {
   // Check archetype components
   for (const componentType of archetype.componentTypes) {
+    // Skip wildcard markers - they should only be removed by maybeRemoveWildcardMarker
+    if (isWildcardRelationId(componentType)) continue;
+
     if (getComponentIdFromRelationId(componentType) === baseComponentId) {
       changeset.delete(componentType);
     }

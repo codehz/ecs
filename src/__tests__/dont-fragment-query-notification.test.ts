@@ -232,4 +232,236 @@ describe("DontFragment Query Notification Issue", () => {
     expect(queryB.getEntities()).not.toContain(entity1);
     expect(queryB.getEntities()).toContain(entity2);
   });
+
+  it("should handle repeated setting of the same dontFragment exclusive relation", () => {
+    const world = new World();
+
+    const PositionId = component();
+    const ChildOf = component({ dontFragment: true, exclusive: true });
+
+    const parent = world.new();
+    const entity = world.new();
+    world.set(entity, PositionId);
+
+    // Create a wildcard query before setting relations
+    const wildcardChildOf = relation(ChildOf, "*");
+    const query = world.createQuery([wildcardChildOf, PositionId]);
+
+    // Initially, should not match
+    expect(query.getEntities()).not.toContain(entity);
+
+    // Set the relation for the first time
+    world.set(entity, relation(ChildOf, parent));
+    world.sync();
+
+    // Should now match
+    expect(query.getEntities()).toContain(entity);
+    expect(query.getEntities().length).toBe(1);
+
+    // Repeat setting the same relation (second time)
+    world.set(entity, relation(ChildOf, parent));
+    world.sync();
+
+    // Should still match (not lost due to exclusive handling)
+    expect(query.getEntities()).toContain(entity);
+    expect(query.getEntities().length).toBe(1);
+
+    // Set it one more time to be sure
+    world.set(entity, relation(ChildOf, parent));
+    world.sync();
+
+    // Should still match
+    expect(query.getEntities()).toContain(entity);
+    expect(query.getEntities().length).toBe(1);
+  });
+
+  it("should handle changing exclusive relation target (replacing one relation with another)", () => {
+    const world = new World();
+
+    const PositionId = component();
+    const ChildOf = component({ dontFragment: true, exclusive: true });
+
+    const parent1 = world.new();
+    const parent2 = world.new();
+    const entity = world.new();
+    world.set(entity, PositionId);
+
+    const wildcardChildOf = relation(ChildOf, "*");
+    const query = world.createQuery([wildcardChildOf, PositionId]);
+
+    // Set relation to parent1
+    world.set(entity, relation(ChildOf, parent1));
+    world.sync();
+
+    expect(query.getEntities()).toContain(entity);
+    expect(world.has(entity, relation(ChildOf, parent1))).toBe(true);
+    expect(world.has(entity, relation(ChildOf, parent2))).toBe(false);
+
+    // Change relation to parent2 (exclusive should remove parent1 relation)
+    world.set(entity, relation(ChildOf, parent2));
+    world.sync();
+
+    expect(query.getEntities()).toContain(entity);
+    expect(query.getEntities().length).toBe(1);
+    expect(world.has(entity, relation(ChildOf, parent1))).toBe(false);
+    expect(world.has(entity, relation(ChildOf, parent2))).toBe(true);
+  });
+
+  it("should handle specific relation query when target changes (non-dontFragment)", () => {
+    const world = new World();
+
+    const PositionId = component();
+    // Note: Using non-dontFragment exclusive relation for specific queries
+    const ChildOf = component({ exclusive: true });
+
+    const parent1 = world.new();
+    const parent2 = world.new();
+    const entity = world.new();
+    world.set(entity, PositionId);
+
+    // Create specific queries for each parent
+    const queryParent1 = world.createQuery([relation(ChildOf, parent1), PositionId]);
+    const queryParent2 = world.createQuery([relation(ChildOf, parent2), PositionId]);
+
+    // Set relation to parent1
+    world.set(entity, relation(ChildOf, parent1));
+    world.sync();
+
+    expect(queryParent1.getEntities()).toContain(entity);
+    expect(queryParent2.getEntities()).not.toContain(entity);
+
+    // Change to parent2
+    world.set(entity, relation(ChildOf, parent2));
+    world.sync();
+
+    expect(queryParent1.getEntities()).not.toContain(entity);
+    expect(queryParent2.getEntities()).toContain(entity);
+
+    // Change back to parent1
+    world.set(entity, relation(ChildOf, parent1));
+    world.sync();
+
+    expect(queryParent1.getEntities()).toContain(entity);
+    expect(queryParent2.getEntities()).not.toContain(entity);
+  });
+
+  it("should handle non-exclusive dontFragment relations with repeated setting", () => {
+    const world = new World();
+
+    const PositionId = component();
+    const TaggedWith = component({ dontFragment: true }); // non-exclusive
+
+    const tag1 = world.new();
+    const tag2 = world.new();
+    const entity = world.new();
+    world.set(entity, PositionId);
+
+    const wildcardTagged = relation(TaggedWith, "*");
+    const query = world.createQuery([wildcardTagged, PositionId]);
+
+    // Add first tag
+    world.set(entity, relation(TaggedWith, tag1));
+    world.sync();
+
+    expect(query.getEntities()).toContain(entity);
+
+    // Add second tag (non-exclusive allows multiple)
+    world.set(entity, relation(TaggedWith, tag2));
+    world.sync();
+
+    expect(query.getEntities()).toContain(entity);
+    expect(world.has(entity, relation(TaggedWith, tag1))).toBe(true);
+    expect(world.has(entity, relation(TaggedWith, tag2))).toBe(true);
+
+    // Re-set first tag (should not affect second tag)
+    world.set(entity, relation(TaggedWith, tag1));
+    world.sync();
+
+    expect(query.getEntities()).toContain(entity);
+    expect(world.has(entity, relation(TaggedWith, tag1))).toBe(true);
+    expect(world.has(entity, relation(TaggedWith, tag2))).toBe(true);
+  });
+
+  it("should handle wildcard queries with has() checks for specific targets", () => {
+    const world = new World();
+
+    const PositionId = component();
+    const ChildOf = component({ dontFragment: true, exclusive: true });
+
+    const parent1 = world.new();
+    const parent2 = world.new();
+    const entity1 = world.new();
+    const entity2 = world.new();
+
+    world.set(entity1, PositionId);
+    world.set(entity2, PositionId);
+
+    // For dontFragment relations, use wildcard query and filter with has()
+    const wildcardChildOf = relation(ChildOf, "*");
+    const wildcardQuery = world.createQuery([wildcardChildOf, PositionId]);
+
+    // Set entity1 -> parent1, entity2 -> parent2
+    world.set(entity1, relation(ChildOf, parent1));
+    world.set(entity2, relation(ChildOf, parent2));
+    world.sync();
+
+    expect(wildcardQuery.getEntities().length).toBe(2);
+    expect(wildcardQuery.getEntities()).toContain(entity1);
+    expect(wildcardQuery.getEntities()).toContain(entity2);
+
+    // Filter for specific parent using has()
+    const entitiesWithParent1 = wildcardQuery.getEntities().filter((e) => world.has(e, relation(ChildOf, parent1)));
+    expect(entitiesWithParent1.length).toBe(1);
+    expect(entitiesWithParent1).toContain(entity1);
+
+    // Change entity1 from parent1 to parent2
+    world.set(entity1, relation(ChildOf, parent2));
+    world.sync();
+
+    expect(wildcardQuery.getEntities().length).toBe(2);
+    const entitiesWithParent1After = wildcardQuery
+      .getEntities()
+      .filter((e) => world.has(e, relation(ChildOf, parent1)));
+    expect(entitiesWithParent1After.length).toBe(0);
+
+    // Change entity1 back to parent1
+    world.set(entity1, relation(ChildOf, parent1));
+    world.sync();
+
+    expect(wildcardQuery.getEntities().length).toBe(2);
+    const entitiesWithParent1Final = wildcardQuery
+      .getEntities()
+      .filter((e) => world.has(e, relation(ChildOf, parent1)));
+    expect(entitiesWithParent1Final.length).toBe(1);
+    expect(entitiesWithParent1Final).toContain(entity1);
+  });
+
+  it("should preserve wildcard marker when switching between targets rapidly", () => {
+    const world = new World();
+
+    const PositionId = component();
+    const ChildOf = component({ dontFragment: true, exclusive: true });
+
+    const parents = [world.new(), world.new(), world.new()];
+    const entity = world.new();
+    world.set(entity, PositionId);
+
+    const wildcardChildOf = relation(ChildOf, "*");
+    const query = world.createQuery([wildcardChildOf, PositionId]);
+
+    // Rapidly switch between different parents
+    for (let i = 0; i < 10; i++) {
+      const parent = parents[i % parents.length]!;
+      world.set(entity, relation(ChildOf, parent));
+      world.sync();
+
+      expect(query.getEntities()).toContain(entity);
+      expect(query.getEntities().length).toBe(1);
+      expect(world.has(entity, relation(ChildOf, parent))).toBe(true);
+
+      // Verify wildcard marker is still in archetype
+      const archetype = (world as any).entityToArchetype.get(entity);
+      expect(archetype.componentTypes).toContain(wildcardChildOf);
+    }
+  });
 });
