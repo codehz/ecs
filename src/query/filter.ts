@@ -1,6 +1,12 @@
 import type { Archetype } from "../core/archetype";
 import type { EntityId } from "../core/entity";
-import { getComponentIdFromRelationId, getDetailedIdType, isRelationId } from "../core/entity";
+import {
+  getComponentIdFromRelationId,
+  getDetailedIdType,
+  isDontFragmentComponent,
+  isRelationId,
+  relation,
+} from "../core/entity";
 
 /**
  * Filter options for queries
@@ -32,8 +38,16 @@ export function matchesComponentTypes(archetype: Archetype, componentTypes: Enti
         const componentId = getComponentIdFromRelationId(archetypeType);
         return componentId === detailedType.componentId;
       });
+    } else if (
+      (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
+      detailedType.componentId !== undefined &&
+      isDontFragmentComponent(detailedType.componentId)
+    ) {
+      // For specific dontFragment relations, check if archetype has the wildcard marker
+      const wildcardMarker = relation(detailedType.componentId, "*");
+      return archetype.componentTypes.includes(wildcardMarker);
     } else {
-      // For regular components, check direct inclusion
+      // For regular components and non-dontFragment relations, check direct inclusion
       return archetype.componentTypes.includes(type);
     }
   });

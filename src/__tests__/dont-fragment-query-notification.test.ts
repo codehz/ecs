@@ -464,4 +464,73 @@ describe("DontFragment Query Notification Issue", () => {
       expect(archetype.componentTypes).toContain(wildcardChildOf);
     }
   });
+
+  it("should support specific relation queries for dontFragment components", () => {
+    const world = new World();
+
+    const PositionId = component();
+    const ChildOf = component({ dontFragment: true });
+
+    const parent1 = world.new();
+    const parent2 = world.new();
+
+    // Create specific relation queries (not wildcard)
+    const queryParent1 = world.createQuery([relation(ChildOf, parent1), PositionId]);
+    const queryParent2 = world.createQuery([relation(ChildOf, parent2), PositionId]);
+
+    // Create entities with different parents
+    const entity1 = world.new();
+    world.set(entity1, PositionId);
+    world.set(entity1, relation(ChildOf, parent1));
+
+    const entity2 = world.new();
+    world.set(entity2, PositionId);
+    world.set(entity2, relation(ChildOf, parent2));
+
+    world.sync();
+
+    // Specific queries should find their respective entities
+    expect(queryParent1.getEntities()).toContain(entity1);
+    expect(queryParent1.getEntities()).not.toContain(entity2);
+
+    expect(queryParent2.getEntities()).not.toContain(entity1);
+    expect(queryParent2.getEntities()).toContain(entity2);
+  });
+
+  it("should support specific relation queries with exclusive dontFragment when target changes", () => {
+    const world = new World();
+
+    const PositionId = component();
+    const ChildOf = component({ dontFragment: true, exclusive: true });
+
+    const parent1 = world.new();
+    const parent2 = world.new();
+    const entity = world.new();
+    world.set(entity, PositionId);
+
+    // Create specific queries for each parent
+    const queryParent1 = world.createQuery([relation(ChildOf, parent1), PositionId]);
+    const queryParent2 = world.createQuery([relation(ChildOf, parent2), PositionId]);
+
+    // Set relation to parent1
+    world.set(entity, relation(ChildOf, parent1));
+    world.sync();
+
+    expect(queryParent1.getEntities()).toContain(entity);
+    expect(queryParent2.getEntities()).not.toContain(entity);
+
+    // Change to parent2
+    world.set(entity, relation(ChildOf, parent2));
+    world.sync();
+
+    expect(queryParent1.getEntities()).not.toContain(entity);
+    expect(queryParent2.getEntities()).toContain(entity);
+
+    // Change back to parent1
+    world.set(entity, relation(ChildOf, parent1));
+    world.sync();
+
+    expect(queryParent1.getEntities()).toContain(entity);
+    expect(queryParent2.getEntities()).not.toContain(entity);
+  });
 });
