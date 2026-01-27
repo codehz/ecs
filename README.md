@@ -55,42 +55,7 @@ query.forEach([PositionId, VelocityId], (entity, position, velocity) => {
 
 ### 组件生命周期钩子
 
-ECS 支持在组件添加或移除时执行回调函数。钩子回调函数的参数如下：
-
-- `entityId`: 实体的 ID (number)
-- `componentType`: 组件类型 ID (EntityId)
-- `component`: 组件数据值 (T)
-
-```typescript
-// 注册组件生命周期钩子
-world.hook(PositionId, {
-  on_init: (entityId, componentType, component) => {
-    // 当钩子注册时，为现有实体上的组件调用
-    console.log(`现有组件 ${componentType} 在实体 ${entityId}`);
-  },
-  on_set: (entityId, componentType, component) => {
-    console.log(`组件 ${componentType} 被添加到实体 ${entityId}`);
-  },
-  on_remove: (entityId, componentType, component) => {
-    console.log(`组件 ${componentType} 被从实体 ${entityId} 移除`);
-  },
-});
-
-// 你也可以只注册其中一个钩子
-world.hook(VelocityId, {
-  on_remove: (entityId, componentType, component) => {
-    console.log(`组件 ${componentType} 被从实体 ${entityId} 移除`);
-  },
-});
-
-// 添加组件时会触发钩子
-world.set(entity, PositionId, { x: 0, y: 0 });
-world.sync(); // 钩子在这里被调用
-```
-
-### 多组件生命周期钩子
-
-ECS 还支持多组件生命周期钩子，可以监听多个组件同时存在于实体时的事件。只有当所有必需组件都存在时才会触发回调。
+ECS 支持监听组件的生命周期事件。可以监听单个组件或多个组件同时存在于实体时的事件。
 
 ```typescript
 // 定义组件类型
@@ -101,22 +66,20 @@ type Velocity = { x: number; y: number };
 const PositionId = component<Position>();
 const VelocityId = component<Velocity>();
 
-// 注册多组件生命周期钩子
-world.hook([PositionId, VelocityId], {
-  on_init: (entityId, componentTypes, components) => {
+// 注册生命周期钩子，返回卸载函数
+const unhook = world.hook([PositionId, VelocityId], {
+  on_init: (entityId, position, velocity) => {
     // 当钩子注册时，为已同时拥有 Position 和 Velocity 组件的实体调用
     console.log(`实体 ${entityId} 同时拥有 Position 和 Velocity 组件`);
   },
-  on_set: (entityId, componentTypes, components) => {
+  on_set: (entityId, position, velocity) => {
     // 当实体同时拥有 Position 和 Velocity 组件时调用
-    const [position, velocity] = components;
     console.log(
       `实体 ${entityId} 现在同时拥有 Position (${position.x}, ${position.y}) 和 Velocity (${velocity.x}, ${velocity.y})`,
     );
   },
-  on_remove: (entityId, componentTypes, components) => {
+  on_remove: (entityId, position, velocity) => {
     // 当实体失去 Position 或 Velocity 组件之一时调用（如果之前同时拥有两者）
-    const [position, velocity] = components; // 移除前的组件值快照
     console.log(`实体 ${entityId} 失去了 Position 或 Velocity 组件`);
   },
 });
@@ -125,17 +88,33 @@ world.hook([PositionId, VelocityId], {
 const entity = world.new();
 world.set(entity, PositionId, { x: 0, y: 0 });
 world.set(entity, VelocityId, { x: 1, y: 0.5 });
-world.sync(); // 多组件钩子在这里被调用
+world.sync(); // 钩子在这里被调用
+
+// 不再需要时，调用卸载函数移除钩子
+unhook();
+```
+
+`hook()` 也支持只监听单个组件：
+
+```typescript
+// 监听单个组件
+const unhook = world.hook([PositionId], {
+  on_set: (entityId, position) => {
+    console.log(`组件 Position 被添加到实体 ${entityId}`);
+  },
+  on_remove: (entityId, position) => {
+    console.log(`组件 Position 被从实体 ${entityId} 移除`);
+  },
+});
 ```
 
 还可以使用可选组件，这样即使某些组件不存在也会触发钩子：
 
 ```typescript
-// 注册包含可选组件的多组件生命周期钩子
-world.hook([PositionId, { optional: VelocityId }], {
-  on_set: (entityId, componentTypes, components) => {
+// 注册包含可选组件的生命周期钩子
+const unhook = world.hook([PositionId, { optional: VelocityId }], {
+  on_set: (entityId, position, velocity) => {
     // 当实体拥有 Position 组件时调用，Velocity 组件可选
-    const [position, velocity] = components;
     if (velocity !== undefined) {
       console.log(`实体 ${entityId} 拥有 Position 和 Velocity 组件`);
     } else {
@@ -145,9 +124,9 @@ world.hook([PositionId, { optional: VelocityId }], {
 });
 ```
 
-### 通配符关系生命周期钩子
+### 通配符关系钩子
 
-ECS 还支持通配符关系生命周期钩子，可以监听特定组件的所有关系变化：
+ECS 支持通配符关系钩子，可以监听特定组件的所有关系变化：
 
 ```typescript
 import { World, component, relation } from "@codehz/ecs";
@@ -167,13 +146,16 @@ const entity = world.new();
 // 创建通配符关系ID，用于监听所有 Position 相关的关系
 const wildcardPositionRelation = relation(PositionId, "*");
 
-// 注册通配符关系钩子
-world.hook(wildcardPositionRelation, {
-  on_set: (entityId, componentType, component) => {
-    console.log(`关系组件 ${componentType} 被添加到实体 ${entityId}`);
+// 注册通配符关系钩子，返回卸载函数
+const unhook = world.hook([wildcardPositionRelation], {
+  on_set: (entityId, relations) => {
+    console.log(`实体 ${entityId} 添加了 Position 关系`);
+    for (const [targetId, position] of relations) {
+      console.log(`  -> 目标实体 ${targetId}:`, position);
+    }
   },
-  on_remove: (entityId, componentType, component) => {
-    console.log(`关系组件 ${componentType} 被从实体 ${entityId} 移除`);
+  on_remove: (entityId, relations) => {
+    console.log(`实体 ${entityId} 移除了 Position 关系`);
   },
 });
 
@@ -182,6 +164,9 @@ const entity2 = world.new();
 const positionRelation = relation(PositionId, entity2);
 world.set(entity, positionRelation, { x: 10, y: 20 });
 world.sync(); // 通配符钩子会被触发
+
+// 不再需要时移除钩子
+unhook();
 ```
 
 ### Exclusive Relations
@@ -241,8 +226,7 @@ bun run examples/simple/demo.ts
 - `delete(entity)`: 销毁实体及其所有组件
 - `query(componentIds)`: 快速查询具有指定组件的实体
 - `createQuery(componentIds)`: 创建可重用的查询对象
-- `hook(componentId, hook)`: 注册组件或通配符关系生命周期钩子
-- `unhook(componentId, hook)`: 注销组件或通配符关系生命周期钩子
+- `hook(componentIds, hook)`: 注册生命周期钩子，返回卸载函数
 - `serialize()`: 序列化世界状态为快照对象
 - `sync()`: 执行所有延迟命令
 
