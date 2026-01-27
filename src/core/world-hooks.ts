@@ -1,5 +1,11 @@
 import type { Archetype } from "./archetype";
-import { getComponentIdFromRelationId, isWildcardRelationId, relation, type EntityId } from "./entity";
+import {
+  getComponentIdFromRelationId,
+  getTargetIdFromRelationId,
+  isWildcardRelationId,
+  relation,
+  type EntityId,
+} from "./entity";
 import { isOptionalEntityId, type ComponentType, type LegacyLifecycleHook, type LifecycleHookEntry } from "./types";
 
 /**
@@ -124,7 +130,7 @@ function triggerMultiComponentHooks(
     }
   }
 
-  // Handle on_remove: triggers if any required component was removed and entity matched before
+  // Handle on_remove: triggers if any required component was removed and entity no longer matches
   if (removedComponents.size > 0) {
     for (const entry of oldArchetype.matchingMultiHooks) {
       const { hook, requiredComponents, componentTypes } = entry;
@@ -132,7 +138,15 @@ function triggerMultiComponentHooks(
 
       const anyRequiredRemoved = requiredComponents.some((c) => anyComponentMatches(removedComponents, c));
 
-      if (anyRequiredRemoved && entityHadAllComponentsBefore(ctx, entityId, requiredComponents, removedComponents)) {
+      // Only trigger if:
+      // 1. A required component was removed
+      // 2. Entity matched before (had all required components)
+      // 3. Entity no longer matches after removal
+      if (
+        anyRequiredRemoved &&
+        entityHadAllComponentsBefore(ctx, entityId, requiredComponents, removedComponents) &&
+        !entityHasAllComponents(ctx, entityId, requiredComponents)
+      ) {
         hook.on_remove(
           entityId,
           ...collectMultiHookComponentsWithRemoved(ctx, entityId, componentTypes, removedComponents),
@@ -191,6 +205,32 @@ export function collectMultiHookComponents(
   );
 }
 
+/**
+ * Reconstructs wildcard relation data by merging current data with removed components.
+ * Returns an array of [targetId, value] tuples for the wildcard relation.
+ */
+function reconstructWildcardWithRemoved(
+  ctx: HooksContext,
+  entityId: EntityId,
+  wildcardId: EntityId<any>,
+  removedComponents: Map<EntityId<any>, any>,
+): [EntityId, any][] {
+  const currentData = ctx.get(entityId, wildcardId);
+  const result = Array.isArray(currentData) ? [...currentData] : [];
+
+  // Add removed matching relations
+  for (const [removedCompId, removedValue] of removedComponents.entries()) {
+    if (componentMatchesHookType(removedCompId, wildcardId)) {
+      const targetId = getTargetIdFromRelationId(removedCompId);
+      if (targetId !== undefined) {
+        result.push([targetId, removedValue]);
+      }
+    }
+  }
+
+  return result;
+}
+
 function collectMultiHookComponentsWithRemoved(
   ctx: HooksContext,
   entityId: EntityId,
@@ -200,10 +240,22 @@ function collectMultiHookComponentsWithRemoved(
   return componentTypes.map((ct) => {
     if (isOptionalEntityId(ct)) {
       const optionalId = ct.optional;
+
+      if (isWildcardRelationId(optionalId)) {
+        const result = reconstructWildcardWithRemoved(ctx, entityId, optionalId, removedComponents);
+        return result.length > 0 ? { value: result } : undefined;
+      }
+
       const match = findMatchingComponent(removedComponents, optionalId);
       return match ? { value: match[1] } : ctx.getOptional(entityId, optionalId);
     }
+
     const compId = ct as EntityId<any>;
+
+    if (isWildcardRelationId(compId)) {
+      return reconstructWildcardWithRemoved(ctx, entityId, compId, removedComponents);
+    }
+
     const match = findMatchingComponent(removedComponents, compId);
     return match ? match[1] : ctx.get(entityId, compId);
   });
