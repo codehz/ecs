@@ -255,15 +255,15 @@ export class World {
   /**
    * @deprecated use array overload with LifecycleCallback
    */
-  hook<T>(componentType: EntityId<T>, hook: LegacyLifecycleHook<T> | LegacyLifecycleCallback<T>): void;
+  hook<T>(componentType: EntityId<T>, hook: LegacyLifecycleHook<T> | LegacyLifecycleCallback<T>): () => void;
   hook<const T extends readonly ComponentType<any>[]>(
     componentTypes: T,
     hook: LifecycleHook<T> | LifecycleCallback<T>,
-  ): void;
+  ): () => void;
   hook(
     componentTypesOrSingle: EntityId<any> | readonly ComponentType<any>[],
     hook: LegacyLifecycleHook<any> | LifecycleHook<any> | LegacyLifecycleCallback<any> | LifecycleCallback<any>,
-  ): void {
+  ): () => void {
     // Normalize callback functions to hook objects
     if (typeof hook === "function") {
       if (Array.isArray(componentTypesOrSingle)) {
@@ -320,30 +320,50 @@ export class World {
           }
         }
       }
+
+      return () => {
+        this.hooks.delete(entry);
+        for (const archetype of this.archetypes) {
+          archetype.matchingMultiHooks.delete(entry);
+        }
+      };
     } else {
       const componentType = componentTypesOrSingle as EntityId<any>;
       if (!this.legacyHooks.has(componentType)) {
         this.legacyHooks.set(componentType, new Set());
       }
-      this.legacyHooks.get(componentType)!.add(hook as LegacyLifecycleHook<any>);
+      const legacyHook = hook as LegacyLifecycleHook<any>;
+      this.legacyHooks.get(componentType)!.add(legacyHook);
 
-      const singleHook = hook as LegacyLifecycleHook<any>;
-      if (singleHook.on_init !== undefined) {
+      if (legacyHook.on_init !== undefined) {
         this.archetypesByComponent.get(componentType)?.forEach((archetype) => {
           const entities = archetype.getEntityToIndexMap();
           const componentData = archetype.getComponentData<any>(componentType);
           for (const [entity, index] of entities) {
             const data = componentData[index];
             const value = data === MISSING_COMPONENT ? undefined : data;
-            singleHook.on_init?.(entity, componentType, value);
+            legacyHook.on_init?.(entity, componentType, value);
           }
         });
       }
+
+      return () => {
+        const hooks = this.legacyHooks.get(componentType);
+        if (hooks) {
+          hooks.delete(legacyHook);
+          if (hooks.size === 0) {
+            this.legacyHooks.delete(componentType);
+          }
+        }
+      };
     }
   }
 
+  /** @deprecated use the unsubscribe function returned by hook() instead */
   unhook<T>(componentType: EntityId<T>, hook: LegacyLifecycleHook<T>): void;
+  /** @deprecated use the unsubscribe function returned by hook() instead */
   unhook<const T extends readonly ComponentType<any>[]>(componentTypes: T, hook: LifecycleHook<T>): void;
+  /** @deprecated use the unsubscribe function returned by hook() instead */
   unhook(
     componentTypesOrSingle: EntityId<any> | readonly ComponentType<any>[],
     hook: LegacyLifecycleHook<any> | LifecycleHook<any>,
