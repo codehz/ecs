@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { component, type EntityId } from "../core/entity";
 import { World } from "../core/world";
 
-describe("World - Component Hooks", () => {
+describe("World - Legacy Hooks", () => {
   type Position = { x: number; y: number };
 
   const positionComponent = component<Position>();
