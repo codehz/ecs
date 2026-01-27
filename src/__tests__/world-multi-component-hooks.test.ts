@@ -219,6 +219,33 @@ describe("World - Multi-Component Hooks", () => {
     expect(removeCalls.length).toBe(0);
   });
 
+  it("should trigger on_set when optional component is removed", () => {
+    const world = new World();
+    const A = component<number>();
+    const B = component<string>();
+    const setCalls: { entityId: EntityId; components: readonly [number, { value: string } | undefined] }[] = [];
+
+    world.hook([A, { optional: B }], {
+      on_set: (entityId, ...components) => {
+        setCalls.push({ entityId, components });
+      },
+    });
+
+    const entity = world.spawn().with(A, 42).with(B, "hello").build();
+    world.sync();
+
+    expect(setCalls.length).toBe(1);
+    expect(setCalls[0]!.components).toEqual([42, { value: "hello" }]);
+
+    // Remove optional component B - should trigger on_set with undefined for B
+    world.remove(entity, B);
+    world.sync();
+
+    expect(setCalls.length).toBe(2);
+    expect(setCalls[1]!.entityId).toBe(entity);
+    expect(setCalls[1]!.components).toEqual([42, undefined]);
+  });
+
   it("should trigger on_remove with complete snapshot when required component is removed", () => {
     const world = new World();
     const A = component<number>();

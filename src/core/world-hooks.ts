@@ -115,18 +115,20 @@ function triggerMultiComponentHooks(
   oldArchetype: Archetype,
   newArchetype: Archetype,
 ): void {
-  // Handle on_set: triggers if any required or optional component was added and entity matches now
-  if (addedComponents.size > 0) {
-    for (const entry of newArchetype.matchingMultiHooks) {
-      const { hook, requiredComponents, optionalComponents, componentTypes } = entry;
-      if (!hook.on_set) continue;
+  // Handle on_set: triggers if any required or optional component was added/removed and entity still matches
+  for (const entry of newArchetype.matchingMultiHooks) {
+    const { hook, requiredComponents, optionalComponents, componentTypes } = entry;
+    if (!hook.on_set) continue;
 
-      const anyRequiredAdded = requiredComponents.some((c) => anyComponentMatches(addedComponents, c));
-      const anyOptionalAdded = optionalComponents.some((c) => anyComponentMatches(addedComponents, c));
+    const anyRequiredAdded = requiredComponents.some((c) => anyComponentMatches(addedComponents, c));
+    const anyOptionalAdded = optionalComponents.some((c) => anyComponentMatches(addedComponents, c));
+    const anyOptionalRemoved = optionalComponents.some((c) => anyComponentMatches(removedComponents, c));
 
-      if ((anyRequiredAdded || anyOptionalAdded) && entityHasAllComponents(ctx, entityId, requiredComponents)) {
-        hook.on_set(entityId, ...collectMultiHookComponents(ctx, entityId, componentTypes));
-      }
+    if (
+      (anyRequiredAdded || anyOptionalAdded || anyOptionalRemoved) &&
+      entityHasAllComponents(ctx, entityId, requiredComponents)
+    ) {
+      hook.on_set(entityId, ...collectMultiHookComponents(ctx, entityId, componentTypes));
     }
   }
 
