@@ -3,6 +3,28 @@ import { component, relation, type EntityId } from "../core/entity";
 import { World } from "../core/world";
 
 describe("World - Multi-Component Hooks", () => {
+  it("should throw error when hook has no required components (only optional)", () => {
+    const world = new World();
+    const A = component<number>();
+    const B = component<string>();
+
+    expect(() => {
+      world.hook([{ optional: A }, { optional: B }], {
+        on_set: () => {},
+      });
+    }).toThrow();
+  });
+
+  it("should throw error when hook has empty component array", () => {
+    const world = new World();
+
+    expect(() => {
+      world.hook([], {
+        on_set: () => {},
+      });
+    }).toThrow();
+  });
+
   it("should trigger on_set when all required components are present", () => {
     const world = new World();
     const A = component<number>();

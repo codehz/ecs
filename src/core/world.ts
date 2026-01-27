@@ -295,6 +295,10 @@ export class World {
         }
       }
 
+      if (requiredComponents.length === 0) {
+        throw new Error("Hook must have at least one required component");
+      }
+
       const entry: LifecycleHookEntry = {
         componentTypes,
         requiredComponents,
