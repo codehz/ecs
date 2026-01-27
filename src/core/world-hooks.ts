@@ -1,6 +1,6 @@
 import type { Archetype } from "./archetype";
 import { getComponentIdFromRelationId, isWildcardRelationId, relation, type EntityId } from "./entity";
-import { isOptionalEntityId, type ComponentType, type LegacyLifecycleHook, type MultiHookEntry } from "./types";
+import { isOptionalEntityId, type ComponentType, type LegacyLifecycleHook, type LifecycleHookEntry } from "./types";
 
 /**
  * Check if a component change matches a hook component type.
@@ -54,7 +54,7 @@ export type HooksMap = Map<EntityId<any>, Set<LegacyLifecycleHook<any>>>;
 
 export interface HooksContext {
   hooks: HooksMap;
-  multiHooks: Set<MultiHookEntry>;
+  multiHooks: Set<LifecycleHookEntry>;
   has: (entityId: EntityId, componentType: EntityId<any>) => boolean;
   get: <T>(entityId: EntityId, componentType: EntityId<T>) => T;
   getOptional: <T>(entityId: EntityId, componentType: EntityId<T>) => { value: T } | undefined;

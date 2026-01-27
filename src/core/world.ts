@@ -27,7 +27,7 @@ import type {
   LegacyLifecycleHook,
   LifecycleCallback,
   LifecycleHook,
-  MultiHookEntry,
+  LifecycleHookEntry,
 } from "./types";
 import { isOptionalEntityId } from "./types";
 import {
@@ -68,7 +68,7 @@ export class World {
 
   // Lifecycle hooks
   private hooks = new Map<EntityId<any>, Set<LegacyLifecycleHook<any>>>();
-  private multiHooks: Set<MultiHookEntry> = new Set();
+  private multiHooks: Set<LifecycleHookEntry> = new Set();
 
   constructor(snapshot?: SerializedWorld) {
     if (snapshot && typeof snapshot === "object") {
@@ -295,7 +295,7 @@ export class World {
         }
       }
 
-      const entry: MultiHookEntry = {
+      const entry: LifecycleHookEntry = {
         componentTypes,
         requiredComponents,
         optionalComponents,
@@ -635,7 +635,7 @@ export class World {
     }
   }
 
-  private archetypeMatchesHook(archetype: Archetype, entry: MultiHookEntry): boolean {
+  private archetypeMatchesHook(archetype: Archetype, entry: LifecycleHookEntry): boolean {
     return entry.requiredComponents.every((c: EntityId<any>) => {
       if (isWildcardRelationId(c)) {
         if (isDontFragmentWildcard(c)) return true;

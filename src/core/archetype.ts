@@ -14,7 +14,7 @@ import {
   isDontFragmentComponent,
   isWildcardRelationId,
 } from "./entity";
-import { isOptionalEntityId, type ComponentTuple, type ComponentType, type MultiHookEntry } from "./types";
+import { isOptionalEntityId, type ComponentTuple, type ComponentType, type LifecycleHookEntry } from "./types";
 
 /**
  * Special value to represent missing component data
@@ -61,7 +61,7 @@ export class Archetype {
   /**
    * Multi-hooks that match this archetype
    */
-  public readonly matchingMultiHooks: Set<MultiHookEntry> = new Set();
+  public readonly matchingMultiHooks: Set<LifecycleHookEntry> = new Set();
 
   /**
    * Cache for pre-computed component data sources to avoid repeated calculations
