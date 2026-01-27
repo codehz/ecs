@@ -33,4 +33,11 @@ export { World } from "./core/world";
 export { Query } from "./query/query";
 
 // Type utilities
-export type { ComponentTuple, ComponentType, LifecycleHook } from "./core/types";
+export type {
+  ComponentTuple,
+  ComponentType,
+  LifecycleCallback,
+  LifecycleHook,
+  MultiLifecycleCallback,
+  MultiLifecycleHook,
+} from "./core/types";

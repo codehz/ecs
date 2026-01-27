@@ -24,6 +24,28 @@ export interface MultiLifecycleHook<T extends readonly ComponentType<any>[]> {
   on_remove?: (entityId: EntityId, componentTypes: T, components: ComponentTuple<T>) => void;
 }
 
+/**
+ * Convenience function type for single component lifecycle events
+ * Combines on_init, on_set, and on_remove into a single callback
+ */
+export type LifecycleCallback<T = unknown> = (
+  type: "init" | "set" | "remove",
+  entityId: EntityId,
+  componentType: EntityId<T>,
+  component: T,
+) => void;
+
+/**
+ * Convenience function type for multi-component lifecycle events
+ * Combines on_init, on_set, and on_remove into a single callback
+ */
+export type MultiLifecycleCallback<T extends readonly ComponentType<any>[]> = (
+  type: "init" | "set" | "remove",
+  entityId: EntityId,
+  componentTypes: T,
+  components: ComponentTuple<T>,
+) => void;
+
 export type ComponentType<T> = EntityId<T> | OptionalEntityId<T>;
 
 export type OptionalEntityId<T> = { optional: EntityId<T> };
