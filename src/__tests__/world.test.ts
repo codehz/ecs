@@ -1113,5 +1113,206 @@ describe("World", () => {
       expect(world.has(entity1, A)).toBe(true);
       expect(world.has(entity2, A)).toBe(true);
     });
+
+    describe("Wildcard-Relation Support", () => {
+      it("should trigger on_set when wildcard relation matches added relation component", () => {
+        const world = new World();
+        const A = component<number>();
+        const RelData = component<{ value: string }>();
+        const target = world.new();
+        const wildcardRel = relation(RelData, "*");
+        const concreteRel = relation(RelData, target);
+
+        const calls: { entityId: EntityId; components: readonly [number, [EntityId, { value: string }][]] }[] = [];
+
+        world.hook([A, wildcardRel], {
+          on_set: (entityId, _componentTypes, components) => {
+            calls.push({ entityId, components });
+          },
+        });
+
+        // Create entity with both A and a concrete relation
+        const entity = world.spawn().with(A, 42).with(concreteRel, { value: "hello" }).build();
+        world.sync();
+
+        expect(calls.length).toBe(1);
+        expect(calls[0]!.entityId).toBe(entity);
+        expect(calls[0]!.components[0]).toBe(42);
+        expect(calls[0]!.components[1]).toEqual([[target, { value: "hello" }]]);
+      });
+
+      it("should trigger on_set when adding a new relation that matches wildcard", () => {
+        const world = new World();
+        const A = component<number>();
+        const RelData = component<{ value: string }>();
+        const target1 = world.new();
+        const target2 = world.new();
+        const wildcardRel = relation(RelData, "*");
+
+        const calls: { entityId: EntityId; components: readonly [number, [EntityId, { value: string }][]] }[] = [];
+
+        world.hook([A, wildcardRel], {
+          on_set: (entityId, _componentTypes, components) => {
+            calls.push({ entityId, components });
+          },
+        });
+
+        // First, create entity with A and one relation
+        const entity = world.spawn().with(A, 42).with(relation(RelData, target1), { value: "first" }).build();
+        world.sync();
+
+        expect(calls.length).toBe(1);
+
+        // Add another relation - should trigger again
+        world.set(entity, relation(RelData, target2), { value: "second" });
+        world.sync();
+
+        expect(calls.length).toBe(2);
+        // Check that both relations are present (order may vary)
+        const relations = calls[1]!.components[1] as [EntityId, { value: string }][];
+        expect(relations.length).toBe(2);
+        expect(relations).toContainEqual([target1, { value: "first" }]);
+        expect(relations).toContainEqual([target2, { value: "second" }]);
+      });
+
+      it("should not trigger on_set when wildcard relation requirement not met", () => {
+        const world = new World();
+        const A = component<number>();
+        const RelData = component<{ value: string }>();
+        const wildcardRel = relation(RelData, "*");
+
+        const calls: any[] = [];
+
+        world.hook([A, wildcardRel], {
+          on_set: (entityId, _componentTypes, components) => {
+            calls.push({ entityId, components });
+          },
+        });
+
+        // Create entity with only A, no relation
+        const entity = world.spawn().with(A, 42).build();
+        world.sync();
+
+        expect(calls.length).toBe(0);
+        expect(world.has(entity, A)).toBe(true);
+      });
+
+      it("should trigger on_remove when wildcard relation matches removed relation component", () => {
+        const world = new World();
+        const A = component<number>();
+        const RelData = component<{ value: string }>();
+        const target = world.new();
+        const wildcardRel = relation(RelData, "*");
+        const concreteRel = relation(RelData, target);
+
+        const removeCalls: { entityId: EntityId; components: any }[] = [];
+
+        world.hook([A, wildcardRel], {
+          on_remove: (entityId, _componentTypes, components) => {
+            removeCalls.push({ entityId, components });
+          },
+        });
+
+        const entity = world.spawn().with(A, 42).with(concreteRel, { value: "hello" }).build();
+        world.sync();
+
+        // Remove the relation
+        world.remove(entity, concreteRel);
+        world.sync();
+
+        expect(removeCalls.length).toBe(1);
+        expect(removeCalls[0]!.entityId).toBe(entity);
+      });
+
+      it("should support optional wildcard relation in multi-hook", () => {
+        const world = new World();
+        const A = component<number>();
+        const RelData = component<{ value: string }>();
+        const target = world.new();
+        const wildcardRel = relation(RelData, "*");
+        const concreteRel = relation(RelData, target);
+
+        const calls: { entityId: EntityId; components: any }[] = [];
+
+        world.hook([A, { optional: wildcardRel }], {
+          on_set: (entityId, _componentTypes, components) => {
+            calls.push({ entityId, components });
+          },
+        });
+
+        // Create entity with only A
+        const entity = world.spawn().with(A, 42).build();
+        world.sync();
+
+        expect(calls.length).toBe(1);
+        expect(calls[0]!.components).toEqual([42, undefined]);
+
+        // Add a relation
+        world.set(entity, concreteRel, { value: "hello" });
+        world.sync();
+
+        expect(calls.length).toBe(2);
+        expect(calls[1]!.components[0]).toBe(42);
+        expect(calls[1]!.components[1]).toEqual({ value: [[target, { value: "hello" }]] });
+      });
+
+      it("should trigger on_set with multiple wildcard relations", () => {
+        const world = new World();
+        const A = component<number>();
+        const RelData1 = component<{ x: number }>();
+        const RelData2 = component<{ y: number }>();
+        const target1 = world.new();
+        const target2 = world.new();
+        const wildcardRel1 = relation(RelData1, "*");
+        const wildcardRel2 = relation(RelData2, "*");
+
+        const calls: { entityId: EntityId; components: any }[] = [];
+
+        world.hook([A, wildcardRel1, wildcardRel2], {
+          on_set: (entityId, _componentTypes, components) => {
+            calls.push({ entityId, components });
+          },
+        });
+
+        const entity = world
+          .spawn()
+          .with(A, 42)
+          .with(relation(RelData1, target1), { x: 10 })
+          .with(relation(RelData2, target2), { y: 20 })
+          .build();
+        world.sync();
+
+        expect(calls.length).toBe(1);
+        expect(calls[0]!.entityId).toBe(entity);
+        expect(calls[0]!.components[0]).toBe(42);
+        expect(calls[0]!.components[1]).toEqual([[target1, { x: 10 }]]);
+        expect(calls[0]!.components[2]).toEqual([[target2, { y: 20 }]]);
+      });
+
+      it("should not match unrelated relation components with wildcard", () => {
+        const world = new World();
+        const A = component<number>();
+        const RelData1 = component<{ x: number }>();
+        const RelData2 = component<{ y: number }>();
+        const target = world.new();
+        const wildcardRel1 = relation(RelData1, "*");
+
+        const calls: any[] = [];
+
+        world.hook([A, wildcardRel1], {
+          on_set: (entityId, _componentTypes, components) => {
+            calls.push({ entityId, components });
+          },
+        });
+
+        // Create entity with A and a different relation type
+        const entity = world.spawn().with(A, 42).with(relation(RelData2, target), { y: 20 }).build();
+        world.sync();
+
+        // Should not trigger because RelData2 doesn't match RelData1's wildcard
+        expect(calls.length).toBe(0);
+        expect(world.has(entity, A)).toBe(true);
+      });
+    });
   });
 });

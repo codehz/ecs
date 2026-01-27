@@ -49,12 +49,22 @@ describe("World.getOptional", () => {
     expect(() => world.getOptional(entity, PositionId)).toThrow("Entity 1234 does not exist");
   });
 
-  it("should return undefined for wildcard relations", () => {
+  it("should return matching relations for wildcard relations", () => {
     const world = new World();
     const Rel = component<number>();
     const target = world.new();
     const entity = world.new();
     world.set(entity, relation(Rel, target), 100);
+    world.sync();
+
+    const wildcard = relation(Rel, "*");
+    expect(world.getOptional(entity, wildcard as any)).toEqual({ value: [[target, 100]] });
+  });
+
+  it("should return undefined for wildcard relations with no matching relations", () => {
+    const world = new World();
+    const Rel = component<number>();
+    const entity = world.new();
     world.sync();
 
     const wildcard = relation(Rel, "*");

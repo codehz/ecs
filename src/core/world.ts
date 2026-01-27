@@ -243,7 +243,14 @@ export class World {
       throw new Error(`Entity ${entityId} does not exist`);
     }
 
-    if (isWildcardRelationId(componentType)) return undefined;
+    if (isWildcardRelationId(componentType)) {
+      // For wildcard relations, get the data and wrap in optional if non-empty
+      const wildcardData = archetype.get(entityId, componentType as any);
+      if (Array.isArray(wildcardData) && wildcardData.length > 0) {
+        return { value: wildcardData as T };
+      }
+      return undefined;
+    }
 
     return archetype.getOptional(entityId, componentType);
   }
