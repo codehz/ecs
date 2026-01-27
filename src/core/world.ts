@@ -23,11 +23,11 @@ import { decodeSerializedId, encodeEntityId } from "./serialization";
 import type {
   ComponentTuple,
   ComponentType,
+  LegacyLifecycleCallback,
   LegacyLifecycleHook,
   LifecycleCallback,
   LifecycleHook,
   MultiHookEntry,
-  MultiLifecycleCallback,
 } from "./types";
 import { isOptionalEntityId } from "./types";
 import {
@@ -252,26 +252,29 @@ export class World {
     return archetype.getOptional(entityId, componentType);
   }
 
-  hook<T>(componentType: EntityId<T>, hook: LegacyLifecycleHook<T> | LifecycleCallback<T>): void;
+  /**
+   * @deprecated use array overload with LifecycleCallback
+   */
+  hook<T>(componentType: EntityId<T>, hook: LegacyLifecycleHook<T> | LegacyLifecycleCallback<T>): void;
   hook<const T extends readonly ComponentType<any>[]>(
     componentTypes: T,
-    hook: LifecycleHook<T> | MultiLifecycleCallback<T>,
+    hook: LifecycleHook<T> | LifecycleCallback<T>,
   ): void;
   hook(
     componentTypesOrSingle: EntityId<any> | readonly ComponentType<any>[],
-    hook: LegacyLifecycleHook<any> | LifecycleHook<any> | LifecycleCallback<any> | MultiLifecycleCallback<any>,
+    hook: LegacyLifecycleHook<any> | LifecycleHook<any> | LegacyLifecycleCallback<any> | LifecycleCallback<any>,
   ): void {
     // Normalize callback functions to hook objects
     if (typeof hook === "function") {
       if (Array.isArray(componentTypesOrSingle)) {
-        const callback = hook as MultiLifecycleCallback<any>;
+        const callback = hook as LifecycleCallback<any>;
         hook = {
           on_init: (entityId, componentTypes, components) => callback("init", entityId, componentTypes, components),
           on_set: (entityId, componentTypes, components) => callback("set", entityId, componentTypes, components),
           on_remove: (entityId, componentTypes, components) => callback("remove", entityId, componentTypes, components),
         } as LifecycleHook<any>;
       } else {
-        const callback = hook as LifecycleCallback<any>;
+        const callback = hook as LegacyLifecycleCallback<any>;
         hook = {
           on_init: (entityId, componentType, component) => callback("init", entityId, componentType, component),
           on_set: (entityId, componentType, component) => callback("set", entityId, componentType, component),

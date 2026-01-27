@@ -28,7 +28,7 @@ export interface LifecycleHook<T extends readonly ComponentType<any>[]> {
  * Convenience function type for single component lifecycle events
  * Combines on_init, on_set, and on_remove into a single callback
  */
-export type LifecycleCallback<T = unknown> = (
+export type LegacyLifecycleCallback<T = unknown> = (
   type: "init" | "set" | "remove",
   entityId: EntityId,
   componentType: EntityId<T>,
@@ -39,7 +39,7 @@ export type LifecycleCallback<T = unknown> = (
  * Convenience function type for multi-component lifecycle events
  * Combines on_init, on_set, and on_remove into a single callback
  */
-export type MultiLifecycleCallback<T extends readonly ComponentType<any>[]> = (
+export type LifecycleCallback<T extends readonly ComponentType<any>[]> = (
   type: "init" | "set" | "remove",
   entityId: EntityId,
   componentTypes: T,

@@ -36,8 +36,8 @@ export { Query } from "./query/query";
 export type {
   ComponentTuple,
   ComponentType,
-  LifecycleCallback,
+  LegacyLifecycleCallback as LifecycleCallback,
   LegacyLifecycleHook as LifecycleHook,
-  MultiLifecycleCallback,
+  LifecycleCallback as MultiLifecycleCallback,
   LifecycleHook as MultiLifecycleHook,
 } from "./core/types";
