@@ -927,6 +927,120 @@ describe("World", () => {
       expect(calls[0]!.components).toEqual([42, undefined]);
     });
 
+    it("should trigger on_set when optional component changes while required component unchanged", () => {
+      const world = new World();
+      const A = component<number>();
+      const B = component<string>();
+      const calls: { entityId: EntityId; components: readonly [number, { value: string } | undefined] }[] = [];
+
+      world.hook([A, { optional: B }], {
+        on_set: (entityId, _componentTypes, components) => {
+          calls.push({ entityId, components });
+        },
+      });
+
+      // First, create entity with only A
+      const entity = world.spawn().with(A, 42).build();
+      world.sync();
+
+      expect(calls.length).toBe(1);
+      expect(calls[0]!.components).toEqual([42, undefined]);
+
+      // Now add B - should trigger on_set
+      world.set(entity, B, "hello");
+      world.sync();
+
+      expect(calls.length).toBe(2);
+      expect(calls[1]!.entityId).toBe(entity);
+      expect(calls[1]!.components).toEqual([42, { value: "hello" }]);
+
+      // Update B - should also trigger on_set
+      world.set(entity, B, "world");
+      world.sync();
+
+      expect(calls.length).toBe(3);
+      expect(calls[2]!.entityId).toBe(entity);
+      expect(calls[2]!.components).toEqual([42, { value: "world" }]);
+
+      // Updating A should also trigger on_set with latest B value
+      world.set(entity, A, 100);
+      world.sync();
+
+      expect(calls.length).toBe(4);
+      expect(calls[3]!.entityId).toBe(entity);
+      expect(calls[3]!.components).toEqual([100, { value: "world" }]);
+    });
+
+    it("should trigger on_remove when required component is removed with optional present", () => {
+      const world = new World();
+      const A = component<number>();
+      const B = component<string>();
+      const removeCalls: { entityId: EntityId; components: readonly [number, { value: string } | undefined] }[] = [];
+
+      world.hook([A, { optional: B }], {
+        on_remove: (entityId, _componentTypes, components) => {
+          removeCalls.push({ entityId, components });
+        },
+      });
+
+      const entity = world.spawn().with(A, 42).with(B, "hello").build();
+      world.sync();
+
+      // Remove required component A
+      world.remove(entity, A);
+      world.sync();
+
+      expect(removeCalls.length).toBe(1);
+      expect(removeCalls[0]!.entityId).toBe(entity);
+      expect(removeCalls[0]!.components).toEqual([42, { value: "hello" }]);
+    });
+
+    it("should trigger on_remove when required component is removed with optional absent", () => {
+      const world = new World();
+      const A = component<number>();
+      const B = component<string>();
+      const removeCalls: { entityId: EntityId; components: readonly [number, { value: string } | undefined] }[] = [];
+
+      world.hook([A, { optional: B }], {
+        on_remove: (entityId, _componentTypes, components) => {
+          removeCalls.push({ entityId, components });
+        },
+      });
+
+      const entity = world.spawn().with(A, 42).build();
+      world.sync();
+
+      // Remove required component A
+      world.remove(entity, A);
+      world.sync();
+
+      expect(removeCalls.length).toBe(1);
+      expect(removeCalls[0]!.entityId).toBe(entity);
+      expect(removeCalls[0]!.components).toEqual([42, undefined]);
+    });
+
+    it("should not trigger on_remove when optional component is removed", () => {
+      const world = new World();
+      const A = component<number>();
+      const B = component<string>();
+      const removeCalls: { entityId: EntityId; components: readonly [number, { value: string } | undefined] }[] = [];
+
+      world.hook([A, { optional: B }], {
+        on_remove: (entityId, _componentTypes, components) => {
+          removeCalls.push({ entityId, components });
+        },
+      });
+
+      const entity = world.spawn().with(A, 42).with(B, "hello").build();
+      world.sync();
+
+      // Remove optional component B - should NOT trigger on_remove
+      world.remove(entity, B);
+      world.sync();
+
+      expect(removeCalls.length).toBe(0);
+    });
+
     it("should trigger on_remove with complete snapshot when required component is removed", () => {
       const world = new World();
       const A = component<number>();

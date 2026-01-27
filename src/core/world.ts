@@ -279,15 +279,19 @@ export class World {
     if (Array.isArray(componentTypesOrSingle)) {
       const componentTypes = componentTypesOrSingle as readonly ComponentType<any>[];
       const requiredComponents: EntityId<any>[] = [];
+      const optionalComponents: EntityId<any>[] = [];
       for (const ct of componentTypes) {
         if (!isOptionalEntityId(ct)) {
           requiredComponents.push(ct as EntityId<any>);
+        } else {
+          optionalComponents.push(ct.optional);
         }
       }
 
       const entry: MultiHookEntry = {
         componentTypes,
         requiredComponents,
+        optionalComponents,
         hook: hook as MultiLifecycleHook<any>,
       };
       this.multiHooks.add(entry);

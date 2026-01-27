@@ -7,6 +7,7 @@ export type HooksMap = Map<EntityId<any>, Set<LifecycleHook<any>>>;
 export interface MultiHookEntry {
   componentTypes: readonly ComponentType<any>[];
   requiredComponents: EntityId<any>[];
+  optionalComponents: EntityId<any>[];
   hook: MultiLifecycleHook<any>;
 }
 
@@ -63,12 +64,17 @@ function triggerMultiComponentHooks(
   addedComponents: Map<EntityId<any>, any>,
   removedComponents: Map<EntityId<any>, any>,
 ): void {
-  for (const { componentTypes, requiredComponents, hook } of ctx.multiHooks) {
+  for (const { componentTypes, requiredComponents, optionalComponents, hook } of ctx.multiHooks) {
     const anyRequiredAdded = requiredComponents.some((c) => addedComponents.has(c));
+    const anyOptionalAdded = optionalComponents.some((c) => addedComponents.has(c));
     const anyRequiredRemoved = requiredComponents.some((c) => removedComponents.has(c));
 
-    // Handle on_set: trigger if any required component was added and entity has all required components now
-    if (anyRequiredAdded && hook.on_set && entityHasAllComponents(ctx, entityId, requiredComponents)) {
+    // Handle on_set: trigger if any required or optional component was added and entity has all required components now
+    if (
+      (anyRequiredAdded || anyOptionalAdded) &&
+      hook.on_set &&
+      entityHasAllComponents(ctx, entityId, requiredComponents)
+    ) {
       hook.on_set(entityId, componentTypes, collectMultiHookComponents(ctx, entityId, componentTypes));
     }
 
