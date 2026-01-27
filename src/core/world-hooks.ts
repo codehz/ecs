@@ -119,7 +119,7 @@ function triggerMultiComponentHooks(
       const anyOptionalAdded = optionalComponents.some((c) => anyComponentMatches(addedComponents, c));
 
       if ((anyRequiredAdded || anyOptionalAdded) && entityHasAllComponents(ctx, entityId, requiredComponents)) {
-        hook.on_set(entityId, componentTypes, collectMultiHookComponents(ctx, entityId, componentTypes));
+        hook.on_set(entityId, ...collectMultiHookComponents(ctx, entityId, componentTypes));
       }
     }
   }
@@ -135,8 +135,7 @@ function triggerMultiComponentHooks(
       if (anyRequiredRemoved && entityHadAllComponentsBefore(ctx, entityId, requiredComponents, removedComponents)) {
         hook.on_remove(
           entityId,
-          componentTypes,
-          collectMultiHookComponentsWithRemoved(ctx, entityId, componentTypes, removedComponents),
+          ...collectMultiHookComponentsWithRemoved(ctx, entityId, componentTypes, removedComponents),
         );
       }
     }

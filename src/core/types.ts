@@ -19,9 +19,9 @@ export interface LegacyLifecycleHook<T = unknown> {
 }
 
 export interface LifecycleHook<T extends readonly ComponentType<any>[]> {
-  on_init?: (entityId: EntityId, componentTypes: T, components: ComponentTuple<T>) => void;
-  on_set?: (entityId: EntityId, componentTypes: T, components: ComponentTuple<T>) => void;
-  on_remove?: (entityId: EntityId, componentTypes: T, components: ComponentTuple<T>) => void;
+  on_init?: (entityId: EntityId, ...components: ComponentTuple<T>) => void;
+  on_set?: (entityId: EntityId, ...components: ComponentTuple<T>) => void;
+  on_remove?: (entityId: EntityId, ...components: ComponentTuple<T>) => void;
 }
 
 /**
@@ -42,8 +42,7 @@ export type LegacyLifecycleCallback<T = unknown> = (
 export type LifecycleCallback<T extends readonly ComponentType<any>[]> = (
   type: "init" | "set" | "remove",
   entityId: EntityId,
-  componentTypes: T,
-  components: ComponentTuple<T>,
+  ...components: ComponentTuple<T>
 ) => void;
 
 export type ComponentType<T> = EntityId<T> | OptionalEntityId<T>;

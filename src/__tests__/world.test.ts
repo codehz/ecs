@@ -854,7 +854,7 @@ describe("World", () => {
       const calls: { entityId: EntityId; components: readonly [number, string] }[] = [];
 
       world.hook([A, B], {
-        on_set: (entityId, _componentTypes, components) => {
+        on_set: (entityId, ...components) => {
           calls.push({ entityId, components });
         },
       });
@@ -874,7 +874,7 @@ describe("World", () => {
       const calls: any[] = [];
 
       world.hook([A, B], {
-        on_set: (entityId, _componentTypes, components) => {
+        on_set: (entityId, ...components) => {
           calls.push({ entityId, components });
         },
       });
@@ -894,7 +894,7 @@ describe("World", () => {
       const calls: { entityId: EntityId; components: readonly [number, { value: string } | undefined] }[] = [];
 
       world.hook([A, { optional: B }], {
-        on_set: (entityId, _componentTypes, components) => {
+        on_set: (entityId, ...components) => {
           calls.push({ entityId, components });
         },
       });
@@ -914,7 +914,7 @@ describe("World", () => {
       const calls: { entityId: EntityId; components: readonly [number, { value: string } | undefined] }[] = [];
 
       world.hook([A, { optional: B }], {
-        on_set: (entityId, _componentTypes, components) => {
+        on_set: (entityId, ...components) => {
           calls.push({ entityId, components });
         },
       });
@@ -934,7 +934,7 @@ describe("World", () => {
       const calls: { entityId: EntityId; components: readonly [number, { value: string } | undefined] }[] = [];
 
       world.hook([A, { optional: B }], {
-        on_set: (entityId, _componentTypes, components) => {
+        on_set: (entityId, ...components) => {
           calls.push({ entityId, components });
         },
       });
@@ -978,7 +978,7 @@ describe("World", () => {
       const removeCalls: { entityId: EntityId; components: readonly [number, { value: string } | undefined] }[] = [];
 
       world.hook([A, { optional: B }], {
-        on_remove: (entityId, _componentTypes, components) => {
+        on_remove: (entityId, ...components) => {
           removeCalls.push({ entityId, components });
         },
       });
@@ -1002,7 +1002,7 @@ describe("World", () => {
       const removeCalls: { entityId: EntityId; components: readonly [number, { value: string } | undefined] }[] = [];
 
       world.hook([A, { optional: B }], {
-        on_remove: (entityId, _componentTypes, components) => {
+        on_remove: (entityId, ...components) => {
           removeCalls.push({ entityId, components });
         },
       });
@@ -1026,7 +1026,7 @@ describe("World", () => {
       const removeCalls: { entityId: EntityId; components: readonly [number, { value: string } | undefined] }[] = [];
 
       world.hook([A, { optional: B }], {
-        on_remove: (entityId, _componentTypes, components) => {
+        on_remove: (entityId, ...components) => {
           removeCalls.push({ entityId, components });
         },
       });
@@ -1048,7 +1048,7 @@ describe("World", () => {
       const removeCalls: { entityId: EntityId; components: readonly [number, string] }[] = [];
 
       world.hook([A, B], {
-        on_remove: (entityId, _componentTypes, components) => {
+        on_remove: (entityId, ...components) => {
           removeCalls.push({ entityId, components });
         },
       });
@@ -1075,7 +1075,7 @@ describe("World", () => {
       const initCalls: { entityId: EntityId; components: readonly [number, string] }[] = [];
 
       world.hook([A, B], {
-        on_init: (entityId, _componentTypes, components) => {
+        on_init: (entityId, ...components) => {
           initCalls.push({ entityId, components });
         },
       });
@@ -1092,7 +1092,7 @@ describe("World", () => {
       const calls: any[] = [];
 
       const hook = {
-        on_set: (entityId: EntityId, _componentTypes: any, components: any) => {
+        on_set: (entityId: EntityId, ...components: any[]) => {
           calls.push({ entityId, components });
         },
       };
@@ -1126,7 +1126,7 @@ describe("World", () => {
         const calls: { entityId: EntityId; components: readonly [number, [EntityId, { value: string }][]] }[] = [];
 
         world.hook([A, wildcardRel], {
-          on_set: (entityId, _componentTypes, components) => {
+          on_set: (entityId, ...components) => {
             calls.push({ entityId, components });
           },
         });
@@ -1152,7 +1152,7 @@ describe("World", () => {
         const calls: { entityId: EntityId; components: readonly [number, [EntityId, { value: string }][]] }[] = [];
 
         world.hook([A, wildcardRel], {
-          on_set: (entityId, _componentTypes, components) => {
+          on_set: (entityId, ...components) => {
             calls.push({ entityId, components });
           },
         });
@@ -1184,7 +1184,7 @@ describe("World", () => {
         const calls: any[] = [];
 
         world.hook([A, wildcardRel], {
-          on_set: (entityId, _componentTypes, components) => {
+          on_set: (entityId, ...components) => {
             calls.push({ entityId, components });
           },
         });
@@ -1208,7 +1208,7 @@ describe("World", () => {
         const removeCalls: { entityId: EntityId; components: any }[] = [];
 
         world.hook([A, wildcardRel], {
-          on_remove: (entityId, _componentTypes, components) => {
+          on_remove: (entityId, ...components) => {
             removeCalls.push({ entityId, components });
           },
         });
@@ -1235,7 +1235,7 @@ describe("World", () => {
         const calls: { entityId: EntityId; components: any }[] = [];
 
         world.hook([A, { optional: wildcardRel }], {
-          on_set: (entityId, _componentTypes, components) => {
+          on_set: (entityId, ...components) => {
             calls.push({ entityId, components });
           },
         });
@@ -1269,7 +1269,7 @@ describe("World", () => {
         const calls: { entityId: EntityId; components: any }[] = [];
 
         world.hook([A, wildcardRel1, wildcardRel2], {
-          on_set: (entityId, _componentTypes, components) => {
+          on_set: (entityId, ...components) => {
             calls.push({ entityId, components });
           },
         });
@@ -1300,7 +1300,7 @@ describe("World", () => {
         const calls: any[] = [];
 
         world.hook([A, wildcardRel1], {
-          on_set: (entityId, _componentTypes, components) => {
+          on_set: (entityId, ...components) => {
             calls.push({ entityId, components });
           },
         });

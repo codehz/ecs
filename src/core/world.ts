@@ -269,9 +269,9 @@ export class World {
       if (Array.isArray(componentTypesOrSingle)) {
         const callback = hook as LifecycleCallback<any>;
         hook = {
-          on_init: (entityId, componentTypes, components) => callback("init", entityId, componentTypes, components),
-          on_set: (entityId, componentTypes, components) => callback("set", entityId, componentTypes, components),
-          on_remove: (entityId, componentTypes, components) => callback("remove", entityId, componentTypes, components),
+          on_init: (entityId, ...components) => callback("init", entityId, ...components),
+          on_set: (entityId, ...components) => callback("set", entityId, ...components),
+          on_remove: (entityId, ...components) => callback("remove", entityId, ...components),
         } as LifecycleHook<any>;
       } else {
         const callback = hook as LegacyLifecycleCallback<any>;
@@ -316,7 +316,7 @@ export class World {
         for (const archetype of matchingArchetypes) {
           for (const entityId of archetype.getEntities()) {
             const components = collectMultiHookComponents(this.createHooksContext(), entityId, componentTypes);
-            multiHook.on_init(entityId, componentTypes, components);
+            multiHook.on_init(entityId, ...components);
           }
         }
       }
