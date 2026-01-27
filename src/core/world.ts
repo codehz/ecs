@@ -67,8 +67,8 @@ export class World {
   private commandBuffer = new CommandBuffer((entityId, commands) => this.executeEntityCommands(entityId, commands));
 
   // Lifecycle hooks
-  private hooks = new Map<EntityId<any>, Set<LegacyLifecycleHook<any>>>();
-  private multiHooks: Set<LifecycleHookEntry> = new Set();
+  private legacyHooks = new Map<EntityId<any>, Set<LegacyLifecycleHook<any>>>();
+  private hooks: Set<LifecycleHookEntry> = new Set();
 
   constructor(snapshot?: SerializedWorld) {
     if (snapshot && typeof snapshot === "object") {
@@ -301,7 +301,7 @@ export class World {
         optionalComponents,
         hook: hook as LifecycleHook<any>,
       };
-      this.multiHooks.add(entry);
+      this.hooks.add(entry);
 
       // Add to archetypes
       for (const archetype of this.archetypes) {
@@ -322,10 +322,10 @@ export class World {
       }
     } else {
       const componentType = componentTypesOrSingle as EntityId<any>;
-      if (!this.hooks.has(componentType)) {
-        this.hooks.set(componentType, new Set());
+      if (!this.legacyHooks.has(componentType)) {
+        this.legacyHooks.set(componentType, new Set());
       }
-      this.hooks.get(componentType)!.add(hook as LegacyLifecycleHook<any>);
+      this.legacyHooks.get(componentType)!.add(hook as LegacyLifecycleHook<any>);
 
       const singleHook = hook as LegacyLifecycleHook<any>;
       if (singleHook.on_init !== undefined) {
@@ -351,9 +351,9 @@ export class World {
     // Note: Callback functions passed to hook() are converted to hook objects internally,
     // so unhook() only accepts the original hook object references.
     if (Array.isArray(componentTypesOrSingle)) {
-      for (const entry of this.multiHooks) {
+      for (const entry of this.hooks) {
         if (entry.hook === hook) {
-          this.multiHooks.delete(entry);
+          this.hooks.delete(entry);
           for (const archetype of this.archetypes) {
             archetype.matchingMultiHooks.delete(entry);
           }
@@ -362,11 +362,11 @@ export class World {
       }
     } else {
       const componentType = componentTypesOrSingle as EntityId<any>;
-      const hooks = this.hooks.get(componentType);
+      const hooks = this.legacyHooks.get(componentType);
       if (hooks) {
         hooks.delete(hook as LegacyLifecycleHook<any>);
         if (hooks.size === 0) {
-          this.hooks.delete(componentType);
+          this.legacyHooks.delete(componentType);
         }
       }
     }
@@ -539,8 +539,8 @@ export class World {
 
   private createHooksContext(): HooksContext {
     return {
-      hooks: this.hooks,
-      multiHooks: this.multiHooks,
+      hooks: this.legacyHooks,
+      multiHooks: this.hooks,
       has: (eid, ct) => this.has(eid, ct),
       get: (eid, ct) => this.get(eid, ct),
       getOptional: (eid, ct) => this.getOptional(eid, ct),
@@ -628,7 +628,7 @@ export class World {
   }
 
   private updateArchetypeHookMatches(archetype: Archetype): void {
-    for (const entry of this.multiHooks) {
+    for (const entry of this.hooks) {
       if (this.archetypeMatchesHook(archetype, entry)) {
         archetype.matchingMultiHooks.add(entry);
       }
