@@ -160,7 +160,7 @@ export function applyChangeset(
   currentArchetype: Archetype,
   changeset: ComponentChangeset,
   entityToArchetype: Map<EntityId, Archetype>,
-): Map<EntityId<any>, any> {
+): { removedComponents: Map<EntityId<any>, any>; newArchetype: Archetype } {
   const currentEntityData = currentArchetype.getEntity(entityId);
   const allCurrentComponentTypes = currentEntityData
     ? Array.from(currentEntityData.keys())
@@ -178,7 +178,7 @@ export function applyChangeset(
 
     if (archetypeChanged) {
       // Move to new archetype (regular components changed)
-      moveEntityToNewArchetype(
+      const newArchetype = moveEntityToNewArchetype(
         ctx,
         entityId,
         currentArchetype,
@@ -187,6 +187,7 @@ export function applyChangeset(
         removedComponents,
         entityToArchetype,
       );
+      return { removedComponents, newArchetype };
     } else {
       // Only dontFragment components changed, stay in same archetype
       updateEntityInSameArchetype(ctx, entityId, currentArchetype, changeset, removedComponents);
@@ -196,7 +197,7 @@ export function applyChangeset(
     updateEntityInSameArchetype(ctx, entityId, currentArchetype, changeset, removedComponents);
   }
 
-  return removedComponents;
+  return { removedComponents, newArchetype: currentArchetype };
 }
 
 function moveEntityToNewArchetype(
@@ -207,7 +208,7 @@ function moveEntityToNewArchetype(
   changeset: ComponentChangeset,
   removedComponents: Map<EntityId<any>, any>,
   entityToArchetype: Map<EntityId, Archetype>,
-): void {
+): Archetype {
   const newArchetype = ctx.ensureArchetype(finalComponentTypes);
   const currentComponents = currentArchetype.removeEntity(entityId)!;
 
@@ -219,6 +220,7 @@ function moveEntityToNewArchetype(
   // Add to new archetype with updated components
   newArchetype.addEntity(entityId, changeset.applyTo(currentComponents));
   entityToArchetype.set(entityId, newArchetype);
+  return newArchetype;
 }
 
 function updateEntityInSameArchetype(

@@ -13,6 +13,7 @@ import {
   getTargetIdFromRelationId,
   isCascadeDeleteRelation,
   isDontFragmentRelation,
+  isDontFragmentWildcard,
   isEntityRelation,
   isExclusiveComponent,
   isWildcardRelationId,
@@ -24,6 +25,7 @@ import type {
   ComponentType,
   LifecycleCallback,
   LifecycleHook,
+  MultiHookEntry,
   MultiLifecycleCallback,
   MultiLifecycleHook,
 } from "./types";
@@ -35,12 +37,7 @@ import {
   processCommands,
   removeMatchingRelations,
 } from "./world-commands";
-import {
-  collectMultiHookComponents,
-  triggerLifecycleHooks,
-  type HooksContext,
-  type MultiHookEntry,
-} from "./world-hooks";
+import { collectMultiHookComponents, triggerLifecycleHooks, type HooksContext } from "./world-hooks";
 import {
   getEntityReferences,
   trackEntityReference,
@@ -303,6 +300,13 @@ export class World {
       };
       this.multiHooks.add(entry);
 
+      // Add to archetypes
+      for (const archetype of this.archetypes) {
+        if (this.archetypeMatchesHook(archetype, entry)) {
+          archetype.matchingMultiHooks.add(entry);
+        }
+      }
+
       const multiHook = hook as MultiLifecycleHook<any>;
       if (multiHook.on_init !== undefined) {
         const matchingArchetypes = this.getMatchingArchetypes(requiredComponents);
@@ -347,6 +351,9 @@ export class World {
       for (const entry of this.multiHooks) {
         if (entry.hook === hook) {
           this.multiHooks.delete(entry);
+          for (const archetype of this.archetypes) {
+            archetype.matchingMultiHooks.delete(entry);
+          }
           break;
         }
       }
@@ -506,7 +513,7 @@ export class World {
       }
     });
 
-    const removedComponents = applyChangeset(
+    const { removedComponents, newArchetype } = applyChangeset(
       { dontFragmentRelations: this.dontFragmentRelations, ensureArchetype: (ct) => this.ensureArchetype(ct) },
       entityId,
       currentArchetype,
@@ -515,7 +522,14 @@ export class World {
     );
 
     this.updateEntityReferences(entityId, changeset);
-    triggerLifecycleHooks(this.createHooksContext(), entityId, changeset.adds, removedComponents);
+    triggerLifecycleHooks(
+      this.createHooksContext(),
+      entityId,
+      changeset.adds,
+      removedComponents,
+      currentArchetype,
+      newArchetype,
+    );
 
     return changeset;
   }
@@ -545,7 +559,7 @@ export class World {
     );
 
     const removedComponent = sourceArchetype.get(entityId, componentType);
-    applyChangeset(
+    const { newArchetype } = applyChangeset(
       { dontFragmentRelations: this.dontFragmentRelations, ensureArchetype: (ct) => this.ensureArchetype(ct) },
       entityId,
       sourceArchetype,
@@ -553,7 +567,14 @@ export class World {
       this.entityToArchetype,
     );
     untrackEntityReference(this.entityReferences, entityId, componentType, targetEntityId);
-    triggerLifecycleHooks(this.createHooksContext(), entityId, new Map(), new Map([[componentType, removedComponent]]));
+    triggerLifecycleHooks(
+      this.createHooksContext(),
+      entityId,
+      new Map(),
+      new Map([[componentType, removedComponent]]),
+      sourceArchetype,
+      newArchetype,
+    );
   }
 
   private updateEntityReferences(entityId: EntityId, changeset: ComponentChangeset): void {
@@ -598,7 +619,28 @@ export class World {
       query.checkNewArchetype(newArchetype);
     }
 
+    this.updateArchetypeHookMatches(newArchetype);
+
     return newArchetype;
+  }
+
+  private updateArchetypeHookMatches(archetype: Archetype): void {
+    for (const entry of this.multiHooks) {
+      if (this.archetypeMatchesHook(archetype, entry)) {
+        archetype.matchingMultiHooks.add(entry);
+      }
+    }
+  }
+
+  private archetypeMatchesHook(archetype: Archetype, entry: MultiHookEntry): boolean {
+    return entry.requiredComponents.every((c: EntityId<any>) => {
+      if (isWildcardRelationId(c)) {
+        if (isDontFragmentWildcard(c)) return true;
+        const componentId = getComponentIdFromRelationId(c);
+        return componentId !== undefined && archetype.hasRelationWithComponentId(componentId);
+      }
+      return archetype.componentTypes.includes(c) || isDontFragmentRelation(c);
+    });
   }
 
   private archetypeReferencesEntity(archetype: Archetype, entityId: EntityId): boolean {

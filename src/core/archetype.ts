@@ -14,7 +14,7 @@ import {
   isDontFragmentComponent,
   isWildcardRelationId,
 } from "./entity";
-import { isOptionalEntityId, type ComponentTuple, type ComponentType } from "./types";
+import { isOptionalEntityId, type ComponentTuple, type ComponentType, type MultiHookEntry } from "./types";
 
 /**
  * Special value to represent missing component data
@@ -54,6 +54,14 @@ export class Archetype {
    * Stored in World to avoid migration overhead when entities change archetypes
    */
   private dontFragmentRelations: Map<EntityId, Map<EntityId<any>, any>>;
+
+  /**
+   * Cache for pre-computed component data sources to avoid repeated calculations
+   */
+  /**
+   * Multi-hooks that match this archetype
+   */
+  public readonly matchingMultiHooks: Set<MultiHookEntry> = new Set();
 
   /**
    * Cache for pre-computed component data sources to avoid repeated calculations

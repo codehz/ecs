@@ -68,3 +68,10 @@ export type ComponentTypeToData<T> = T extends { optional: infer U }
 export type ComponentTuple<T extends readonly ComponentType<any>[]> = {
   readonly [K in keyof T]: ComponentTypeToData<T[K]>;
 };
+
+export interface MultiHookEntry {
+  componentTypes: readonly ComponentType<any>[];
+  requiredComponents: EntityId<any>[];
+  optionalComponents: EntityId<any>[];
+  hook: MultiLifecycleHook<any>;
+}
