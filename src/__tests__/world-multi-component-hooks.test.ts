@@ -3,6 +3,69 @@ import { component, relation, type EntityId } from "../core/entity";
 import { World } from "../core/world";
 
 describe("World - Multi-Component Hooks", () => {
+  it("should trigger init, set, remove events correctly when using array syntax with single element", () => {
+    const world = new World();
+    const A = component<number>();
+
+    const initCalls: { entityId: EntityId; value: number }[] = [];
+    const setCalls: { entityId: EntityId; value: number }[] = [];
+    const removeCalls: { entityId: EntityId; value: number }[] = [];
+
+    // First create an entity before registering the hook (for on_init test)
+    const existingEntity = world.spawn().with(A, 100).build();
+    world.sync();
+
+    // Register hook using array syntax with single element
+    world.hook([A], {
+      on_init: (entityId, value) => {
+        initCalls.push({ entityId, value });
+      },
+      on_set: (entityId, value) => {
+        setCalls.push({ entityId, value });
+      },
+      on_remove: (entityId, value) => {
+        removeCalls.push({ entityId, value });
+      },
+    });
+
+    // on_init should be triggered for existing entity
+    expect(initCalls.length).toBe(1);
+    expect(initCalls[0]!.entityId).toBe(existingEntity);
+    expect(initCalls[0]!.value).toBe(100);
+
+    // Create a new entity - should trigger on_set
+    const newEntity = world.spawn().with(A, 42).build();
+    world.sync();
+
+    expect(setCalls.length).toBe(1);
+    expect(setCalls[0]!.entityId).toBe(newEntity);
+    expect(setCalls[0]!.value).toBe(42);
+
+    // Update the component - should trigger on_set again
+    world.set(newEntity, A, 99);
+    world.sync();
+
+    expect(setCalls.length).toBe(2);
+    expect(setCalls[1]!.entityId).toBe(newEntity);
+    expect(setCalls[1]!.value).toBe(99);
+
+    // Remove the component - should trigger on_remove
+    world.remove(newEntity, A);
+    world.sync();
+
+    expect(removeCalls.length).toBe(1);
+    expect(removeCalls[0]!.entityId).toBe(newEntity);
+    expect(removeCalls[0]!.value).toBe(99);
+
+    // Delete the existing entity - should trigger on_remove
+    world.delete(existingEntity);
+    world.sync();
+
+    expect(removeCalls.length).toBe(2);
+    expect(removeCalls[1]!.entityId).toBe(existingEntity);
+    expect(removeCalls[1]!.value).toBe(100);
+  });
+
   it("should throw error when hook has no required components (only optional)", () => {
     const world = new World();
     const A = component<number>();

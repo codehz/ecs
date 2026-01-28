@@ -135,24 +135,31 @@ export class World {
       const archetype = this.entityToArchetype.get(cur);
       if (!archetype) continue;
 
-      const componentReferences = Array.from(getEntityReferences(this.entityReferences, cur));
-      for (const [sourceEntityId, componentType] of componentReferences) {
-        const sourceArchetype = this.entityToArchetype.get(sourceEntityId);
-        if (!sourceArchetype) continue;
+      // Process entity references before removal
+      for (const [sourceEntityId, componentType] of getEntityReferences(this.entityReferences, cur)) {
+        if (!this.entityToArchetype.has(sourceEntityId)) continue;
 
         if (isCascadeDeleteRelation(componentType)) {
           if (!visited.has(sourceEntityId)) {
             queue.push(sourceEntityId);
           }
-          continue;
+        } else {
+          this.removeComponentImmediate(sourceEntityId, componentType, cur);
         }
-
-        this.removeComponentImmediate(sourceEntityId, componentType, cur);
       }
 
+      // Remove entity from archetype - this also cleans up dontFragment relations
+      // and returns all removed component data
       this.entityReferences.delete(cur);
-      archetype.removeEntity(cur);
+      const removedComponents = archetype.removeEntity(cur)!;
       this.entityToArchetype.delete(cur);
+
+      // Trigger lifecycle hooks for removed components
+      if (removedComponents.size > 0) {
+        const emptyArchetype = this.ensureArchetype([]);
+        triggerLifecycleHooks(this.createHooksContext(), cur, new Map(), removedComponents, archetype, emptyArchetype);
+      }
+
       this.cleanupArchetypesReferencingEntity(cur);
       this.entityIdManager.deallocate(cur);
     }
