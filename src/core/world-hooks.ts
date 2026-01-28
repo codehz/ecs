@@ -79,6 +79,44 @@ export function triggerLifecycleHooks(
   triggerMultiComponentHooks(ctx, entityId, addedComponents, removedComponents, oldArchetype, newArchetype);
 }
 
+/**
+ * Fast path for triggering lifecycle hooks when an entity is being deleted.
+ * This avoids unnecessary archetype lookups and on_set checks since the entity
+ * is being completely removed.
+ */
+export function triggerRemoveHooksForEntityDeletion(
+  ctx: HooksContext,
+  entityId: EntityId,
+  removedComponents: Map<EntityId<any>, any>,
+  oldArchetype: Archetype,
+): void {
+  if (removedComponents.size === 0) return;
+
+  // Trigger legacy hooks for removed components
+  invokeHooksForComponents(ctx.hooks, entityId, removedComponents, "on_remove");
+
+  // Trigger multi-component hooks - only on_remove since entity is being deleted
+  for (const entry of oldArchetype.matchingMultiHooks) {
+    const { hook, requiredComponents, componentTypes } = entry;
+    if (!hook.on_remove) continue;
+
+    // Check if any required component was removed
+    const anyRequiredRemoved = requiredComponents.some((c) => anyComponentMatches(removedComponents, c));
+    if (!anyRequiredRemoved) continue;
+
+    // For entity deletion, we know:
+    // 1. All components are being removed, so entity "had" all required components
+    // 2. Entity will no longer match after deletion
+    // Just need to verify the entity actually had all required components before
+    const hadAllRequired = requiredComponents.every((c) => anyComponentMatches(removedComponents, c));
+    if (!hadAllRequired) continue;
+
+    // Collect component values from removedComponents directly (no entity lookup needed)
+    const components = collectComponentsFromRemoved(componentTypes, removedComponents);
+    hook.on_remove(entityId, ...components);
+  }
+}
+
 function invokeHooksForComponents(
   hooks: HooksMap,
   entityId: EntityId,
@@ -261,4 +299,57 @@ function collectMultiHookComponentsWithRemoved(
     const match = findMatchingComponent(removedComponents, compId);
     return match ? match[1] : ctx.get(entityId, compId);
   });
+}
+
+/**
+ * Collect component values directly from removedComponents map.
+ * Used for entity deletion fast path where the entity no longer exists.
+ */
+function collectComponentsFromRemoved(
+  componentTypes: readonly ComponentType<any>[],
+  removedComponents: Map<EntityId<any>, any>,
+): any[] {
+  return componentTypes.map((ct) => {
+    if (isOptionalEntityId(ct)) {
+      const optionalId = ct.optional;
+
+      if (isWildcardRelationId(optionalId)) {
+        const result = collectWildcardFromRemoved(optionalId, removedComponents);
+        return result.length > 0 ? { value: result } : undefined;
+      }
+
+      const match = findMatchingComponent(removedComponents, optionalId);
+      return match ? { value: match[1] } : undefined;
+    }
+
+    const compId = ct as EntityId<any>;
+
+    if (isWildcardRelationId(compId)) {
+      return collectWildcardFromRemoved(compId, removedComponents);
+    }
+
+    const match = findMatchingComponent(removedComponents, compId);
+    return match ? match[1] : undefined;
+  });
+}
+
+/**
+ * Collect all matching wildcard relation data from removed components.
+ */
+function collectWildcardFromRemoved(
+  wildcardId: EntityId<any>,
+  removedComponents: Map<EntityId<any>, any>,
+): [EntityId, any][] {
+  const result: [EntityId, any][] = [];
+
+  for (const [removedCompId, removedValue] of removedComponents.entries()) {
+    if (componentMatchesHookType(removedCompId, wildcardId)) {
+      const targetId = getTargetIdFromRelationId(removedCompId);
+      if (targetId !== undefined) {
+        result.push([targetId, removedValue]);
+      }
+    }
+  }
+
+  return result;
 }

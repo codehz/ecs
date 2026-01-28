@@ -37,7 +37,12 @@ import {
   processCommands,
   removeMatchingRelations,
 } from "./world-commands";
-import { collectMultiHookComponents, triggerLifecycleHooks, type HooksContext } from "./world-hooks";
+import {
+  collectMultiHookComponents,
+  triggerLifecycleHooks,
+  triggerRemoveHooksForEntityDeletion,
+  type HooksContext,
+} from "./world-hooks";
 import {
   getEntityReferences,
   trackEntityReference,
@@ -154,11 +159,8 @@ export class World {
       const removedComponents = archetype.removeEntity(cur)!;
       this.entityToArchetype.delete(cur);
 
-      // Trigger lifecycle hooks for removed components
-      if (removedComponents.size > 0) {
-        const emptyArchetype = this.ensureArchetype([]);
-        triggerLifecycleHooks(this.createHooksContext(), cur, new Map(), removedComponents, archetype, emptyArchetype);
-      }
+      // Trigger lifecycle hooks for removed components (fast path for entity deletion)
+      triggerRemoveHooksForEntityDeletion(this.createHooksContext(), cur, removedComponents, archetype);
 
       this.cleanupArchetypesReferencingEntity(cur);
       this.entityIdManager.deallocate(cur);
