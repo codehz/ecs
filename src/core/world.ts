@@ -219,9 +219,13 @@ export class World {
     return false;
   }
 
+  get<T>(entityId: EntityId<T>): T;
   get<T>(entityId: EntityId, componentType: WildcardRelationId<T>): [EntityId<unknown>, T][];
   get<T>(entityId: EntityId, componentType: EntityId<T>): T;
-  get<T>(entityId: EntityId, componentType: EntityId<T> | WildcardRelationId<T>): T | [EntityId<unknown>, any][] {
+  get<T>(
+    entityId: EntityId,
+    componentType: EntityId<T> | WildcardRelationId<T> = entityId as EntityId<T>,
+  ): T | [EntityId<unknown>, any][] {
     const archetype = this.entityToArchetype.get(entityId);
     if (!archetype) {
       throw new Error(`Entity ${entityId} does not exist`);
@@ -243,7 +247,9 @@ export class World {
     return archetype.get(entityId, componentType);
   }
 
-  getOptional<T>(entityId: EntityId, componentType: EntityId<T>): { value: T } | undefined {
+  getOptional<T>(entityId: EntityId<T>): { value: T } | undefined;
+  getOptional<T>(entityId: EntityId, componentType: EntityId<T>): { value: T } | undefined;
+  getOptional<T>(entityId: EntityId, componentType: EntityId<T> = entityId as EntityId<T>): { value: T } | undefined {
     const archetype = this.entityToArchetype.get(entityId);
     if (!archetype) {
       throw new Error(`Entity ${entityId} does not exist`);
