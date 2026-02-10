@@ -11,6 +11,7 @@ export type SerializedWorld = {
   version: number;
   entityManager: any;
   entities: SerializedEntity[];
+  componentEntities?: SerializedEntity[];
 };
 
 export type SerializedEntity = {

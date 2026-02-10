@@ -63,6 +63,8 @@ export class World {
   private archetypesByComponent = new Map<EntityId<any>, Archetype[]>();
   private entityReferences: EntityReferencesMap = new Map();
   private dontFragmentRelations: Map<EntityId, Map<EntityId<any>, any>> = new Map();
+  private componentEntityComponents: Map<EntityId, Map<EntityId<any>, any>> = new Map();
+  private relationEntityIdsByTarget: Map<EntityId, Set<EntityId>> = new Map();
 
   // Query management
   private queries: Query[] = [];
@@ -84,6 +86,24 @@ export class World {
   private deserializeSnapshot(snapshot: SerializedWorld): void {
     if (snapshot.entityManager) {
       this.entityIdManager.deserializeState(snapshot.entityManager);
+    }
+
+    if (Array.isArray(snapshot.componentEntities)) {
+      for (const entry of snapshot.componentEntities) {
+        const entityId = decodeSerializedId(entry.id);
+        if (!this.isComponentEntityId(entityId)) continue;
+
+        const componentsArray: SerializedComponent[] = entry.components || [];
+        const componentMap = new Map<EntityId<any>, any>();
+
+        for (const componentEntry of componentsArray) {
+          const componentType = decodeSerializedId(componentEntry.type);
+          componentMap.set(componentType, componentEntry.value);
+        }
+
+        this.componentEntityComponents.set(entityId, componentMap);
+        this.registerRelationEntityId(entityId);
+      }
     }
 
     if (Array.isArray(snapshot.entities)) {
@@ -140,6 +160,69 @@ export class World {
     return entityId as EntityId<T>;
   }
 
+  private isComponentEntityId(entityId: EntityId): boolean {
+    const detailed = getDetailedIdType(entityId);
+    return detailed.type !== "entity" && detailed.type !== "invalid";
+  }
+
+  private registerRelationEntityId(entityId: EntityId): void {
+    const detailed = getDetailedIdType(entityId);
+    if (detailed.type !== "entity-relation") return;
+
+    const targetId = detailed.targetId;
+    if (targetId === undefined) return;
+
+    const existing = this.relationEntityIdsByTarget.get(targetId);
+    if (existing) {
+      existing.add(entityId);
+      return;
+    }
+
+    this.relationEntityIdsByTarget.set(targetId, new Set([entityId]));
+  }
+
+  private unregisterRelationEntityId(entityId: EntityId): void {
+    const detailed = getDetailedIdType(entityId);
+    if (detailed.type !== "entity-relation") return;
+
+    const targetId = detailed.targetId;
+    if (targetId === undefined) return;
+
+    const existing = this.relationEntityIdsByTarget.get(targetId);
+    if (!existing) return;
+
+    existing.delete(entityId);
+    if (existing.size === 0) {
+      this.relationEntityIdsByTarget.delete(targetId);
+    }
+  }
+
+  private getComponentEntityComponents(entityId: EntityId, create: boolean): Map<EntityId<any>, any> | undefined {
+    let data = this.componentEntityComponents.get(entityId);
+    if (!data && create) {
+      data = new Map();
+      this.componentEntityComponents.set(entityId, data);
+      this.registerRelationEntityId(entityId);
+    }
+    return data;
+  }
+
+  private clearComponentEntityComponents(entityId: EntityId): void {
+    if (this.componentEntityComponents.delete(entityId)) {
+      this.unregisterRelationEntityId(entityId);
+    }
+  }
+
+  private cleanupComponentEntitiesReferencingEntity(targetId: EntityId): void {
+    const relationEntities = this.relationEntityIdsByTarget.get(targetId);
+    if (!relationEntities) return;
+
+    for (const relationEntityId of relationEntities) {
+      this.componentEntityComponents.delete(relationEntityId);
+    }
+    this.relationEntityIdsByTarget.delete(targetId);
+  }
+
   private destroyEntityImmediate(entityId: EntityId): void {
     const queue: EntityId[] = [entityId];
     const visited = new Set<EntityId>();
@@ -176,6 +259,7 @@ export class World {
 
       this.cleanupArchetypesReferencingEntity(cur);
       this.entityIdManager.deallocate(cur);
+      this.cleanupComponentEntitiesReferencingEntity(cur);
     }
   }
 
@@ -191,6 +275,7 @@ export class World {
    * }
    */
   exists(entityId: EntityId): boolean {
+    if (this.isComponentEntityId(entityId)) return true;
     return this.entityToArchetype.has(entityId);
   }
 
@@ -290,6 +375,23 @@ export class World {
    * }
    */
   has<T>(entityId: EntityId, componentType: EntityId<T>): boolean {
+    if (this.isComponentEntityId(entityId)) {
+      if (isWildcardRelationId(componentType)) {
+        const componentId = getComponentIdFromRelationId(componentType);
+        if (componentId === undefined) return false;
+
+        const data = this.componentEntityComponents.get(entityId);
+        if (!data) return false;
+
+        for (const key of data.keys()) {
+          if (getComponentIdFromRelationId(key) === componentId) return true;
+        }
+        return false;
+      }
+
+      return this.componentEntityComponents.get(entityId)?.has(componentType) ?? false;
+    }
+
     const archetype = this.entityToArchetype.get(entityId);
     if (!archetype) return false;
 
@@ -330,6 +432,35 @@ export class World {
     entityId: EntityId,
     componentType: EntityId<T> | WildcardRelationId<T> = entityId as EntityId<T>,
   ): T | [EntityId<unknown>, any][] {
+    if (this.isComponentEntityId(entityId)) {
+      if (isWildcardRelationId(componentType as EntityId<any>)) {
+        const componentId = getComponentIdFromRelationId(componentType as EntityId<any>);
+        const data = this.componentEntityComponents.get(entityId);
+        const relations: [EntityId<unknown>, any][] = [];
+
+        if (componentId !== undefined && data) {
+          for (const [key, value] of data.entries()) {
+            if (getComponentIdFromRelationId(key) === componentId) {
+              const detailed = getDetailedIdType(key);
+              if (detailed.type === "entity-relation" || detailed.type === "component-relation") {
+                relations.push([detailed.targetId!, value]);
+              }
+            }
+          }
+        }
+
+        return relations;
+      }
+
+      const data = this.componentEntityComponents.get(entityId);
+      if (!data || !data.has(componentType as EntityId<any>)) {
+        throw new Error(
+          `Entity ${entityId} does not have component ${componentType}. Use has() to check component existence before calling get().`,
+        );
+      }
+      return data.get(componentType as EntityId<any>);
+    }
+
     const archetype = this.entityToArchetype.get(entityId);
     if (!archetype) {
       throw new Error(`Entity ${entityId} does not exist`);
@@ -374,6 +505,33 @@ export class World {
   getOptional<T>(entityId: EntityId<T>): { value: T } | undefined;
   getOptional<T>(entityId: EntityId, componentType: EntityId<T>): { value: T } | undefined;
   getOptional<T>(entityId: EntityId, componentType: EntityId<T> = entityId as EntityId<T>): { value: T } | undefined {
+    if (this.isComponentEntityId(entityId)) {
+      if (isWildcardRelationId(componentType)) {
+        const componentId = getComponentIdFromRelationId(componentType);
+        if (componentId === undefined) return undefined;
+
+        const data = this.componentEntityComponents.get(entityId);
+        if (!data) return undefined;
+
+        const relations: [EntityId<unknown>, any][] = [];
+        for (const [key, value] of data.entries()) {
+          if (getComponentIdFromRelationId(key) === componentId) {
+            const detailed = getDetailedIdType(key);
+            if (detailed.type === "entity-relation" || detailed.type === "component-relation") {
+              relations.push([detailed.targetId!, value]);
+            }
+          }
+        }
+
+        if (relations.length === 0) return undefined;
+        return { value: relations as T };
+      }
+
+      const data = this.componentEntityComponents.get(entityId);
+      if (!data || !data.has(componentType)) return undefined;
+      return { value: data.get(componentType) };
+    }
+
     const archetype = this.entityToArchetype.get(entityId);
     if (!archetype) {
       throw new Error(`Entity ${entityId} does not exist`);
@@ -811,6 +969,11 @@ export class World {
   executeEntityCommands(entityId: EntityId, commands: Command[]): ComponentChangeset {
     const changeset = new ComponentChangeset();
 
+    if (this.isComponentEntityId(entityId)) {
+      this.executeComponentEntityCommands(entityId, commands);
+      return changeset;
+    }
+
     if (commands.some((cmd) => cmd.type === "destroy")) {
       this.destroyEntityImmediate(entityId);
       return changeset;
@@ -844,6 +1007,40 @@ export class World {
     );
 
     return changeset;
+  }
+
+  private executeComponentEntityCommands(entityId: EntityId, commands: Command[]): void {
+    if (commands.some((cmd) => cmd.type === "destroy")) {
+      this.clearComponentEntityComponents(entityId);
+      return;
+    }
+
+    for (const command of commands) {
+      if (command.type === "set" && command.componentType) {
+        const data = this.getComponentEntityComponents(entityId, true)!;
+        data.set(command.componentType, command.component);
+      } else if (command.type === "delete" && command.componentType) {
+        const data = this.componentEntityComponents.get(entityId);
+        if (!data) continue;
+
+        if (isWildcardRelationId(command.componentType)) {
+          const componentId = getComponentIdFromRelationId(command.componentType);
+          if (componentId !== undefined) {
+            for (const key of Array.from(data.keys())) {
+              if (getComponentIdFromRelationId(key) === componentId) {
+                data.delete(key);
+              }
+            }
+          }
+        } else {
+          data.delete(command.componentType);
+        }
+
+        if (data.size === 0) {
+          this.clearComponentEntityComponents(entityId);
+        }
+      }
+    }
   }
 
   private createHooksContext(): HooksContext {
@@ -1033,10 +1230,22 @@ export class World {
       }
     }
 
+    const componentEntities: SerializedEntity[] = [];
+    for (const [entityId, components] of this.componentEntityComponents.entries()) {
+      componentEntities.push({
+        id: encodeEntityId(entityId),
+        components: Array.from(components.entries()).map(([rawType, value]) => ({
+          type: encodeEntityId(rawType),
+          value: value === MISSING_COMPONENT ? undefined : value,
+        })),
+      });
+    }
+
     return {
       version: 1,
       entityManager: this.entityIdManager.serializeState(),
       entities,
+      componentEntities,
     };
   }
 }
