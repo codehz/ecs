@@ -290,19 +290,52 @@ export class World {
    * @overload set<T>(entityId: EntityId, componentType: EntityId<T>, component: NoInfer<T>): void
    * Adds or updates a component with data on the entity
    *
+   * @overload set<T>(componentId: ComponentId<T>, component: NoInfer<T>): void
+   * Adds or updates a singleton component (shorthand for set(componentId, componentId, component))
+   *
    * @throws {Error} If the entity does not exist
    * @throws {Error} If the component type is invalid or is a wildcard relation
    *
    * @example
    * world.set(entity, Position, { x: 10, y: 20 });
    * world.set(entity, Marker); // void component
+   * world.set(GlobalConfig, { debug: true }); // singleton component
    * world.sync(); // Apply changes
    */
   set(entityId: EntityId, componentType: EntityId<void>): void;
   set<T>(entityId: EntityId, componentType: EntityId<T>, component: NoInfer<T>): void;
-  set(entityId: EntityId, componentType: EntityId, component?: any): void {
-    if (!this.exists(entityId)) {
-      throw new Error(`Entity ${entityId} does not exist`);
+  set<T>(componentId: ComponentId<T>, component: NoInfer<T>): void;
+  set(entityId: EntityId | ComponentId, componentTypeOrComponent?: EntityId | any, maybeComponent?: any): void {
+    // Handle singleton component overload: set(componentId, data)
+    if (maybeComponent === undefined && componentTypeOrComponent !== undefined) {
+      const detailedType = getDetailedIdType(entityId);
+      // Check if this looks like a singleton call (2 arguments, second is not an EntityId)
+      if (detailedType.type === "component" || detailedType.type === "component-relation") {
+        // Singleton component: set(componentId, data)
+        const componentId = entityId as ComponentId;
+        const component = componentTypeOrComponent;
+        if (!this.exists(componentId)) {
+          throw new Error(`Component entity ${componentId} does not exist`);
+        }
+        const detailedComponentType = getDetailedIdType(componentId);
+        if (detailedComponentType.type === "invalid") {
+          throw new Error(`Invalid component type: ${componentId}`);
+        }
+        if (detailedComponentType.type === "wildcard-relation") {
+          throw new Error(`Cannot directly add wildcard relation components: ${componentId}`);
+        }
+        this.commandBuffer.set(componentId, componentId, component);
+        return;
+      }
+    }
+
+    // Standard overload: set(entityId, componentType, data?) or set(entityId, componentType)
+    const entityIdArg = entityId as EntityId;
+    const componentType = componentTypeOrComponent as EntityId;
+    const component = maybeComponent;
+
+    if (!this.exists(entityIdArg)) {
+      throw new Error(`Entity ${entityIdArg} does not exist`);
     }
 
     const detailedType = getDetailedIdType(componentType);
@@ -313,13 +346,19 @@ export class World {
       throw new Error(`Cannot directly add wildcard relation components: ${componentType}`);
     }
 
-    this.commandBuffer.set(entityId, componentType, component);
+    this.commandBuffer.set(entityIdArg, componentType, component);
   }
 
   /**
    * Removes a component from an entity.
    * The change is buffered and takes effect after calling `world.sync()`.
    * If the entity does not exist, throws an error.
+   *
+   * @overload remove<T>(entityId: EntityId, componentType: EntityId<T>): void
+   * Removes a component from an entity.
+   *
+   * @overload remove<T>(componentId: ComponentId<T>): void
+   * Removes a singleton component (shorthand for remove(componentId, componentId)).
    *
    * @template T - The component data type
    * @param entityId - The entity identifier
@@ -330,11 +369,25 @@ export class World {
    *
    * @example
    * world.remove(entity, Position);
+   * world.remove(GlobalConfig); // Remove singleton component
    * world.sync(); // Apply changes
    */
-  remove<T>(entityId: EntityId, componentType: EntityId<T>): void {
-    if (!this.exists(entityId)) {
-      throw new Error(`Entity ${entityId} does not exist`);
+  remove<T>(componentId: ComponentId<T>): void;
+  remove<T>(entityId: EntityId, componentType: EntityId<T>): void;
+  remove<T>(entityId: EntityId | ComponentId, componentType?: EntityId<T>): void {
+    // Handle singleton component overload: remove(componentId)
+    if (componentType === undefined) {
+      const componentId = entityId as ComponentId<T>;
+      if (!this.exists(componentId)) {
+        throw new Error(`Component entity ${componentId} does not exist`);
+      }
+      this.commandBuffer.remove(componentId, componentId);
+      return;
+    }
+
+    const entityIdArg = entityId as EntityId;
+    if (!this.exists(entityIdArg)) {
+      throw new Error(`Entity ${entityIdArg} does not exist`);
     }
 
     const detailedType = getDetailedIdType(componentType);
@@ -342,7 +395,7 @@ export class World {
       throw new Error(`Invalid component type: ${componentType}`);
     }
 
-    this.commandBuffer.remove(entityId, componentType);
+    this.commandBuffer.remove(entityIdArg, componentType);
   }
 
   /**
@@ -364,6 +417,12 @@ export class World {
    * Checks if an entity has a specific component.
    * Immediately reflects the current state without waiting for `sync()`.
    *
+   * @overload has<T>(entityId: EntityId, componentType: EntityId<T>): boolean
+   * Checks if a specific component type is present on the entity.
+   *
+   * @overload has<T>(componentId: ComponentId<T>): boolean
+   * Checks if a singleton component has data (shorthand for has(componentId, componentId)).
+   *
    * @template T - The component data type
    * @param entityId - The entity identifier
    * @param componentType - The component type to check
@@ -373,8 +432,19 @@ export class World {
    * if (world.has(entity, Position)) {
    *   const pos = world.get(entity, Position);
    * }
+   * if (world.has(GlobalConfig)) {
+   *   const config = world.get(GlobalConfig);
+   * }
    */
-  has<T>(entityId: EntityId, componentType: EntityId<T>): boolean {
+  has<T>(componentId: ComponentId<T>): boolean;
+  has<T>(entityId: EntityId, componentType: EntityId<T>): boolean;
+  has<T>(entityId: EntityId | ComponentId, componentType?: EntityId<T>): boolean {
+    // Handle singleton component overload: has(componentId)
+    if (componentType === undefined) {
+      const componentId = entityId as ComponentId<T>;
+      return this.componentEntityComponents.get(componentId)?.has(componentId) ?? false;
+    }
+
     if (this.isComponentEntityId(entityId)) {
       if (isWildcardRelationId(componentType)) {
         const componentId = getComponentIdFromRelationId(componentType);
