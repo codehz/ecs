@@ -120,6 +120,18 @@ export class World {
     return componentTypes.join(",");
   }
 
+  /**
+   * Creates a new entity.
+   * The entity is created with an empty component set and can be configured using `set()`.
+   *
+   * @template T - The initial component type (defaults to void if not specified)
+   * @returns A unique identifier for the new entity
+   *
+   * @example
+   * const entity = world.new<MyComponent>();
+   * world.set(entity, MyComponent, { value: 42 });
+   * world.sync();
+   */
   new<T = void>(): EntityId<T> {
     const entityId = this.entityIdManager.allocate();
     let emptyArchetype = this.ensureArchetype([]);
@@ -167,10 +179,40 @@ export class World {
     }
   }
 
+  /**
+   * Checks if an entity exists in the world.
+   *
+   * @param entityId - The entity identifier to check
+   * @returns `true` if the entity exists, `false` otherwise
+   *
+   * @example
+   * if (world.exists(entityId)) {
+   *   console.log("Entity exists");
+   * }
+   */
   exists(entityId: EntityId): boolean {
     return this.entityToArchetype.has(entityId);
   }
 
+  /**
+   * Adds or updates a component on an entity (or marks void component as present).
+   * The change is buffered and takes effect after calling `world.sync()`.
+   * If the entity does not exist, throws an error.
+   *
+   * @overload set(entityId: EntityId, componentType: EntityId<void>): void
+   * Marks a void component as present on the entity
+   *
+   * @overload set<T>(entityId: EntityId, componentType: EntityId<T>, component: NoInfer<T>): void
+   * Adds or updates a component with data on the entity
+   *
+   * @throws {Error} If the entity does not exist
+   * @throws {Error} If the component type is invalid or is a wildcard relation
+   *
+   * @example
+   * world.set(entity, Position, { x: 10, y: 20 });
+   * world.set(entity, Marker); // void component
+   * world.sync(); // Apply changes
+   */
   set(entityId: EntityId, componentType: EntityId<void>): void;
   set<T>(entityId: EntityId, componentType: EntityId<T>, component: NoInfer<T>): void;
   set(entityId: EntityId, componentType: EntityId, component?: any): void {
@@ -189,6 +231,22 @@ export class World {
     this.commandBuffer.set(entityId, componentType, component);
   }
 
+  /**
+   * Removes a component from an entity.
+   * The change is buffered and takes effect after calling `world.sync()`.
+   * If the entity does not exist, throws an error.
+   *
+   * @template T - The component data type
+   * @param entityId - The entity identifier
+   * @param componentType - The component type to remove
+   *
+   * @throws {Error} If the entity does not exist
+   * @throws {Error} If the component type is invalid
+   *
+   * @example
+   * world.remove(entity, Position);
+   * world.sync(); // Apply changes
+   */
   remove<T>(entityId: EntityId, componentType: EntityId<T>): void {
     if (!this.exists(entityId)) {
       throw new Error(`Entity ${entityId} does not exist`);
@@ -202,10 +260,35 @@ export class World {
     this.commandBuffer.remove(entityId, componentType);
   }
 
+  /**
+   * Deletes an entity and all its components from the world.
+   * The change is buffered and takes effect after calling `world.sync()`.
+   * Related entities may trigger cascade delete hooks if configured.
+   *
+   * @param entityId - The entity identifier to delete
+   *
+   * @example
+   * world.delete(entity);
+   * world.sync(); // Apply changes
+   */
   delete(entityId: EntityId): void {
     this.commandBuffer.delete(entityId);
   }
 
+  /**
+   * Checks if an entity has a specific component.
+   * Immediately reflects the current state without waiting for `sync()`.
+   *
+   * @template T - The component data type
+   * @param entityId - The entity identifier
+   * @param componentType - The component type to check
+   * @returns `true` if the entity has the component, `false` otherwise
+   *
+   * @example
+   * if (world.has(entity, Position)) {
+   *   const pos = world.get(entity, Position);
+   * }
+   */
   has<T>(entityId: EntityId, componentType: EntityId<T>): boolean {
     const archetype = this.entityToArchetype.get(entityId);
     if (!archetype) return false;
@@ -219,6 +302,27 @@ export class World {
     return false;
   }
 
+  /**
+   * Retrieves a component from an entity.
+   * For wildcard relations, returns all relations of that type.
+   * Throws an error if the component does not exist; use `has()` to check first or use `getOptional()`.
+   *
+   * @overload get<T>(entityId: EntityId<T>): T
+   * When called with only an entity ID, retrieves the entity's primary component.
+   *
+   * @overload get<T>(entityId: EntityId, componentType: WildcardRelationId<T>): [EntityId<unknown>, T][]
+   * For wildcard relations, returns an array of [target entity, component value] pairs.
+   *
+   * @overload get<T>(entityId: EntityId, componentType: EntityId<T>): T
+   * Retrieves a specific component from the entity.
+   *
+   * @throws {Error} If the entity does not exist
+   * @throws {Error} If the component does not exist on the entity
+   *
+   * @example
+   * const position = world.get(entity, Position); // Throws if no Position
+   * const relations = world.get(entity, relation(Parent, "*")); // Wildcard relation
+   */
   get<T>(entityId: EntityId<T>): T;
   get<T>(entityId: EntityId, componentType: WildcardRelationId<T>): [EntityId<unknown>, T][];
   get<T>(entityId: EntityId, componentType: EntityId<T>): T;
@@ -247,6 +351,26 @@ export class World {
     return archetype.get(entityId, componentType);
   }
 
+  /**
+   * Safely retrieves a component from an entity without throwing an error.
+   * Returns `undefined` if the component does not exist.
+   * For wildcard relations, returns `undefined` if there are no relations.
+   *
+   * @template T - The component data type
+   * @overload getOptional<T>(entityId: EntityId<T>): { value: T } | undefined
+   * Retrieves the entity's primary component safely.
+   *
+   * @overload getOptional<T>(entityId: EntityId, componentType: EntityId<T>): { value: T } | undefined
+   * Retrieves a specific component safely.
+   *
+   * @throws {Error} If the entity does not exist
+   *
+   * @example
+   * const position = world.getOptional(entity, Position);
+   * if (position) {
+   *   console.log(position.value.x);
+   * }
+   */
   getOptional<T>(entityId: EntityId<T>): { value: T } | undefined;
   getOptional<T>(entityId: EntityId, componentType: EntityId<T>): { value: T } | undefined;
   getOptional<T>(entityId: EntityId, componentType: EntityId<T> = entityId as EntityId<T>): { value: T } | undefined {
@@ -268,7 +392,40 @@ export class World {
   }
 
   /**
-   * @deprecated use array overload with LifecycleCallback
+   * Registers a lifecycle hook that responds to component changes.
+   * The hook callback is invoked when components matching the specified types are added, updated, or removed.
+   *
+   * @deprecated For single components, use the array overload with LifecycleCallback for better multi-component support
+   *
+   * @overload hook<T>(componentType: EntityId<T>, hook: LegacyLifecycleHook<T> | LegacyLifecycleCallback<T>): () => void
+   * Registers a hook for a single component type (legacy API).
+   *
+   * @overload hook<const T extends readonly ComponentType<any>[]>(
+   *   componentTypes: T,
+   *   hook: LifecycleHook<T> | LifecycleCallback<T>,
+   * ): () => void
+   * Registers a hook for multiple component types.
+   * The hook is triggered when all required components change together.
+   *
+   * @param componentTypesOrSingle - A single component type or an array of component types
+   * @param hook - Either a hook object with on_init/on_set/on_remove handlers, or a callback function
+   * @returns A function that unsubscribes the hook when called
+   *
+   * @throws {Error} If no required components are specified in array overload
+   *
+   * @example
+   * // Array overload (recommended)
+   * const unsubscribe = world.hook([Position, Velocity], {
+   *   on_init: (entityId, position, velocity) => console.log("Initialized"),
+   *   on_set: (entityId, position, velocity) => console.log("Updated"),
+   *   on_remove: (entityId, position, velocity) => console.log("Removed"),
+   * });
+   * unsubscribe(); // Remove hook
+   *
+   * // Callback style
+   * const unsubscribe = world.hook([Position], (event, entityId, position) => {
+   *   if (event === "init") console.log("Initialized");
+   * });
    */
   hook<T>(componentType: EntityId<T>, hook: LegacyLifecycleHook<T> | LegacyLifecycleCallback<T>): () => void;
   hook<const T extends readonly ComponentType<any>[]>(
@@ -411,10 +568,48 @@ export class World {
     }
   }
 
+  /**
+   * Synchronizes all buffered commands (set/remove/delete) to the world.
+   * This method must be called after making changes via `set()`, `remove()`, or `delete()` for them to take effect.
+   * Typically called once per frame at the end of your game loop.
+   *
+   * @example
+   * world.set(entity, Position, { x: 10, y: 20 });
+   * world.remove(entity, OldComponent);
+   * world.sync(); // Apply all buffered changes
+   */
   sync(): void {
     this.commandBuffer.execute();
   }
 
+  /**
+   * Creates a cached query for efficiently iterating entities with specific components.
+   * The query is cached internally and reused across calls with the same component types and filter.
+   *
+   * **Important:** Store the query reference and reuse it across frames for optimal performance.
+   * Creating a new query each frame defeats the caching mechanism.
+   *
+   * @param componentTypes - Array of component types to match
+   * @param filter - Optional filter for additional constraints (e.g., without specific components)
+   * @returns A Query instance that can be used to iterate matching entities
+   *
+   * @example
+   * // Create once, reuse many times
+   * const movementQuery = world.createQuery([Position, Velocity]);
+   *
+   * // In game loop
+   * movementQuery.forEach((entity) => {
+   *   const pos = world.get(entity, Position);
+   *   const vel = world.get(entity, Velocity);
+   *   pos.x += vel.x;
+   *   pos.y += vel.y;
+   * });
+   *
+   * // With filter
+   * const activeQuery = world.createQuery([Position], {
+   *   without: [Disabled]
+   * });
+   */
   createQuery(componentTypes: EntityId<any>[], filter: QueryFilter = {}): Query {
     const sortedTypes = [...componentTypes].sort((a, b) => a - b);
     const filterKey = serializeQueryFilter(filter);
@@ -431,10 +626,39 @@ export class World {
     return query;
   }
 
+  /**
+   * Creates a new entity builder for fluent entity configuration.
+   * Useful for building entities with multiple components in a single expression.
+   *
+   * @returns An EntityBuilder instance
+   *
+   * @example
+   * const entity = world.spawn()
+   *   .with(Position, { x: 0, y: 0 })
+   *   .with(Velocity, { x: 1, y: 1 })
+   *   .build();
+   * world.sync(); // Apply changes
+   */
   spawn(): EntityBuilder {
     return new EntityBuilder(this);
   }
 
+  /**
+   * Spawns multiple entities with a configuration callback.
+   * More efficient than calling `spawn()` multiple times when creating many entities.
+   *
+   * @param count - Number of entities to spawn
+   * @param configure - Callback that receives an EntityBuilder and index; must return the configured builder
+   * @returns Array of created entity IDs
+   *
+   * @example
+   * const entities = world.spawnMany(100, (builder, index) => {
+   *   return builder
+   *     .with(Position, { x: index * 10, y: 0 })
+   *     .with(Velocity, { x: 0, y: 1 });
+   * });
+   * world.sync();
+   */
   spawnMany(count: number, configure: (builder: EntityBuilder, index: number) => EntityBuilder): EntityId[] {
     const entities: EntityId[] = [];
     for (let i = 0; i < count; i++) {
@@ -455,6 +679,17 @@ export class World {
     }
   }
 
+  /**
+   * Releases a cached query and frees its resources if no longer needed.
+   * Call this when you're done using a query to allow the world to clean up its cache entry.
+   *
+   * @param query - The query to release
+   *
+   * @example
+   * const query = world.createQuery([Position]);
+   * // ... use query ...
+   * world.releaseQuery(query); // Optional cleanup
+   */
   releaseQuery(query: Query): void {
     for (const [k, v] of this.queryCache.entries()) {
       if (v.query === query) {
@@ -469,6 +704,14 @@ export class World {
     }
   }
 
+  /**
+   * Returns all archetypes that contain entities with the specified components.
+   * Used internally for query optimization but can be useful for debugging.
+   *
+   * @param componentTypes - Array of component types to match
+   * @returns Array of Archetype objects containing matching components
+   * @internal
+   */
   getMatchingArchetypes(componentTypes: EntityId<any>[]): Archetype[] {
     if (componentTypes.length === 0) {
       return [...this.archetypes];
@@ -512,6 +755,33 @@ export class World {
     return firstList.filter((archetype) => archetypeLists.slice(1).every((list) => list.includes(archetype)));
   }
 
+  /**
+   * Queries entities with specific components.
+   * For simpler use cases, prefer using `createQuery()` with `forEach()` which is cached and more efficient.
+   *
+   * @overload query(componentTypes: EntityId<any>[]): EntityId[]
+   * Returns an array of entity IDs that have all specified components.
+   *
+   * @overload query<const T extends readonly EntityId<any>[]>(
+   *   componentTypes: T,
+   *   includeComponents: true,
+   * ): Array<{ entity: EntityId; components: ComponentTuple<T> }>
+   * Returns entities along with their component data.
+   *
+   * @param componentTypes - Array of component types to query
+   * @param includeComponents - If true, includes component data in results
+   * @returns Array of entity IDs or objects with entities and components
+   *
+   * @example
+   * // Just entity IDs
+   * const entities = world.query([Position, Velocity]);
+   *
+   * // With components
+   * const results = world.query([Position, Velocity], true);
+   * results.forEach(({ entity, components: [pos, vel] }) => {
+   *   pos.x += vel.x;
+   * });
+   */
   query(componentTypes: EntityId<any>[]): EntityId[];
   query<const T extends readonly EntityId<any>[]>(
     componentTypes: T,
@@ -726,6 +996,27 @@ export class World {
     }
   }
 
+  /**
+   * Serializes the entire world state to a plain JavaScript object.
+   * This creates a "memory snapshot" that can be stored or transmitted.
+   * The snapshot can be restored using `new World(snapshot)`.
+   *
+   * **Note:** This is NOT automatically persistent storage. To persist data,
+   * you must serialize the returned object to JSON or another format yourself.
+   *
+   * @returns A serializable object representing the world state
+   *
+   * @example
+   * // Create snapshot
+   * const snapshot = world.serialize();
+   *
+   * // Save to storage (example)
+   * localStorage.setItem('save', JSON.stringify(snapshot));
+   *
+   * // Later, restore from snapshot
+   * const savedData = JSON.parse(localStorage.getItem('save'));
+   * const newWorld = new World(savedData);
+   */
   serialize(): SerializedWorld {
     const entities: SerializedEntity[] = [];
 
