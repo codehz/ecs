@@ -92,4 +92,3 @@ class MultiMap<K, V> {
 }
 
 export { MultiMap };
-export type { MultiMap as MultiMapType };

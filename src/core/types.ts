@@ -9,7 +9,7 @@ export interface LegacyLifecycleHook<T = unknown> {
    */
   on_init?: (entityId: EntityId, componentType: EntityId<T>, component: T) => void;
   /**
-   * Called when a component is added to an entity
+   * Called when a component is updated on an entity
    */
   on_set?: (entityId: EntityId, componentType: EntityId<T>, component: T) => void;
   /**

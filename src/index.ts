@@ -33,6 +33,11 @@ export { World } from "./core/world";
 export { Query } from "./query/query";
 
 // Type utilities
+// Type export mappings:
+// - Internal LegacyLifecycleHook → External LifecycleHook (single component hooks)
+// - Internal LifecycleHook → External MultiLifecycleHook (multi-component hooks)
+// - Internal LegacyLifecycleCallback → External LifecycleCallback (single component callbacks)
+// - Internal LifecycleCallback → External MultiLifecycleCallback (multi-component callbacks)
 export type {
   ComponentTuple,
   ComponentType,

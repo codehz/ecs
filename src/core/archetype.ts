@@ -61,9 +61,6 @@ export class Archetype {
   private dontFragmentRelations: Map<EntityId, Map<EntityId<any>, any>>;
 
   /**
-   * Cache for pre-computed component data sources to avoid repeated calculations
-   */
-  /**
    * Multi-hooks that match this archetype
    */
   public readonly matchingMultiHooks: Set<LifecycleHookEntry> = new Set();

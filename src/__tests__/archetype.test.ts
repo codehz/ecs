@@ -212,7 +212,7 @@ describe("Archetype", () => {
 
     // First call - should compute and cache
     let results1: [EntityId<any>, any][][] = [];
-    archetype.forEachWithComponents([wildcardPositionRelation], (entity, relations) => {
+    archetype.forEachWithComponents([wildcardPositionRelation], (_entity, relations) => {
       results1.push(relations);
     });
     expect(results1[0]).toEqual([
@@ -222,7 +222,7 @@ describe("Archetype", () => {
 
     // Second call - should use cache
     let results2: [EntityId<any>, any][][] = [];
-    archetype.forEachWithComponents([wildcardPositionRelation], (entity, relations) => {
+    archetype.forEachWithComponents([wildcardPositionRelation], (_entity, relations) => {
       results2.push(relations);
     });
     expect(results2[0]).toEqual([
@@ -235,7 +235,7 @@ describe("Archetype", () => {
 
     // Third call - should still use cache (data is computed dynamically)
     let results3: [EntityId<any>, any][][] = [];
-    archetype.forEachWithComponents([wildcardPositionRelation], (entity, relations) => {
+    archetype.forEachWithComponents([wildcardPositionRelation], (_entity, relations) => {
       results3.push(relations);
     });
     // Since cache stores structure and data is computed dynamically, this should show updated data

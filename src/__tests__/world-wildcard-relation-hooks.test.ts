@@ -22,11 +22,11 @@ describe("World - Wildcard Relation Hooks", () => {
 
     // Register a wildcard relation hook for positionComponent
     world.hook(wildcardRelationId, {
-      on_set: (entityId, componentType, _component) => {
+      on_set: (_entityId, componentType, _component) => {
         addedCalled = true;
         addedComponentType = componentType;
       },
-      on_remove: (entityId, componentType) => {
+      on_remove: (_entityId, componentType) => {
         removedCalled = true;
         removedComponentType = componentType;
       },
