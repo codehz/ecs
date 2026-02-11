@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { beforeEach, describe, expect, it } from "bun:test";
 import { component, createEntityId, relation, type EntityId } from "../core/entity";
 import { World } from "../core/world";
 
@@ -6,8 +6,13 @@ describe("World - Component Management", () => {
   type Position = { x: number; y: number };
   type Velocity = { x: number; y: number };
 
-  const positionComponent = component<Position>();
-  const velocityComponent = component<Velocity>();
+  let positionComponent: EntityId<Position>;
+  let velocityComponent: EntityId<Velocity>;
+
+  beforeEach(() => {
+    positionComponent = component<Position>();
+    velocityComponent = component<Velocity>();
+  });
 
   it("should add components to entities", () => {
     const world = new World();

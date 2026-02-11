@@ -1,5 +1,5 @@
-import { describe, expect, it } from "bun:test";
-import { component, relation } from "../core/entity";
+import { beforeEach, describe, expect, it } from "bun:test";
+import { component, relation, type EntityId } from "../core/entity";
 import { World } from "../core/world";
 import {
   AssertionError,
@@ -15,13 +15,20 @@ type Position = { x: number; y: number };
 type Velocity = { x: number; y: number };
 type Health = { current: number; max: number };
 
-const PositionId = component<Position>();
-const VelocityId = component<Velocity>();
-const HealthId = component<Health>();
-const TagId = component<void>();
-const ParentId = component<{ offset: { x: number; y: number } }>();
+let PositionId: EntityId<Position>;
+let VelocityId: EntityId<Velocity>;
+let HealthId: EntityId<Health>;
+let TagId: EntityId<void>;
+let ParentId: EntityId<{ offset: { x: number; y: number } }>;
 
 describe("testing module", () => {
+  beforeEach(() => {
+    PositionId = component<Position>();
+    VelocityId = component<Velocity>();
+    HealthId = component<Health>();
+    TagId = component<void>();
+    ParentId = component<{ offset: { x: number; y: number } }>();
+  });
   describe("WorldFixture", () => {
     it("should create a world instance", () => {
       const fixture = new WorldFixture();
