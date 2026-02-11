@@ -14,6 +14,8 @@ export class Query {
   private filter: QueryFilter;
   private cachedArchetypes: Archetype[] = [];
   private isDisposed = false;
+  /** Cache key assigned by World for O(1) releaseQuery lookup */
+  _cacheKey: string | undefined;
   /** Cached wildcard component types for faster entity filtering */
   private wildcardTypes: WildcardRelationId<any>[];
   /** Cached specific dontFragment relation types that need entity-level filtering */

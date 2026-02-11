@@ -15,6 +15,7 @@ export interface Command {
  */
 export class CommandBuffer {
   private commands: Command[] = [];
+  private swapBuffer: Command[] = [];
   private executeEntityCommands: (entityId: EntityId, commands: Command[]) => void;
 
   /**
@@ -60,8 +61,9 @@ export class CommandBuffer {
       }
       iterations++;
 
-      const currentCommands = [...this.commands];
-      this.commands = [];
+      // Swap buffers to avoid allocation
+      const currentCommands = this.commands;
+      this.commands = this.swapBuffer;
 
       // Group commands by entity
       const entityCommands = new Map<EntityId, Command[]>();
@@ -71,6 +73,10 @@ export class CommandBuffer {
         }
         entityCommands.get(cmd.entityId)!.push(cmd);
       }
+
+      // Clear the consumed buffer for reuse
+      currentCommands.length = 0;
+      this.swapBuffer = currentCommands;
 
       // Process each entity's commands with optimization
       for (const [entityId, commands] of entityCommands) {

@@ -58,7 +58,7 @@ function processSetCommand(
     if (isDontFragmentComponent(componentId)) {
       const wildcardMarker = relation(componentId, "*");
       // Add wildcard marker to changeset if not already in archetype
-      if (!currentArchetype.componentTypes.includes(wildcardMarker)) {
+      if (!currentArchetype.componentTypeSet.has(wildcardMarker)) {
         changeset.set(wildcardMarker, undefined);
       }
     }
@@ -103,7 +103,7 @@ export function removeMatchingRelations(
   const entityData = archetype.getEntity(entityId);
   if (entityData) {
     for (const [componentType] of entityData) {
-      if (archetype.componentTypes.includes(componentType)) continue;
+      if (archetype.componentTypeSet.has(componentType)) continue;
       if (getComponentIdFromRelationId(componentType) === baseComponentId) {
         changeset.delete(componentType);
       }

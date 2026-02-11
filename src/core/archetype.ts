@@ -33,6 +33,11 @@ export class Archetype {
   public readonly componentTypes: EntityId<any>[];
 
   /**
+   * Set version of componentTypes for O(1) lookups in hot paths
+   */
+  public readonly componentTypeSet: ReadonlySet<EntityId<any>>;
+
+  /**
    * List of entities in this archetype
    */
   private entities: EntityId[] = [];
@@ -70,6 +75,7 @@ export class Archetype {
 
   constructor(componentTypes: EntityId<any>[], dontFragmentRelations: Map<EntityId, Map<EntityId<any>, any>>) {
     this.componentTypes = [...componentTypes].sort((a, b) => a - b);
+    this.componentTypeSet = new Set(this.componentTypes);
     this.dontFragmentRelations = dontFragmentRelations;
 
     for (const componentType of this.componentTypes) {
@@ -110,7 +116,7 @@ export class Archetype {
     const dontFragmentData = new Map<EntityId<any>, any>();
 
     for (const [componentType, data] of componentData) {
-      if (this.componentTypes.includes(componentType)) continue;
+      if (this.componentTypeSet.has(componentType)) continue;
 
       const detailedType = getDetailedIdType(componentType);
       if (isRelationType(detailedType) && isDontFragmentComponent(detailedType.componentId!)) {
@@ -256,7 +262,7 @@ export class Archetype {
   }
 
   private getRegularComponent<T>(entityId: EntityId, index: number, componentType: EntityId<T>): T {
-    if (this.componentTypes.includes(componentType)) {
+    if (this.componentTypeSet.has(componentType)) {
       const data = this.getComponentData(componentType)[index]!;
       if (data === MISSING_COMPONENT) {
         throw new Error(`Component type ${componentType} not found for entity ${entityId}`);
@@ -278,7 +284,7 @@ export class Archetype {
       throw new Error(`Entity ${entityId} is not in this archetype`);
     }
 
-    if (this.componentTypes.includes(componentType)) {
+    if (this.componentTypeSet.has(componentType)) {
       const data = this.getComponentData(componentType)[index]!;
       if (data === MISSING_COMPONENT) return undefined;
       return { value: data as T };

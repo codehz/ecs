@@ -7,7 +7,9 @@ import { Archetype, MISSING_COMPONENT } from "./archetype";
 import { EntityBuilder } from "./builder";
 import type { ComponentId, EntityId, WildcardRelationId } from "./entity";
 import {
+  ENTITY_ID_START,
   EntityIdManager,
+  RELATION_SHIFT,
   getComponentIdFromRelationId,
   getDetailedIdType,
   getTargetIdFromRelationId,
@@ -226,9 +228,10 @@ export class World {
   private destroyEntityImmediate(entityId: EntityId): void {
     const queue: EntityId[] = [entityId];
     const visited = new Set<EntityId>();
+    let queueIndex = 0;
 
-    while (queue.length > 0) {
-      const cur = queue.shift()!;
+    while (queueIndex < queue.length) {
+      const cur = queue[queueIndex++]!;
       if (visited.has(cur)) continue;
       visited.add(cur);
 
@@ -465,7 +468,7 @@ export class World {
     const archetype = this.entityToArchetype.get(entityId);
     if (!archetype) return false;
 
-    if (archetype.componentTypes.includes(componentType)) return true;
+    if (archetype.componentTypeSet.has(componentType)) return true;
 
     if (isDontFragmentRelation(componentType)) {
       return this.dontFragmentRelations.get(entityId)?.has(componentType) ?? false;
@@ -536,8 +539,8 @@ export class World {
       throw new Error(`Entity ${entityId} does not exist`);
     }
 
-    if (componentType >= 0 || componentType % 2 ** 42 !== 0) {
-      const inArchetype = archetype.componentTypes.includes(componentType);
+    if (componentType >= 0 || componentType % RELATION_SHIFT !== 0) {
+      const inArchetype = archetype.componentTypeSet.has(componentType);
       const hasDontFragment = isDontFragmentRelation(componentType);
       const hasComponent =
         inArchetype || (hasDontFragment && this.dontFragmentRelations.get(entityId)?.has(componentType));
@@ -850,6 +853,7 @@ export class World {
     }
 
     const query = new Query(this, sortedTypes, filter);
+    query._cacheKey = key;
     this.queryCache.set(key, { query, refCount: 1 });
     return query;
   }
@@ -919,16 +923,17 @@ export class World {
    * world.releaseQuery(query); // Optional cleanup
    */
   releaseQuery(query: Query): void {
-    for (const [k, v] of this.queryCache.entries()) {
-      if (v.query === query) {
-        v.refCount--;
-        if (v.refCount <= 0) {
-          this.queryCache.delete(k);
-          this._unregisterQuery(query);
-          v.query._disposeInternal();
-        }
-        return;
-      }
+    const key = query._cacheKey;
+    if (!key) return;
+
+    const cached = this.queryCache.get(key);
+    if (!cached || cached.query !== query) return;
+
+    cached.refCount--;
+    if (cached.refCount <= 0) {
+      this.queryCache.delete(key);
+      this._unregisterQuery(query);
+      cached.query._disposeInternal();
     }
   }
 
@@ -978,9 +983,25 @@ export class World {
     if (componentTypes.length === 0) return [...this.archetypes];
     if (componentTypes.length === 1) return this.archetypesByComponent.get(componentTypes[0]!) || [];
 
-    const archetypeLists = componentTypes.map((type) => this.archetypesByComponent.get(type) || []);
-    const firstList = archetypeLists[0]!;
-    return firstList.filter((archetype) => archetypeLists.slice(1).every((list) => list.includes(archetype)));
+    // Sort by list length to start intersection from the smallest set
+    const archetypeLists = componentTypes
+      .map((type) => this.archetypesByComponent.get(type) || [])
+      .sort((a, b) => a.length - b.length);
+
+    const shortest = archetypeLists[0]!;
+    if (shortest.length === 0) return [];
+
+    // Use Set-based intersection starting from the shortest list
+    let result = new Set(shortest);
+    for (let i = 1; i < archetypeLists.length; i++) {
+      const listSet = new Set(archetypeLists[i]!);
+      for (const item of result) {
+        if (!listSet.has(item)) result.delete(item);
+      }
+      if (result.size === 0) return [];
+    }
+
+    return Array.from(result);
   }
 
   /**
@@ -1161,7 +1182,7 @@ export class World {
       if (isEntityRelation(componentType)) {
         const targetId = getTargetIdFromRelationId(componentType)!;
         untrackEntityReference(this.entityReferences, entityId, componentType, targetId);
-      } else if (componentType >= 1024) {
+      } else if (componentType >= ENTITY_ID_START) {
         untrackEntityReference(this.entityReferences, entityId, componentType, componentType);
       }
     }
@@ -1170,7 +1191,7 @@ export class World {
       if (isEntityRelation(componentType)) {
         const targetId = getTargetIdFromRelationId(componentType)!;
         trackEntityReference(this.entityReferences, entityId, componentType, targetId);
-      } else if (componentType >= 1024) {
+      } else if (componentType >= ENTITY_ID_START) {
         trackEntityReference(this.entityReferences, entityId, componentType, componentType);
       }
     }
@@ -1218,7 +1239,7 @@ export class World {
         const componentId = getComponentIdFromRelationId(c);
         return componentId !== undefined && archetype.hasRelationWithComponentId(componentId);
       }
-      return archetype.componentTypes.includes(c) || isDontFragmentRelation(c);
+      return archetype.componentTypeSet.has(c) || isDontFragmentRelation(c);
     });
   }
 

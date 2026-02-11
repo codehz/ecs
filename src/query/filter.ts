@@ -45,10 +45,10 @@ export function matchesComponentTypes(archetype: Archetype, componentTypes: Enti
     ) {
       // For specific dontFragment relations, check if archetype has the wildcard marker
       const wildcardMarker = relation(detailedType.componentId, "*");
-      return archetype.componentTypes.includes(wildcardMarker);
+      return archetype.componentTypeSet.has(wildcardMarker);
     } else {
       // For regular components and non-dontFragment relations, check direct inclusion
-      return archetype.componentTypes.includes(type);
+      return archetype.componentTypeSet.has(type);
     }
   });
 }
@@ -69,7 +69,7 @@ export function matchesFilter(archetype: Archetype, filter: QueryFilter): boolea
       });
     } else {
       // For regular components, check direct exclusion
-      return !archetype.componentTypes.includes(type);
+      return !archetype.componentTypeSet.has(type);
     }
   });
 }
