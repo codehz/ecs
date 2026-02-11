@@ -6,10 +6,10 @@
  * Get a value from cache or compute and cache it if not present
  * @param cache The cache map
  * @param key The cache key
- * @param compute Function to compute the value if not cached
+ * @param compute Function to compute the value if not cached (may have side effects)
  * @returns The cached or computed value
  */
-export function getOrComputeCache<K, V>(cache: Map<K, V>, key: K, compute: () => V): V {
+export function getOrCompute<K, V>(cache: Map<K, V>, key: K, compute: () => V): V {
   let value = cache.get(key);
   if (value === undefined) {
     value = compute();
@@ -19,17 +19,13 @@ export function getOrComputeCache<K, V>(cache: Map<K, V>, key: K, compute: () =>
 }
 
 /**
- * Get a value from cache or create and cache it if not present, allowing side effects during creation
- * @param cache The cache map
- * @param key The cache key
- * @param create Function to create the value if not cached (can have side effects)
- * @returns The cached or created value
+ * Alias for getOrCompute - maintained for backwards compatibility
+ * @deprecated Use getOrCompute instead
  */
-export function getOrCreateWithSideEffect<K, V>(cache: Map<K, V>, key: K, create: () => V): V {
-  let value = cache.get(key);
-  if (value === undefined) {
-    value = create();
-    cache.set(key, value);
-  }
-  return value;
-}
+export const getOrComputeCache = getOrCompute;
+
+/**
+ * Alias for getOrCompute - maintained for backwards compatibility
+ * @deprecated Use getOrCompute instead
+ */
+export const getOrCreateWithSideEffect = getOrCompute;

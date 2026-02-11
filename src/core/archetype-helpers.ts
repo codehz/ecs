@@ -1,6 +1,12 @@
 import { MISSING_COMPONENT } from "./archetype";
 import type { ComponentId, EntityId, WildcardRelationId } from "./entity";
-import { getComponentIdFromRelationId, getDetailedIdType, getIdType, getTargetIdFromRelationId } from "./entity";
+import {
+  getComponentIdFromRelationId,
+  getDetailedIdType,
+  getIdType,
+  getTargetIdFromRelationId,
+  isRelationId,
+} from "./entity";
 import { isOptionalEntityId, type ComponentType } from "./types";
 
 type DetailedIdType = ReturnType<typeof getDetailedIdType>;
@@ -8,6 +14,41 @@ type DetailedIdType = ReturnType<typeof getDetailedIdType>;
 type RelationDetailedType =
   | { type: "entity-relation"; componentId: ComponentId<any>; targetId: EntityId<any> }
   | { type: "component-relation"; componentId: ComponentId<any>; targetId: ComponentId<any> };
+
+/**
+ * Find all wildcard relations matching a specific component ID from a components map
+ * @param components - Component entity's components map
+ * @param wildcardComponentId - The component ID to match (relation part)
+ * @returns Array of matching relation IDs
+ */
+export function findWildcardRelations(components: Map<EntityId, any>, wildcardComponentId: EntityId): EntityId<any>[] {
+  const result: EntityId<any>[] = [];
+  for (const [relId] of components) {
+    if (isRelationId(relId)) {
+      const decoded = getComponentIdFromRelationId(relId);
+      if (decoded === wildcardComponentId) {
+        result.push(relId);
+      }
+    }
+  }
+  return result;
+}
+
+/**
+ * Check if a components map has any wildcard relations matching a component ID
+ * @param components - Component entity's components map
+ * @param wildcardComponentId - The component ID to match
+ * @returns True if at least one matching relation exists
+ */
+export function hasWildcardRelation(components: Map<EntityId, any>, wildcardComponentId: EntityId): boolean {
+  for (const relId of components.keys()) {
+    if (isRelationId(relId)) {
+      const decoded = getComponentIdFromRelationId(relId);
+      if (decoded === wildcardComponentId) return true;
+    }
+  }
+  return false;
+}
 
 /**
  * Check if a detailed type represents a relation (entity or component)

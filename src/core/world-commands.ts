@@ -25,7 +25,8 @@ export function processCommands(
   handleExclusiveRelation: (entityId: EntityId, archetype: Archetype, componentId: ComponentId<any>) => void,
 ): void {
   for (const command of commands) {
-    if (command.type === "set" && command.componentType) {
+    if (command.type === "set") {
+      // TypeScript knows command.componentType and command.component exist
       processSetCommand(
         entityId,
         currentArchetype,
@@ -34,7 +35,8 @@ export function processCommands(
         changeset,
         handleExclusiveRelation,
       );
-    } else if (command.type === "delete" && command.componentType) {
+    } else if (command.type === "delete") {
+      // TypeScript knows command.componentType exists
       processDeleteCommand(entityId, currentArchetype, command.componentType, changeset);
     }
   }

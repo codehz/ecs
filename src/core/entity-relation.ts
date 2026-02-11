@@ -119,23 +119,23 @@ export function getIdType(
   if (isEntityId(id)) return "entity";
 
   if (id < 0) {
-    try {
-      const decoded = decodeRelationId(id as RelationId<any>);
-      // Validate that componentId and targetId are valid (decodeRelationId already checks componentId)
-      if (decoded.type !== "wildcard" && !isEntityId(decoded.targetId) && !isComponentId(decoded.targetId)) {
-        return "invalid";
-      }
-      switch (decoded.type) {
-        case "entity":
-          return "entity-relation";
-        case "component":
-          return "component-relation";
-        case "wildcard":
-          return "wildcard-relation";
-      }
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (_error) {
-      return "invalid"; // fallback for invalid relation IDs
+    const decoded = decodeRelationRaw(id as RelationId<any>);
+    if (decoded === null) return "invalid";
+
+    const { componentId: rawComponentId, targetId: rawTargetId } = decoded;
+
+    // Validate component ID
+    if (!isValidComponentId(rawComponentId)) return "invalid";
+
+    // Determine type based on targetId range
+    if (rawTargetId === WILDCARD_TARGET_ID) {
+      return "wildcard-relation";
+    } else if (isEntityId(rawTargetId as EntityId<any>)) {
+      return "entity-relation";
+    } else if (isComponentId(rawTargetId as ComponentId<any>)) {
+      return "component-relation";
+    } else {
+      return "invalid";
     }
   }
 
@@ -172,34 +172,29 @@ export function getDetailedIdType(id: EntityId<any>):
   }
 
   if (id < 0) {
-    try {
-      const decoded = decodeRelationId(id as RelationId<any>);
-      // Validate that targetId is valid (decodeRelationId already checks componentId)
-      if (decoded.type !== "wildcard" && !isEntityId(decoded.targetId) && !isComponentId(decoded.targetId)) {
-        return { type: "invalid" };
-      }
-      let type: "entity-relation" | "component-relation" | "wildcard-relation";
+    const decoded = decodeRelationRaw(id as RelationId<any>);
+    if (decoded === null) {
+      return { type: "invalid" };
+    }
 
-      switch (decoded.type) {
-        case "entity":
-          type = "entity-relation";
-          break;
-        case "component":
-          type = "component-relation";
-          break;
-        case "wildcard":
-          type = "wildcard-relation";
-          break;
-      }
+    const { componentId: rawComponentId, targetId: rawTargetId } = decoded;
 
-      return {
-        type,
-        componentId: decoded.componentId,
-        targetId: decoded.targetId as any,
-      };
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (_error) {
-      // Invalid relation ID
+    // Validate component ID
+    if (!isValidComponentId(rawComponentId)) {
+      return { type: "invalid" };
+    }
+
+    const componentId = rawComponentId as ComponentId<any>;
+    const targetId = rawTargetId as EntityId<any>;
+
+    // Determine type based on targetId range
+    if (targetId === WILDCARD_TARGET_ID) {
+      return { type: "wildcard-relation", componentId, targetId };
+    } else if (isEntityId(targetId)) {
+      return { type: "entity-relation", componentId, targetId };
+    } else if (isComponentId(targetId as any)) {
+      return { type: "component-relation", componentId, targetId: targetId as ComponentId<any> };
+    } else {
       return { type: "invalid" };
     }
   }
@@ -227,24 +222,33 @@ export function inspectEntityId(id: EntityId<any>): string {
   }
 
   if (id < 0) {
-    try {
-      const decoded = decodeRelationId(id as RelationId<any>);
-      // Validate that targetId is valid (decodeRelationId already checks componentId)
-      if (decoded.type !== "wildcard" && !isEntityId(decoded.targetId) && !isComponentId(decoded.targetId)) {
-        return `Invalid Relation ID (${id})`;
-      }
-      const componentStr = `Component ID (${decoded.componentId})`;
-      const targetStr =
-        decoded.type === "entity"
-          ? `Entity ID (${decoded.targetId})`
-          : decoded.type === "component"
-            ? `Component ID (${decoded.targetId})`
-            : "Wildcard (*)";
-      return `Relation ID: ${componentStr} -> ${targetStr}`;
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (_error) {
+    const decoded = decodeRelationRaw(id as RelationId<any>);
+    if (decoded === null) {
       return `Invalid Relation ID (${id})`;
     }
+
+    const { componentId: rawComponentId, targetId: rawTargetId } = decoded;
+
+    // Validate component ID
+    if (!isValidComponentId(rawComponentId)) {
+      return `Invalid Relation ID (${id})`;
+    }
+
+    // Determine target type and format output
+    const componentStr = `Component ID (${rawComponentId})`;
+    let targetStr: string;
+
+    if (rawTargetId === WILDCARD_TARGET_ID) {
+      targetStr = "Wildcard (*)";
+    } else if (isEntityId(rawTargetId as EntityId<any>)) {
+      targetStr = `Entity ID (${rawTargetId})`;
+    } else if (isComponentId(rawTargetId as ComponentId<any>)) {
+      targetStr = `Component ID (${rawTargetId})`;
+    } else {
+      return `Invalid Relation ID (${id})`;
+    }
+
+    return `Relation ID: ${componentStr} -> ${targetStr}`;
   }
 
   return `Unknown ID (${id})`;

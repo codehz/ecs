@@ -1,6 +1,18 @@
 import type { EntityId, WildcardRelationId } from "./entity";
 
 /**
+ * Type-erased component ID, used for runtime container storage
+ * @internal
+ */
+export type AnyComponentId = EntityId<any>;
+
+/**
+ * Type-erased entity ID, used for runtime container storage
+ * @internal
+ */
+export type AnyEntityId = EntityId<any>;
+
+/**
  * Hook types for component lifecycle events
  */
 export interface LegacyLifecycleHook<T = unknown> {

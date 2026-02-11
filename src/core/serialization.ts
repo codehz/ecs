@@ -7,9 +7,17 @@ import { getComponentIdByName, getComponentNameById, getDetailedIdType, relation
 
 export type SerializedEntityId = number | string | { component: string; target: number | string | "*" };
 
+/**
+ * Serialized state of EntityIdManager
+ */
+export interface SerializedEntityIdManager {
+  nextId: number;
+  freelist?: number[];
+}
+
 export type SerializedWorld = {
   version: number;
-  entityManager: any;
+  entityManager: SerializedEntityIdManager;
   entities: SerializedEntity[];
   componentEntities?: SerializedEntity[];
 };
@@ -43,11 +51,13 @@ export function encodeEntityId(id: EntityId<any>): SerializedEntityId {
       if (!componentName) {
         console.warn(`Component ID ${detailed.componentId} in relation has no registered name`);
       }
-      return { component: componentName || (detailed.componentId as number).toString(), target: detailed.targetId! };
+      // Safe: targetId is guaranteed to exist for entity-relation type
+      return { component: componentName || (detailed.componentId as number).toString(), target: detailed.targetId };
     }
     case "component-relation": {
       const componentName = getComponentNameById(detailed.componentId);
-      const targetName = getComponentNameById(detailed.targetId! as ComponentId);
+      // Safe: targetId is guaranteed to exist for component-relation type
+      const targetName = getComponentNameById(detailed.targetId as ComponentId);
       if (!componentName) {
         console.warn(`Component ID ${detailed.componentId} in relation has no registered name`);
       }

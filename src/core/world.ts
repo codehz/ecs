@@ -4,6 +4,7 @@ import { serializeQueryFilter, type QueryFilter } from "../query/filter";
 import { Query } from "../query/query";
 import { getOrCreateWithSideEffect } from "../utils/utils";
 import { Archetype, MISSING_COMPONENT } from "./archetype";
+import { hasWildcardRelation } from "./archetype-helpers";
 import { EntityBuilder } from "./builder";
 import type { ComponentId, EntityId, WildcardRelationId } from "./entity";
 import {
@@ -129,7 +130,8 @@ export class World {
         for (const compType of componentTypes) {
           const detailedType = getDetailedIdType(compType);
           if (detailedType.type === "entity-relation") {
-            trackEntityReference(this.entityReferences, entityId, compType, detailedType.targetId!);
+            // Safe: targetId is guaranteed to exist for entity-relation type
+            trackEntityReference(this.entityReferences, entityId, compType, detailedType.targetId);
           } else if (detailedType.type === "entity") {
             trackEntityReference(this.entityReferences, entityId, compType, compType);
           }
@@ -456,10 +458,7 @@ export class World {
         const data = this.componentEntityComponents.get(entityId);
         if (!data) return false;
 
-        for (const key of data.keys()) {
-          if (getComponentIdFromRelationId(key) === componentId) return true;
-        }
-        return false;
+        return hasWildcardRelation(data, componentId);
       }
 
       return this.componentEntityComponents.get(entityId)?.has(componentType) ?? false;
@@ -516,7 +515,8 @@ export class World {
             if (getComponentIdFromRelationId(key) === componentId) {
               const detailed = getDetailedIdType(key);
               if (detailed.type === "entity-relation" || detailed.type === "component-relation") {
-                relations.push([detailed.targetId!, value]);
+                // Safe: targetId is guaranteed to exist for entity-relation and component-relation types
+                relations.push([detailed.targetId, value]);
               }
             }
           }
@@ -591,7 +591,8 @@ export class World {
           if (getComponentIdFromRelationId(key) === componentId) {
             const detailed = getDetailedIdType(key);
             if (detailed.type === "entity-relation" || detailed.type === "component-relation") {
-              relations.push([detailed.targetId!, value]);
+              // Safe: targetId is guaranteed to exist for entity-relation and component-relation types
+              relations.push([detailed.targetId, value]);
             }
           }
         }

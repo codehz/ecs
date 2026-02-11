@@ -199,14 +199,11 @@ function triggerMultiComponentHooks(
 function entityHasAllComponents(ctx: HooksContext, entityId: EntityId, requiredComponents: EntityId<any>[]): boolean {
   return requiredComponents.every((c) => {
     // For wildcard relations, check if the entity has the wildcard relation data
-    // (ctx.get will return an array of matching relations, empty if none exist)
     if (isWildcardRelationId(c)) {
-      try {
-        const wildcardData = ctx.get(entityId, c);
-        return Array.isArray(wildcardData) && wildcardData.length > 0;
-      } catch {
-        return false;
-      }
+      const wildcardResult = ctx.getOptional(entityId, c);
+      if (!wildcardResult) return false;
+      const wildcardData = wildcardResult.value;
+      return Array.isArray(wildcardData) && wildcardData.length > 0;
     }
     return ctx.has(entityId, c);
   });
@@ -224,12 +221,10 @@ function entityHadAllComponentsBefore(
 
     // For wildcard relations, check if the entity still has matching relations
     if (isWildcardRelationId(c)) {
-      try {
-        const wildcardData = ctx.get(entityId, c);
-        return Array.isArray(wildcardData) && wildcardData.length > 0;
-      } catch {
-        return false;
-      }
+      const wildcardResult = ctx.getOptional(entityId, c);
+      if (!wildcardResult) return false;
+      const wildcardData = wildcardResult.value;
+      return Array.isArray(wildcardData) && wildcardData.length > 0;
     }
     return ctx.has(entityId, c);
   });

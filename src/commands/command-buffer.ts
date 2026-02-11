@@ -7,13 +7,12 @@ const MAX_COMMAND_ITERATIONS = 100;
 
 /**
  * Command for deferred execution
+ * Uses discriminated union for type safety
  */
-export interface Command {
-  type: "set" | "delete" | "destroy";
-  entityId: EntityId;
-  componentType?: EntityId<any>;
-  component?: any;
-}
+export type Command =
+  | { type: "set"; entityId: EntityId; componentType: EntityId<any>; component: any }
+  | { type: "delete"; entityId: EntityId; componentType: EntityId<any> }
+  | { type: "destroy"; entityId: EntityId };
 
 /**
  * Command buffer for deferred structural changes
