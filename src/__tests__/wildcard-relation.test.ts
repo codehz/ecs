@@ -52,7 +52,7 @@ describe("Wildcard relation edge cases", () => {
 
     // Verify structure
     for (const [target, data] of results) {
-      expect(targets).toContain(target);
+      expect(targets).toContain(target as any);
       expect(data.strength).toBeGreaterThanOrEqual(0);
       expect(data.strength).toBeLessThan(100);
     }

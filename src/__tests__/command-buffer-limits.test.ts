@@ -55,7 +55,6 @@ describe("CommandBuffer iteration limit", () => {
   it("should execute all commands within iteration limit", () => {
     const world = new World();
     const Value = component<{ num: number }>();
-    const Tag = component<void>();
 
     const entity = world.new();
 

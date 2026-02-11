@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import { component, relation, type EntityId } from "../core/entity";
+import { component, relation, type ComponentId } from "../core/entity";
 import { World } from "../core/world";
 import {
   AssertionError,
@@ -15,11 +15,11 @@ type Position = { x: number; y: number };
 type Velocity = { x: number; y: number };
 type Health = { current: number; max: number };
 
-let PositionId: EntityId<Position>;
-let VelocityId: EntityId<Velocity>;
-let HealthId: EntityId<Health>;
-let TagId: EntityId<void>;
-let ParentId: EntityId<{ offset: { x: number; y: number } }>;
+let PositionId: ComponentId<Position>;
+let VelocityId: ComponentId<Velocity>;
+let HealthId: ComponentId<Health>;
+let TagId: ComponentId<void>;
+let ParentId: ComponentId<{ offset: { x: number; y: number } }>;
 
 describe("testing module", () => {
   beforeEach(() => {

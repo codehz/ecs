@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { ComponentIdAllocator } from "../core/entity-manager";
-import { COMPONENT_ID_MAX } from "../core/entity-types";
+import { COMPONENT_ID_MAX, createComponentId } from "../core/entity-types";
 
 describe("ComponentIdAllocator", () => {
   it("should allocate component IDs sequentially", () => {
@@ -10,9 +10,9 @@ describe("ComponentIdAllocator", () => {
     const id2 = allocator.allocate();
     const id3 = allocator.allocate();
 
-    expect(id1).toBe(1);
-    expect(id2).toBe(2);
-    expect(id3).toBe(3);
+    expect(id1).toBe(createComponentId(1));
+    expect(id2).toBe(createComponentId(2));
+    expect(id3).toBe(createComponentId(3));
   });
 
   it("should throw when exceeding COMPONENT_ID_MAX", () => {
@@ -57,7 +57,7 @@ describe("ComponentIdAllocator", () => {
 
     for (let i = 1; i <= COMPONENT_ID_MAX; i++) {
       const id = allocator.allocate();
-      expect(id).toBe(i);
+      expect(id).toBe(createComponentId(i));
     }
 
     // Should be exhausted now

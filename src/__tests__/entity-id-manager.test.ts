@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { EntityIdManager } from "../core/entity-manager";
+import type { EntityId } from "../testing";
 
 describe("EntityIdManager", () => {
   it("should allocate entity IDs sequentially", () => {
@@ -10,9 +11,9 @@ describe("EntityIdManager", () => {
     const id3 = manager.allocate();
 
     // Entity IDs start at 1024
-    expect(id1).toBe(1024);
-    expect(id2).toBe(1025);
-    expect(id3).toBe(1026);
+    expect(Number(id1 as unknown as number)).toBe(1024);
+    expect(Number(id2 as unknown as number)).toBe(1025);
+    expect(Number(id3 as unknown as number)).toBe(1026);
   });
 
   it("should reuse freed entity IDs (LIFO)", () => {
@@ -57,9 +58,9 @@ describe("EntityIdManager", () => {
     expect(manager.getFreelistSize()).toBe(0);
 
     // Free every third ID
-    const toReuse: number[] = [];
+    const toReuse = [];
     for (let i = 0; i < allocated.length; i += 3) {
-      manager.deallocate(allocated[i]!);
+      manager.deallocate(allocated[i]! as EntityId<any>);
       toReuse.push(allocated[i]!);
     }
 
@@ -104,17 +105,19 @@ describe("EntityIdManager", () => {
 
   it("should throw when deallocating invalid entity ID", () => {
     const manager = new EntityIdManager();
-    const id = manager.allocate();
+    manager.allocate();
 
     // Deallocating negative ID or ID that was never allocated
-    expect(() => manager.deallocate(0 as any)).toThrow(/valid entity|deallocate/i);
+    expect(() => manager.deallocate(0 as unknown as ReturnType<typeof manager.allocate>)).toThrow(
+      /valid entity|deallocate/i,
+    );
   });
 
   it("should serialize and deserialize state", () => {
     const manager = new EntityIdManager();
 
     const id1 = manager.allocate();
-    const id2 = manager.allocate();
+    manager.allocate();
 
     manager.deallocate(id1);
 
@@ -138,7 +141,7 @@ describe("EntityIdManager", () => {
 
     const id1 = manager.allocate();
     const id2 = manager.allocate();
-    const id3 = manager.allocate();
+    manager.allocate();
 
     manager.deallocate(id1);
     manager.deallocate(id2);
@@ -149,6 +152,6 @@ describe("EntityIdManager", () => {
 
     // Next allocation should be a new ID
     const newId = manager.allocate();
-    expect(newId).toBe(id3 + 1);
+    expect(Number(newId as unknown as number)).toBe(1027);
   });
 });

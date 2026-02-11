@@ -11,7 +11,7 @@ describe("Serialization edge cases", () => {
     expect(snapshot.version).toBeDefined();
 
     const newWorld = new World(snapshot);
-    expect(newWorld.exists(-1)).toBe(false);
+    expect(newWorld.exists(-1 as unknown as ReturnType<typeof world.new>)).toBe(false);
   });
 
   it("should serialize and deserialize single entity", () => {
