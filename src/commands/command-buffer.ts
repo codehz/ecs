@@ -1,6 +1,11 @@
 import type { EntityId } from "../core/entity";
 
 /**
+ * Maximum number of command buffer execution iterations to prevent infinite loops
+ */
+const MAX_COMMAND_ITERATIONS = 100;
+
+/**
  * Command for deferred execution
  */
 export interface Command {
@@ -52,11 +57,10 @@ export class CommandBuffer {
    * Execute all commands and clear the buffer
    */
   execute(): void {
-    const MAX_ITERATIONS = 100;
     let iterations = 0;
 
     while (this.commands.length > 0) {
-      if (iterations >= MAX_ITERATIONS) {
+      if (iterations >= MAX_COMMAND_ITERATIONS) {
         throw new Error("Command execution exceeded maximum iterations, possible infinite loop");
       }
       iterations++;
