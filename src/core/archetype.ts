@@ -87,6 +87,12 @@ export class Archetype {
     return this.entities.length;
   }
 
+  /**
+   * Check if the given component types match this archetype
+   * @param componentTypes - Component types to check (can be in any order)
+   * @returns true if the types match this archetype's component set
+   * @note This method handles unsorted input by internally sorting for comparison
+   */
   matches(componentTypes: EntityId<any>[]): boolean {
     if (this.componentTypes.length !== componentTypes.length) return false;
     const sortedTypes = [...componentTypes].sort((a, b) => a - b);

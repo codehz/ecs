@@ -370,7 +370,7 @@ describe("EntityIdManager", () => {
       const manager = new EntityIdManager();
       // Mock nextId to near max
       (manager as any).nextId = Number.MAX_SAFE_INTEGER - 1;
-      (manager as any).freelist.clear();
+      (manager as any).freelist.length = 0;
 
       expect(() => manager.allocate()).toThrow("Entity ID overflow");
     });

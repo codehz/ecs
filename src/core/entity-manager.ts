@@ -6,17 +6,19 @@ import { COMPONENT_ID_MAX, ENTITY_ID_START, isEntityId } from "./entity-types";
  */
 export class EntityIdManager {
   private nextId: number = ENTITY_ID_START;
-  private freelist: Set<EntityId> = new Set();
+  /**
+   * Free list uses a stack (LIFO) for better memory locality when reusing IDs.
+   * We use an array instead of a Set for significantly better performance.
+   */
+  private freelist: EntityId[] = [];
 
   /**
    * Allocate a new entity ID
    * Uses freelist if available, otherwise increments counter
    */
   allocate(): EntityId {
-    if (this.freelist.size > 0) {
-      const id = this.freelist.values().next().value!;
-      this.freelist.delete(id);
-      return id;
+    if (this.freelist.length > 0) {
+      return this.freelist.pop()!;
     } else {
       const id = this.nextId;
       this.nextId++;
@@ -39,14 +41,14 @@ export class EntityIdManager {
     if (id >= this.nextId) {
       throw new Error("Cannot deallocate an ID that was never allocated");
     }
-    this.freelist.add(id);
+    this.freelist.push(id);
   }
 
   /**
    * Get the current freelist size (for debugging/monitoring)
    */
   getFreelistSize(): number {
-    return this.freelist.size;
+    return this.freelist.length;
   }
 
   /**
@@ -73,7 +75,7 @@ export class EntityIdManager {
       throw new Error("Invalid state for EntityIdManager.deserializeState");
     }
     this.nextId = state.nextId;
-    this.freelist = new Set((state.freelist || []) as EntityId[]);
+    this.freelist = (state.freelist || []) as EntityId[];
   }
 }
 
