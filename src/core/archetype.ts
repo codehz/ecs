@@ -1,4 +1,4 @@
-import { getOrComputeCache } from "../utils/utils";
+import { getOrCompute } from "../utils/utils";
 import {
   buildCacheKey,
   buildSingleComponent,
@@ -350,7 +350,7 @@ export class Archetype {
     componentTypes: T,
   ): (any[] | EntityId<any>[] | undefined)[] {
     const cacheKey = buildCacheKey(componentTypes);
-    return getOrComputeCache(this.componentDataSourcesCache, cacheKey, () =>
+    return getOrCompute(this.componentDataSourcesCache, cacheKey, () =>
       componentTypes.map((compType) => this.getComponentDataSource(compType)),
     );
   }

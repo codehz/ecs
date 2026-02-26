@@ -2,7 +2,7 @@ import { ComponentChangeset } from "../commands/changeset";
 import { CommandBuffer, type Command } from "../commands/command-buffer";
 import { serializeQueryFilter, type QueryFilter } from "../query/filter";
 import { Query } from "../query/query";
-import { getOrCreateWithSideEffect } from "../utils/utils";
+import { getOrCompute } from "../utils/utils";
 import { Archetype, MISSING_COMPONENT } from "./archetype";
 import { hasWildcardRelation } from "./archetype-helpers";
 import { EntityBuilder } from "./builder";
@@ -1203,7 +1203,7 @@ export class World {
     const sortedTypes = regularTypes.sort((a, b) => a - b);
     const hashKey = this.createArchetypeSignature(sortedTypes);
 
-    return getOrCreateWithSideEffect(this.archetypeBySignature, hashKey, () => this.createNewArchetype(sortedTypes));
+    return getOrCompute(this.archetypeBySignature, hashKey, () => this.createNewArchetype(sortedTypes));
   }
 
   private createNewArchetype(componentTypes: EntityId<any>[]): Archetype {

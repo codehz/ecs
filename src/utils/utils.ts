@@ -17,15 +17,3 @@ export function getOrCompute<K, V>(cache: Map<K, V>, key: K, compute: () => V): 
   }
   return value;
 }
-
-/**
- * Alias for getOrCompute - maintained for backwards compatibility
- * @deprecated Use getOrCompute instead
- */
-export const getOrComputeCache = getOrCompute;
-
-/**
- * Alias for getOrCompute - maintained for backwards compatibility
- * @deprecated Use getOrCompute instead
- */
-export const getOrCreateWithSideEffect = getOrCompute;
