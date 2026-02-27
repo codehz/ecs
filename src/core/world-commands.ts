@@ -175,8 +175,16 @@ function hasEntityComponent(archetype: Archetype, entityId: EntityId, componentT
 }
 
 function pruneMissingRemovals(changeset: ComponentChangeset, archetype: Archetype, entityId: EntityId): void {
-  for (const componentType of Array.from(changeset.removes)) {
+  // Collect to-prune entries first to avoid mutating the set during iteration
+  let toPrune: EntityId<any>[] | undefined;
+  for (const componentType of changeset.removes) {
     if (!hasEntityComponent(archetype, entityId, componentType)) {
+      if (toPrune === undefined) toPrune = [];
+      toPrune.push(componentType);
+    }
+  }
+  if (toPrune !== undefined) {
+    for (const componentType of toPrune) {
       changeset.removes.delete(componentType);
     }
   }
@@ -247,6 +255,38 @@ export function applyChangeset(
   return { removedComponents, newArchetype: currentArchetype };
 }
 
+/**
+ * Optimized variant of applyChangeset for when no lifecycle hooks are registered.
+ * Skips creating the removedComponents map, reducing allocations in the hot path.
+ */
+export function applyChangesetNoHooks(
+  ctx: CommandProcessorContext,
+  entityId: EntityId,
+  currentArchetype: Archetype,
+  changeset: ComponentChangeset,
+  entityToArchetype: Map<EntityId, Archetype>,
+): Archetype {
+  pruneMissingRemovals(changeset, currentArchetype, entityId);
+  const archetypeChanged = hasArchetypeStructuralChange(changeset, currentArchetype);
+
+  if (archetypeChanged) {
+    const finalRegularTypes = buildFinalRegularComponentTypes(currentArchetype, changeset);
+    return moveEntityToNewArchetypeNoHooks(
+      ctx,
+      entityId,
+      currentArchetype,
+      finalRegularTypes,
+      changeset,
+      entityToArchetype,
+    );
+  }
+
+  // No archetype move: only component payload updates and/or dontFragment relation updates.
+  updateEntityInSameArchetypeNoHooks(ctx, entityId, currentArchetype, changeset);
+
+  return currentArchetype;
+}
+
 function moveEntityToNewArchetype(
   ctx: CommandProcessorContext,
   entityId: EntityId,
@@ -289,6 +329,49 @@ function updateEntityInSameArchetype(
   }
 }
 
+/**
+ * No-hooks variant: moves entity to new archetype without collecting removed component data.
+ * Only called from applyChangesetNoHooks when no lifecycle hooks are registered.
+ */
+function moveEntityToNewArchetypeNoHooks(
+  ctx: CommandProcessorContext,
+  entityId: EntityId,
+  currentArchetype: Archetype,
+  finalComponentTypes: EntityId<any>[],
+  changeset: ComponentChangeset,
+  entityToArchetype: Map<EntityId, Archetype>,
+): Archetype {
+  const newArchetype = ctx.ensureArchetype(finalComponentTypes);
+  const currentComponents = currentArchetype.removeEntity(entityId)!;
+
+  // Add to new archetype with updated components
+  newArchetype.addEntity(entityId, changeset.applyTo(currentComponents));
+  entityToArchetype.set(entityId, newArchetype);
+  return newArchetype;
+}
+
+/**
+ * No-hooks variant: updates entity in same archetype without tracking removed component data.
+ * Only called from applyChangesetNoHooks when no lifecycle hooks are registered.
+ */
+function updateEntityInSameArchetypeNoHooks(
+  ctx: CommandProcessorContext,
+  entityId: EntityId,
+  currentArchetype: Archetype,
+  changeset: ComponentChangeset,
+): void {
+  // Process dontFragment relation changes directly on World's storage
+  applyDontFragmentChangesNoHooks(ctx.dontFragmentRelations, entityId, changeset);
+
+  // Direct update for regular components in archetype
+  for (const [componentType, component] of changeset.adds) {
+    if (isDontFragmentRelation(componentType)) {
+      continue;
+    }
+    currentArchetype.set(entityId, componentType, component);
+  }
+}
+
 function applyDontFragmentChanges(
   dontFragmentRelations: Map<EntityId, Map<EntityId<any>, any>>,
   entityId: EntityId,
@@ -306,6 +389,40 @@ function applyDontFragmentChanges(
           removedComponents.set(componentType, removedValue);
           entityRelations.delete(componentType);
         }
+      }
+    }
+  }
+
+  for (const [componentType, component] of changeset.adds) {
+    if (isDontFragmentRelation(componentType)) {
+      if (!entityRelations) {
+        entityRelations = new Map();
+        dontFragmentRelations.set(entityId, entityRelations);
+      }
+      entityRelations.set(componentType, component);
+    }
+  }
+
+  // Clean up empty map
+  if (entityRelations && entityRelations.size === 0) {
+    dontFragmentRelations.delete(entityId);
+  }
+}
+
+/**
+ * No-hooks variant of applyDontFragmentChanges that skips tracking removed component data.
+ */
+function applyDontFragmentChangesNoHooks(
+  dontFragmentRelations: Map<EntityId, Map<EntityId<any>, any>>,
+  entityId: EntityId,
+  changeset: ComponentChangeset,
+): void {
+  let entityRelations = dontFragmentRelations.get(entityId);
+
+  for (const componentType of changeset.removes) {
+    if (isDontFragmentRelation(componentType)) {
+      if (entityRelations) {
+        entityRelations.delete(componentType);
       }
     }
   }

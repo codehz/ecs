@@ -36,10 +36,12 @@ import type {
 import { isOptionalEntityId } from "./types";
 import {
   applyChangeset,
+  applyChangesetNoHooks,
   filterRegularComponentTypes,
   maybeRemoveWildcardMarker,
   processCommands,
   removeMatchingRelations,
+  type CommandProcessorContext,
 } from "./world-commands";
 import {
   collectMultiHookComponents,
@@ -74,12 +76,28 @@ export class World {
   private queries: Query[] = [];
   private queryCache = new Map<string, { query: Query; refCount: number }>();
 
+  // Lifecycle hooks (declared before cached contexts that reference them)
+  private legacyHooks = new Map<EntityId<any>, Set<LegacyLifecycleHook<any>>>();
+  private hooks: Set<LifecycleHookEntry> = new Set();
+
   // Command execution
   private commandBuffer = new CommandBuffer((entityId, commands) => this.executeEntityCommands(entityId, commands));
 
-  // Lifecycle hooks
-  private legacyHooks = new Map<EntityId<any>, Set<LegacyLifecycleHook<any>>>();
-  private hooks: Set<LifecycleHookEntry> = new Set();
+  // Reusable instances to reduce per-frame allocations
+  private readonly _changeset = new ComponentChangeset();
+  /** Cached command processor context to avoid per-entity object allocation */
+  private readonly _commandCtx: CommandProcessorContext = {
+    dontFragmentRelations: this.dontFragmentRelations,
+    ensureArchetype: (ct) => this.ensureArchetype(ct),
+  };
+  /** Cached hooks context to avoid per-entity object allocation */
+  private readonly _hooksCtx: HooksContext = {
+    hooks: this.legacyHooks,
+    multiHooks: this.hooks,
+    has: (eid, ct) => this.has(eid, ct),
+    get: (eid, ct) => this.get(eid, ct),
+    getOptional: (eid, ct) => this.getOptional(eid, ct),
+  };
 
   constructor(snapshot?: SerializedWorld) {
     if (snapshot && typeof snapshot === "object") {
@@ -403,11 +421,11 @@ export class World {
   set<T>(entityId: EntityId, componentType: EntityId<T>, component: NoInfer<T>): void;
   set<T>(componentId: ComponentId<T>, component: NoInfer<T>): void;
   set(entityId: EntityId | ComponentId, componentTypeOrComponent?: EntityId | any, maybeComponent?: any): void {
-    const { entityId: targetEntityId, componentType, component } = this.resolveSetOperation(
-      entityId,
-      componentTypeOrComponent,
-      maybeComponent,
-    );
+    const {
+      entityId: targetEntityId,
+      componentType,
+      component,
+    } = this.resolveSetOperation(entityId, componentTypeOrComponent, maybeComponent);
     this.commandBuffer.set(targetEntityId, componentType, component);
   }
 
@@ -1001,7 +1019,15 @@ export class World {
     const shortest = archetypeLists[0]!;
     if (shortest.length === 0) return [];
 
-    // Use Set-based intersection starting from the shortest list
+    // Optimized 2-component case: filter shortest array directly against second array
+    if (archetypeLists.length === 2) {
+      const second = archetypeLists[1]!;
+      // Use Set only for the longer list since we iterate the shorter one
+      const secondSet = new Set(second);
+      return shortest.filter((a) => secondSet.has(a));
+    }
+
+    // General case: Use Set-based intersection starting from the shortest list
     let result = new Set(shortest);
     for (let i = 1; i < archetypeLists.length; i++) {
       const listSet = new Set(archetypeLists[i]!);
@@ -1068,7 +1094,8 @@ export class World {
   }
 
   executeEntityCommands(entityId: EntityId, commands: Command[]): ComponentChangeset {
-    const changeset = new ComponentChangeset();
+    const changeset = this._changeset;
+    changeset.clear();
 
     if (this.isComponentEntityId(entityId)) {
       this.executeComponentEntityCommands(entityId, commands);
@@ -1089,15 +1116,29 @@ export class World {
       }
     });
 
+    const hasHooks = this.legacyHooks.size > 0 || this.hooks.size > 0;
+    const hasEntityRefs = changeset.removes.size > 0 || changeset.adds.size > 0;
+
+    if (!hasHooks) {
+      // Fast path: no hooks, skip removedComponents map allocation and hook triggering
+      applyChangesetNoHooks(this._commandCtx, entityId, currentArchetype, changeset, this.entityToArchetype);
+      if (hasEntityRefs) {
+        this.updateEntityReferences(entityId, changeset);
+      }
+      return changeset;
+    }
+
     const { removedComponents, newArchetype } = applyChangeset(
-      { dontFragmentRelations: this.dontFragmentRelations, ensureArchetype: (ct) => this.ensureArchetype(ct) },
+      this._commandCtx,
       entityId,
       currentArchetype,
       changeset,
       this.entityToArchetype,
     );
 
-    this.updateEntityReferences(entityId, changeset);
+    if (hasEntityRefs) {
+      this.updateEntityReferences(entityId, changeset);
+    }
     triggerLifecycleHooks(
       this.createHooksContext(),
       entityId,
@@ -1145,13 +1186,7 @@ export class World {
   }
 
   private createHooksContext(): HooksContext {
-    return {
-      hooks: this.legacyHooks,
-      multiHooks: this.hooks,
-      has: (eid, ct) => this.has(eid, ct),
-      get: (eid, ct) => this.get(eid, ct),
-      getOptional: (eid, ct) => this.getOptional(eid, ct),
-    };
+    return this._hooksCtx;
   }
 
   private removeComponentImmediate(entityId: EntityId, componentType: EntityId<any>, targetEntityId: EntityId): void {
@@ -1170,7 +1205,7 @@ export class World {
 
     const removedComponent = sourceArchetype.get(entityId, componentType);
     const { newArchetype } = applyChangeset(
-      { dontFragmentRelations: this.dontFragmentRelations, ensureArchetype: (ct) => this.ensureArchetype(ct) },
+      this._commandCtx,
       entityId,
       sourceArchetype,
       changeset,

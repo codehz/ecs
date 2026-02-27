@@ -20,6 +20,8 @@ export type Command =
 export class CommandBuffer {
   private commands: Command[] = [];
   private swapBuffer: Command[] = [];
+  /** Reusable map to group commands by entity, avoids per-sync allocations */
+  private entityCommands: Map<EntityId, Command[]> = new Map();
   private executeEntityCommands: (entityId: EntityId, commands: Command[]) => void;
 
   /**
@@ -68,23 +70,27 @@ export class CommandBuffer {
       const currentCommands = this.commands;
       this.commands = this.swapBuffer;
 
-      // Group commands by entity
-      const entityCommands = new Map<EntityId, Command[]>();
+      // Group commands by entity, reusing the persistent Map
+      const entityCommands = this.entityCommands;
       for (const cmd of currentCommands) {
-        if (!entityCommands.has(cmd.entityId)) {
-          entityCommands.set(cmd.entityId, []);
+        const existing = entityCommands.get(cmd.entityId);
+        if (existing !== undefined) {
+          existing.push(cmd);
+        } else {
+          entityCommands.set(cmd.entityId, [cmd]);
         }
-        entityCommands.get(cmd.entityId)!.push(cmd);
       }
 
       // Clear the consumed buffer for reuse
       currentCommands.length = 0;
       this.swapBuffer = currentCommands;
 
-      // Process each entity's commands with optimization
+      // Process each entity's commands and clear the map (but not the arrays,
+      // as callers may hold references to them after the executor returns)
       for (const [entityId, commands] of entityCommands) {
         this.executeEntityCommands(entityId, commands);
       }
+      entityCommands.clear();
     }
   }
 
