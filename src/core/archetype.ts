@@ -6,8 +6,8 @@ import {
   getWildcardRelationDataSource,
   isRelationType,
 } from "./archetype-helpers";
-import type { EntityId, WildcardRelationId } from "./entity";
 import { normalizeComponentTypes } from "./component-type-utils";
+import type { EntityId, WildcardRelationId } from "./entity";
 import {
   getComponentIdFromRelationId,
   getDetailedIdType,
@@ -154,6 +154,10 @@ export class Archetype {
     }
 
     return entityData;
+  }
+
+  getEntityDontFragmentRelations(entityId: EntityId): Map<EntityId<any>, any> | undefined {
+    return this.dontFragmentRelations.get(entityId);
   }
 
   dump(): Array<{ entity: EntityId; components: Map<EntityId<any>, any> }> {

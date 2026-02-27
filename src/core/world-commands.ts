@@ -103,10 +103,9 @@ export function removeMatchingRelations(
   }
 
   // Check dontFragment relations stored on entity
-  const entityData = archetype.getEntity(entityId);
-  if (entityData) {
-    for (const [componentType] of entityData) {
-      if (archetype.componentTypeSet.has(componentType)) continue;
+  const dontFragmentData = archetype.getEntityDontFragmentRelations(entityId);
+  if (dontFragmentData) {
+    for (const componentType of dontFragmentData.keys()) {
       if (getComponentIdFromRelationId(componentType) === baseComponentId) {
         changeset.delete(componentType);
       }
@@ -140,14 +139,9 @@ export function maybeRemoveWildcardMarker(
   }
 
   const wildcardMarker = relation(componentId, "*");
-  const entityData = archetype.getEntity(entityId);
-  if (!entityData) {
-    changeset.delete(wildcardMarker);
-    return;
-  }
 
   // Check if there are any other relations with the same component ID
-  for (const [otherComponentType] of entityData) {
+  for (const otherComponentType of archetype.componentTypes) {
     if (otherComponentType === removedComponentType) continue;
     if (otherComponentType === wildcardMarker) continue;
     if (changeset.removes.has(otherComponentType)) continue;
@@ -157,7 +151,69 @@ export function maybeRemoveWildcardMarker(
     }
   }
 
+  const dontFragmentData = archetype.getEntityDontFragmentRelations(entityId);
+  if (dontFragmentData) {
+    for (const otherComponentType of dontFragmentData.keys()) {
+      if (otherComponentType === removedComponentType) continue;
+      if (changeset.removes.has(otherComponentType)) continue;
+
+      if (getComponentIdFromRelationId(otherComponentType) === componentId) {
+        return; // Found another relation, keep the marker
+      }
+    }
+  }
+
   changeset.delete(wildcardMarker);
+}
+
+function hasEntityComponent(archetype: Archetype, entityId: EntityId, componentType: EntityId<any>): boolean {
+  if (archetype.componentTypeSet.has(componentType)) {
+    return true;
+  }
+
+  return archetype.getEntityDontFragmentRelations(entityId)?.has(componentType) ?? false;
+}
+
+function pruneMissingRemovals(changeset: ComponentChangeset, archetype: Archetype, entityId: EntityId): void {
+  for (const componentType of Array.from(changeset.removes)) {
+    if (!hasEntityComponent(archetype, entityId, componentType)) {
+      changeset.removes.delete(componentType);
+    }
+  }
+}
+
+function hasArchetypeStructuralChange(changeset: ComponentChangeset, currentArchetype: Archetype): boolean {
+  for (const componentType of changeset.removes) {
+    if (!isDontFragmentRelation(componentType) && currentArchetype.componentTypeSet.has(componentType)) {
+      return true;
+    }
+  }
+
+  for (const componentType of changeset.adds.keys()) {
+    if (!isDontFragmentRelation(componentType) && !currentArchetype.componentTypeSet.has(componentType)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function buildFinalRegularComponentTypes(currentArchetype: Archetype, changeset: ComponentChangeset): EntityId<any>[] {
+  const finalRegularTypes = new Set(currentArchetype.componentTypes);
+
+  for (const componentType of changeset.removes) {
+    if (!isDontFragmentRelation(componentType)) {
+      finalRegularTypes.delete(componentType);
+    }
+  }
+
+  for (const componentType of changeset.adds.keys()) {
+    if (!isDontFragmentRelation(componentType)) {
+      finalRegularTypes.add(componentType);
+    }
+  }
+
+  return Array.from(finalRegularTypes);
 }
 
 export function applyChangeset(
@@ -167,41 +223,26 @@ export function applyChangeset(
   changeset: ComponentChangeset,
   entityToArchetype: Map<EntityId, Archetype>,
 ): { removedComponents: Map<EntityId<any>, any>; newArchetype: Archetype } {
-  const currentEntityData = currentArchetype.getEntity(entityId);
-  const allCurrentComponentTypes = currentEntityData
-    ? Array.from(currentEntityData.keys())
-    : currentArchetype.componentTypes;
-
-  const finalComponentTypes = changeset.getFinalComponentTypes(allCurrentComponentTypes);
   const removedComponents = new Map<EntityId<any>, any>();
+  pruneMissingRemovals(changeset, currentArchetype, entityId);
+  const archetypeChanged = hasArchetypeStructuralChange(changeset, currentArchetype);
 
-  if (finalComponentTypes) {
-    // Check if archetype-affecting components actually changed
-    // (dontFragment components don't affect archetype signature)
-    const currentRegularTypes = filterRegularComponentTypes(allCurrentComponentTypes);
-    const finalRegularTypes = filterRegularComponentTypes(finalComponentTypes);
-    const archetypeChanged = !areComponentTypesEqual(currentRegularTypes, finalRegularTypes);
-
-    if (archetypeChanged) {
-      // Move to new archetype (regular components changed)
-      const newArchetype = moveEntityToNewArchetype(
-        ctx,
-        entityId,
-        currentArchetype,
-        finalComponentTypes,
-        changeset,
-        removedComponents,
-        entityToArchetype,
-      );
-      return { removedComponents, newArchetype };
-    } else {
-      // Only dontFragment components changed, stay in same archetype
-      updateEntityInSameArchetype(ctx, entityId, currentArchetype, changeset, removedComponents);
-    }
-  } else {
-    // Update in same archetype
-    updateEntityInSameArchetype(ctx, entityId, currentArchetype, changeset, removedComponents);
+  if (archetypeChanged) {
+    const finalRegularTypes = buildFinalRegularComponentTypes(currentArchetype, changeset);
+    const newArchetype = moveEntityToNewArchetype(
+      ctx,
+      entityId,
+      currentArchetype,
+      finalRegularTypes,
+      changeset,
+      removedComponents,
+      entityToArchetype,
+    );
+    return { removedComponents, newArchetype };
   }
+
+  // No archetype move needed: only component payload updates and/or dontFragment relation updates.
+  updateEntityInSameArchetype(ctx, entityId, currentArchetype, changeset, removedComponents);
 
   return { removedComponents, newArchetype: currentArchetype };
 }
