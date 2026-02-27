@@ -6,6 +6,7 @@ import { getOrCompute } from "../utils/utils";
 import { Archetype, MISSING_COMPONENT } from "./archetype";
 import { hasWildcardRelation } from "./archetype-helpers";
 import { EntityBuilder } from "./builder";
+import { normalizeComponentTypes } from "./component-type-utils";
 import type { ComponentId, EntityId, WildcardRelationId } from "./entity";
 import {
   ENTITY_ID_START,
@@ -284,6 +285,97 @@ export class World {
     return this.entityToArchetype.has(entityId);
   }
 
+  private assertEntityExists(entityId: EntityId, label: "Entity" | "Component entity"): void {
+    if (!this.exists(entityId)) {
+      throw new Error(`${label} ${entityId} does not exist`);
+    }
+  }
+
+  private assertComponentTypeValid(componentType: EntityId): void {
+    const detailedType = getDetailedIdType(componentType);
+    if (detailedType.type === "invalid") {
+      throw new Error(`Invalid component type: ${componentType}`);
+    }
+  }
+
+  private assertSetComponentTypeValid(componentType: EntityId): void {
+    const detailedType = getDetailedIdType(componentType);
+    if (detailedType.type === "invalid") {
+      throw new Error(`Invalid component type: ${componentType}`);
+    }
+    if (detailedType.type === "wildcard-relation") {
+      throw new Error(`Cannot directly add wildcard relation components: ${componentType}`);
+    }
+  }
+
+  private resolveSetOperation(
+    entityId: EntityId | ComponentId,
+    componentTypeOrComponent?: EntityId | any,
+    maybeComponent?: any,
+  ): { entityId: EntityId; componentType: EntityId; component: any } {
+    // Handle singleton component overload: set(componentId, data)
+    if (maybeComponent === undefined && componentTypeOrComponent !== undefined) {
+      const detailedType = getDetailedIdType(entityId);
+      if (detailedType.type === "component" || detailedType.type === "component-relation") {
+        const componentId = entityId as ComponentId;
+        this.assertEntityExists(componentId, "Component entity");
+        this.assertSetComponentTypeValid(componentId);
+        return { entityId: componentId, componentType: componentId, component: componentTypeOrComponent };
+      }
+    }
+
+    const targetEntityId = entityId as EntityId;
+    const componentType = componentTypeOrComponent as EntityId;
+    this.assertEntityExists(targetEntityId, "Entity");
+    this.assertSetComponentTypeValid(componentType);
+
+    return { entityId: targetEntityId, componentType, component: maybeComponent };
+  }
+
+  private resolveRemoveOperation<T>(
+    entityId: EntityId | ComponentId,
+    componentType?: EntityId<T>,
+  ): { entityId: EntityId; componentType: EntityId } {
+    // Handle singleton component overload: remove(componentId)
+    if (componentType === undefined) {
+      const componentId = entityId as ComponentId<T>;
+      this.assertEntityExists(componentId, "Component entity");
+      return { entityId: componentId, componentType: componentId };
+    }
+
+    const targetEntityId = entityId as EntityId;
+    this.assertEntityExists(targetEntityId, "Entity");
+    this.assertComponentTypeValid(componentType);
+
+    return { entityId: targetEntityId, componentType };
+  }
+
+  private getComponentEntityWildcardRelations<T>(
+    entityId: EntityId,
+    wildcardComponentType: WildcardRelationId<T>,
+  ): [EntityId<unknown>, T][] {
+    const componentId = getComponentIdFromRelationId(wildcardComponentType);
+    const data = this.componentEntityComponents.get(entityId);
+    if (componentId === undefined || !data) {
+      return [];
+    }
+
+    const relations: [EntityId<unknown>, T][] = [];
+    for (const [key, value] of data.entries()) {
+      if (getComponentIdFromRelationId(key) !== componentId) {
+        continue;
+      }
+
+      const detailed = getDetailedIdType(key);
+      if (detailed.type === "entity-relation" || detailed.type === "component-relation") {
+        // Safe: targetId is guaranteed to exist for entity-relation and component-relation types
+        relations.push([detailed.targetId, value]);
+      }
+    }
+
+    return relations;
+  }
+
   /**
    * Adds or updates a component on an entity (or marks void component as present).
    * The change is buffered and takes effect after calling `world.sync()`.
@@ -311,47 +403,12 @@ export class World {
   set<T>(entityId: EntityId, componentType: EntityId<T>, component: NoInfer<T>): void;
   set<T>(componentId: ComponentId<T>, component: NoInfer<T>): void;
   set(entityId: EntityId | ComponentId, componentTypeOrComponent?: EntityId | any, maybeComponent?: any): void {
-    // Handle singleton component overload: set(componentId, data)
-    if (maybeComponent === undefined && componentTypeOrComponent !== undefined) {
-      const detailedType = getDetailedIdType(entityId);
-      // Check if this looks like a singleton call (2 arguments, second is not an EntityId)
-      if (detailedType.type === "component" || detailedType.type === "component-relation") {
-        // Singleton component: set(componentId, data)
-        const componentId = entityId as ComponentId;
-        const component = componentTypeOrComponent;
-        if (!this.exists(componentId)) {
-          throw new Error(`Component entity ${componentId} does not exist`);
-        }
-        const detailedComponentType = getDetailedIdType(componentId);
-        if (detailedComponentType.type === "invalid") {
-          throw new Error(`Invalid component type: ${componentId}`);
-        }
-        if (detailedComponentType.type === "wildcard-relation") {
-          throw new Error(`Cannot directly add wildcard relation components: ${componentId}`);
-        }
-        this.commandBuffer.set(componentId, componentId, component);
-        return;
-      }
-    }
-
-    // Standard overload: set(entityId, componentType, data?) or set(entityId, componentType)
-    const entityIdArg = entityId as EntityId;
-    const componentType = componentTypeOrComponent as EntityId;
-    const component = maybeComponent;
-
-    if (!this.exists(entityIdArg)) {
-      throw new Error(`Entity ${entityIdArg} does not exist`);
-    }
-
-    const detailedType = getDetailedIdType(componentType);
-    if (detailedType.type === "invalid") {
-      throw new Error(`Invalid component type: ${componentType}`);
-    }
-    if (detailedType.type === "wildcard-relation") {
-      throw new Error(`Cannot directly add wildcard relation components: ${componentType}`);
-    }
-
-    this.commandBuffer.set(entityIdArg, componentType, component);
+    const { entityId: targetEntityId, componentType, component } = this.resolveSetOperation(
+      entityId,
+      componentTypeOrComponent,
+      maybeComponent,
+    );
+    this.commandBuffer.set(targetEntityId, componentType, component);
   }
 
   /**
@@ -380,27 +437,11 @@ export class World {
   remove<T>(componentId: ComponentId<T>): void;
   remove<T>(entityId: EntityId, componentType: EntityId<T>): void;
   remove<T>(entityId: EntityId | ComponentId, componentType?: EntityId<T>): void {
-    // Handle singleton component overload: remove(componentId)
-    if (componentType === undefined) {
-      const componentId = entityId as ComponentId<T>;
-      if (!this.exists(componentId)) {
-        throw new Error(`Component entity ${componentId} does not exist`);
-      }
-      this.commandBuffer.remove(componentId, componentId);
-      return;
-    }
-
-    const entityIdArg = entityId as EntityId;
-    if (!this.exists(entityIdArg)) {
-      throw new Error(`Entity ${entityIdArg} does not exist`);
-    }
-
-    const detailedType = getDetailedIdType(componentType);
-    if (detailedType.type === "invalid") {
-      throw new Error(`Invalid component type: ${componentType}`);
-    }
-
-    this.commandBuffer.remove(entityIdArg, componentType);
+    const { entityId: targetEntityId, componentType: targetComponentType } = this.resolveRemoveOperation(
+      entityId,
+      componentType,
+    );
+    this.commandBuffer.remove(targetEntityId, targetComponentType);
   }
 
   /**
@@ -506,23 +547,7 @@ export class World {
   ): T | [EntityId<unknown>, any][] {
     if (this.isComponentEntityId(entityId)) {
       if (isWildcardRelationId(componentType as EntityId<any>)) {
-        const componentId = getComponentIdFromRelationId(componentType as EntityId<any>);
-        const data = this.componentEntityComponents.get(entityId);
-        const relations: [EntityId<unknown>, any][] = [];
-
-        if (componentId !== undefined && data) {
-          for (const [key, value] of data.entries()) {
-            if (getComponentIdFromRelationId(key) === componentId) {
-              const detailed = getDetailedIdType(key);
-              if (detailed.type === "entity-relation" || detailed.type === "component-relation") {
-                // Safe: targetId is guaranteed to exist for entity-relation and component-relation types
-                relations.push([detailed.targetId, value]);
-              }
-            }
-          }
-        }
-
-        return relations;
+        return this.getComponentEntityWildcardRelations(entityId, componentType as WildcardRelationId<T>);
       }
 
       const data = this.componentEntityComponents.get(entityId);
@@ -580,23 +605,7 @@ export class World {
   getOptional<T>(entityId: EntityId, componentType: EntityId<T> = entityId as EntityId<T>): { value: T } | undefined {
     if (this.isComponentEntityId(entityId)) {
       if (isWildcardRelationId(componentType)) {
-        const componentId = getComponentIdFromRelationId(componentType);
-        if (componentId === undefined) return undefined;
-
-        const data = this.componentEntityComponents.get(entityId);
-        if (!data) return undefined;
-
-        const relations: [EntityId<unknown>, any][] = [];
-        for (const [key, value] of data.entries()) {
-          if (getComponentIdFromRelationId(key) === componentId) {
-            const detailed = getDetailedIdType(key);
-            if (detailed.type === "entity-relation" || detailed.type === "component-relation") {
-              // Safe: targetId is guaranteed to exist for entity-relation and component-relation types
-              relations.push([detailed.targetId, value]);
-            }
-          }
-        }
-
+        const relations = this.getComponentEntityWildcardRelations(entityId, componentType as WildcardRelationId<any>);
         if (relations.length === 0) return undefined;
         return { value: relations as T };
       }
@@ -843,7 +852,7 @@ export class World {
    * });
    */
   createQuery(componentTypes: EntityId<any>[], filter: QueryFilter = {}): Query {
-    const sortedTypes = [...componentTypes].sort((a, b) => a - b);
+    const sortedTypes = normalizeComponentTypes(componentTypes);
     const filterKey = serializeQueryFilter(filter);
     const key = `${this.createArchetypeSignature(sortedTypes)}${filterKey ? `|${filterKey}` : ""}`;
 
@@ -1200,7 +1209,7 @@ export class World {
 
   private ensureArchetype(componentTypes: Iterable<EntityId<any>>): Archetype {
     const regularTypes = filterRegularComponentTypes(componentTypes);
-    const sortedTypes = regularTypes.sort((a, b) => a - b);
+    const sortedTypes = normalizeComponentTypes(regularTypes);
     const hashKey = this.createArchetypeSignature(sortedTypes);
 
     return getOrCompute(this.archetypeBySignature, hashKey, () => this.createNewArchetype(sortedTypes));

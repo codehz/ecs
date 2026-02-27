@@ -7,6 +7,7 @@ import {
   isRelationType,
 } from "./archetype-helpers";
 import type { EntityId, WildcardRelationId } from "./entity";
+import { normalizeComponentTypes } from "./component-type-utils";
 import {
   getComponentIdFromRelationId,
   getDetailedIdType,
@@ -71,7 +72,7 @@ export class Archetype {
   private componentDataSourcesCache: Map<string, (any[] | EntityId<any>[] | undefined)[]> = new Map();
 
   constructor(componentTypes: EntityId<any>[], dontFragmentRelations: Map<EntityId, Map<EntityId<any>, any>>) {
-    this.componentTypes = [...componentTypes].sort((a, b) => a - b);
+    this.componentTypes = normalizeComponentTypes(componentTypes);
     this.componentTypeSet = new Set(this.componentTypes);
     this.dontFragmentRelations = dontFragmentRelations;
 
@@ -92,7 +93,7 @@ export class Archetype {
    */
   matches(componentTypes: EntityId<any>[]): boolean {
     if (this.componentTypes.length !== componentTypes.length) return false;
-    const sortedTypes = [...componentTypes].sort((a, b) => a - b);
+    const sortedTypes = normalizeComponentTypes(componentTypes);
     return this.componentTypes.every((type, index) => type === sortedTypes[index]);
   }
 

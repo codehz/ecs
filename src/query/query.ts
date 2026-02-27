@@ -1,4 +1,5 @@
 import type { Archetype } from "../core/archetype";
+import { normalizeComponentTypes } from "../core/component-type-utils";
 import type { EntityId, WildcardRelationId } from "../core/entity";
 import { getDetailedIdType, isDontFragmentComponent } from "../core/entity";
 import type { ComponentTuple, ComponentType } from "../core/types";
@@ -23,7 +24,7 @@ export class Query {
 
   constructor(world: World, componentTypes: EntityId<any>[], filter: QueryFilter = {}) {
     this.world = world;
-    this.componentTypes = [...componentTypes].sort((a, b) => a - b);
+    this.componentTypes = normalizeComponentTypes(componentTypes);
     this.filter = filter;
     // Pre-compute wildcard types once
     this.wildcardTypes = this.componentTypes.filter(

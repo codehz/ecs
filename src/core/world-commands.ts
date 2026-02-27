@@ -1,6 +1,7 @@
 import type { ComponentChangeset } from "../commands/changeset";
 import type { Command } from "../commands/command-buffer";
 import type { Archetype } from "./archetype";
+import { normalizeComponentTypes } from "./component-type-utils";
 import {
   getComponentIdFromRelationId,
   isDontFragmentComponent,
@@ -307,7 +308,7 @@ export function filterRegularComponentTypes(componentTypes: Iterable<EntityId<an
 
 export function areComponentTypesEqual(types1: EntityId<any>[], types2: EntityId<any>[]): boolean {
   if (types1.length !== types2.length) return false;
-  const sorted1 = [...types1].sort((a, b) => a - b);
-  const sorted2 = [...types2].sort((a, b) => a - b);
+  const sorted1 = normalizeComponentTypes(types1);
+  const sorted2 = normalizeComponentTypes(types2);
   return sorted1.every((v, i) => v === sorted2[i]);
 }
