@@ -1,6 +1,6 @@
 import { ComponentChangeset } from "../commands/changeset";
 import { CommandBuffer, type Command } from "../commands/command-buffer";
-import { serializeQueryFilter, type QueryFilter } from "../query/filter";
+import { matchesFilter, serializeQueryFilter, type QueryFilter } from "../query/filter";
 import { Query } from "../query/query";
 import { getOrCompute } from "../utils/utils";
 import { Archetype, MISSING_COMPONENT } from "./archetype";
@@ -663,12 +663,14 @@ export class World {
    * @overload hook<const T extends readonly ComponentType<any>[]>(
    *   componentTypes: T,
    *   hook: LifecycleHook<T> | LifecycleCallback<T>,
+   *   filter?: QueryFilter,
    * ): () => void
    * Registers a hook for multiple component types.
-   * The hook is triggered when all required components change together.
+   * The hook is triggered when entities enter/exit the matching set.
    *
    * @param componentTypesOrSingle - A single component type or an array of component types
    * @param hook - Either a hook object with on_init/on_set/on_remove handlers, or a callback function
+   * @param filter - Optional filter, only applied to array overload
    * @returns A function that unsubscribes the hook when called
    *
    * @throws {Error} If no required components are specified in array overload
@@ -686,15 +688,26 @@ export class World {
    * const unsubscribe = world.hook([Position], (event, entityId, position) => {
    *   if (event === "init") console.log("Initialized");
    * });
+   *
+   * // With filter
+   * const unsubscribe2 = world.hook(
+   *   [Position, Velocity],
+   *   {
+   *     on_set: (entityId, position, velocity) => console.log(entityId, position, velocity),
+   *   },
+   *   { negativeComponentTypes: [Disabled] },
+   * );
    */
   hook<T>(componentType: EntityId<T>, hook: LegacyLifecycleHook<T> | LegacyLifecycleCallback<T>): () => void;
   hook<const T extends readonly ComponentType<any>[]>(
     componentTypes: T,
     hook: LifecycleHook<T> | LifecycleCallback<T>,
+    filter?: QueryFilter,
   ): () => void;
   hook(
     componentTypesOrSingle: EntityId<any> | readonly ComponentType<any>[],
     hook: LegacyLifecycleHook<any> | LifecycleHook<any> | LegacyLifecycleCallback<any> | LifecycleCallback<any>,
+    filter?: QueryFilter,
   ): () => void {
     // Normalize callback functions to hook objects
     if (typeof hook === "function") {
@@ -735,6 +748,7 @@ export class World {
         componentTypes,
         requiredComponents,
         optionalComponents,
+        filter: filter || {},
         hook: hook as LifecycleHook<any>,
       };
       this.hooks.add(entry);
@@ -748,8 +762,8 @@ export class World {
 
       const multiHook = hook as LifecycleHook<any>;
       if (multiHook.on_init !== undefined) {
-        const matchingArchetypes = this.getMatchingArchetypes(requiredComponents);
-        for (const archetype of matchingArchetypes) {
+        for (const archetype of this.archetypes) {
+          if (!this.archetypeMatchesHook(archetype, entry)) continue;
           for (const entityId of archetype.getEntities()) {
             const components = collectMultiHookComponents(this.createHooksContext(), entityId, componentTypes);
             multiHook.on_init(entityId, ...components);
@@ -1296,14 +1310,16 @@ export class World {
   }
 
   private archetypeMatchesHook(archetype: Archetype, entry: LifecycleHookEntry): boolean {
-    return entry.requiredComponents.every((c: EntityId<any>) => {
-      if (isWildcardRelationId(c)) {
-        if (isDontFragmentWildcard(c)) return true;
-        const componentId = getComponentIdFromRelationId(c);
-        return componentId !== undefined && archetype.hasRelationWithComponentId(componentId);
-      }
-      return archetype.componentTypeSet.has(c) || isDontFragmentRelation(c);
-    });
+    return (
+      entry.requiredComponents.every((c: EntityId<any>) => {
+        if (isWildcardRelationId(c)) {
+          if (isDontFragmentWildcard(c)) return true;
+          const componentId = getComponentIdFromRelationId(c);
+          return componentId !== undefined && archetype.hasRelationWithComponentId(componentId);
+        }
+        return archetype.componentTypeSet.has(c) || isDontFragmentRelation(c);
+      }) && matchesFilter(archetype, entry.filter)
+    );
   }
 
   private archetypeReferencesEntity(archetype: Archetype, entityId: EntityId): boolean {

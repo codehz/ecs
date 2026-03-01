@@ -153,7 +153,9 @@ function triggerMultiComponentHooks(
   oldArchetype: Archetype,
   newArchetype: Archetype,
 ): void {
-  // Handle on_set: triggers if any required or optional component was added/removed and entity still matches
+  // Handle on_set:
+  // 1. Required/optional components changed while entity still matches
+  // 2. Entity entered the matching set (e.g. removed a negative filter component)
   for (const entry of newArchetype.matchingMultiHooks) {
     const { hook, requiredComponents, optionalComponents, componentTypes } = entry;
     if (!hook.on_set) continue;
@@ -161,37 +163,36 @@ function triggerMultiComponentHooks(
     const anyRequiredAdded = requiredComponents.some((c) => anyComponentMatches(addedComponents, c));
     const anyOptionalAdded = optionalComponents.some((c) => anyComponentMatches(addedComponents, c));
     const anyOptionalRemoved = optionalComponents.some((c) => anyComponentMatches(removedComponents, c));
+    const enteredMatchingSet = !oldArchetype.matchingMultiHooks.has(entry);
+    const hasRelevantComponentChange = anyRequiredAdded || anyOptionalAdded || anyOptionalRemoved;
+    const shouldTriggerSet =
+      enteredMatchingSet || (hasRelevantComponentChange && entityHasAllComponents(ctx, entityId, requiredComponents));
 
-    if (
-      (anyRequiredAdded || anyOptionalAdded || anyOptionalRemoved) &&
-      entityHasAllComponents(ctx, entityId, requiredComponents)
-    ) {
+    if (shouldTriggerSet) {
       hook.on_set(entityId, ...collectMultiHookComponents(ctx, entityId, componentTypes));
     }
   }
 
-  // Handle on_remove: triggers if any required component was removed and entity no longer matches
-  if (removedComponents.size > 0) {
-    for (const entry of oldArchetype.matchingMultiHooks) {
-      const { hook, requiredComponents, componentTypes } = entry;
-      if (!hook.on_remove) continue;
+  // Handle on_remove:
+  // 1. Required component removal made the entity stop matching
+  // 2. Entity exited the matching set (e.g. added a negative filter component)
+  for (const entry of oldArchetype.matchingMultiHooks) {
+    const { hook, requiredComponents, componentTypes } = entry;
+    if (!hook.on_remove) continue;
 
-      const anyRequiredRemoved = requiredComponents.some((c) => anyComponentMatches(removedComponents, c));
+    const anyRequiredRemoved = requiredComponents.some((c) => anyComponentMatches(removedComponents, c));
+    const lostRequiredMatch =
+      anyRequiredRemoved &&
+      entityHadAllComponentsBefore(ctx, entityId, requiredComponents, removedComponents) &&
+      !entityHasAllComponents(ctx, entityId, requiredComponents);
+    const exitedMatchingSet = !newArchetype.matchingMultiHooks.has(entry);
+    const shouldTriggerRemove = lostRequiredMatch || exitedMatchingSet;
 
-      // Only trigger if:
-      // 1. A required component was removed
-      // 2. Entity matched before (had all required components)
-      // 3. Entity no longer matches after removal
-      if (
-        anyRequiredRemoved &&
-        entityHadAllComponentsBefore(ctx, entityId, requiredComponents, removedComponents) &&
-        !entityHasAllComponents(ctx, entityId, requiredComponents)
-      ) {
-        hook.on_remove(
-          entityId,
-          ...collectMultiHookComponentsWithRemoved(ctx, entityId, componentTypes, removedComponents),
-        );
-      }
+    if (shouldTriggerRemove) {
+      hook.on_remove(
+        entityId,
+        ...collectMultiHookComponentsWithRemoved(ctx, entityId, componentTypes, removedComponents),
+      );
     }
   }
 }

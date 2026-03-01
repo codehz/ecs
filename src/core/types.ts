@@ -1,3 +1,4 @@
+import type { QueryFilter } from "../query/filter";
 import type { EntityId, WildcardRelationId } from "./entity";
 
 /**
@@ -84,5 +85,6 @@ export interface LifecycleHookEntry {
   componentTypes: readonly ComponentType<any>[];
   requiredComponents: EntityId<any>[];
   optionalComponents: EntityId<any>[];
+  filter: QueryFilter;
   hook: LifecycleHook<any>;
 }

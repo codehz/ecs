@@ -353,6 +353,124 @@ describe("World - Multi-Component Hooks", () => {
     expect(initCalls[0]!.components).toEqual([42, "hello"]);
   });
 
+  it("should apply negative filter for on_init replay", () => {
+    const world = new World();
+    const A = component<number>();
+    const Disabled = component<void>();
+
+    const activeEntity = world.spawn().with(A, 1).build();
+    const filteredEntity = world.spawn().with(A, 2).with(Disabled).build();
+    world.sync();
+
+    const initCalls: EntityId[] = [];
+    world.hook(
+      [A],
+      {
+        on_init: (entityId) => {
+          initCalls.push(entityId);
+        },
+      },
+      { negativeComponentTypes: [Disabled] },
+    );
+
+    expect(initCalls).toContain(activeEntity);
+    expect(initCalls).not.toContain(filteredEntity);
+    expect(initCalls.length).toBe(1);
+  });
+
+  it("should trigger on_remove when entering negative filter state", () => {
+    const world = new World();
+    const A = component<number>();
+    const Disabled = component<void>();
+    const removeCalls: { entityId: EntityId; value: number }[] = [];
+
+    world.hook(
+      [A],
+      {
+        on_remove: (entityId, value) => {
+          removeCalls.push({ entityId, value });
+        },
+      },
+      { negativeComponentTypes: [Disabled] },
+    );
+
+    const entity = world.spawn().with(A, 42).build();
+    world.sync();
+    expect(removeCalls.length).toBe(0);
+
+    world.set(entity, Disabled);
+    world.sync();
+
+    expect(removeCalls.length).toBe(1);
+    expect(removeCalls[0]!.entityId).toBe(entity);
+    expect(removeCalls[0]!.value).toBe(42);
+  });
+
+  it("should trigger on_set when leaving negative filter state", () => {
+    const world = new World();
+    const A = component<number>();
+    const Disabled = component<void>();
+    const setCalls: { entityId: EntityId; value: number }[] = [];
+
+    world.hook(
+      [A],
+      {
+        on_set: (entityId, value) => {
+          setCalls.push({ entityId, value });
+        },
+      },
+      { negativeComponentTypes: [Disabled] },
+    );
+
+    const entity = world.spawn().with(A, 7).with(Disabled).build();
+    world.sync();
+    expect(setCalls.length).toBe(0);
+
+    world.remove(entity, Disabled);
+    world.sync();
+
+    expect(setCalls.length).toBe(1);
+    expect(setCalls[0]!.entityId).toBe(entity);
+    expect(setCalls[0]!.value).toBe(7);
+  });
+
+  it("should suppress normal set events while filtered until re-entering", () => {
+    const world = new World();
+    const A = component<number>();
+    const B = component<string>();
+    const Disabled = component<void>();
+    const setCalls: { entityId: EntityId; components: readonly [number, { value: string } | undefined] }[] = [];
+
+    world.hook(
+      [A, { optional: B }],
+      {
+        on_set: (entityId, ...components) => {
+          setCalls.push({ entityId, components });
+        },
+      },
+      { negativeComponentTypes: [Disabled] },
+    );
+
+    const entity = world.spawn().with(A, 1).with(Disabled).build();
+    world.sync();
+    expect(setCalls.length).toBe(0);
+
+    world.set(entity, B, "blocked");
+    world.sync();
+    expect(setCalls.length).toBe(0);
+
+    world.set(entity, A, 2);
+    world.sync();
+    expect(setCalls.length).toBe(0);
+
+    world.remove(entity, Disabled);
+    world.sync();
+
+    expect(setCalls.length).toBe(1);
+    expect(setCalls[0]!.entityId).toBe(entity);
+    expect(setCalls[0]!.components).toEqual([2, { value: "blocked" }]);
+  });
+
   it("should stop triggering after unhook for multi-component hooks", () => {
     const world = new World();
     const A = component<number>();

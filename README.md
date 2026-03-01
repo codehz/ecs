@@ -124,6 +124,29 @@ const unhook = world.hook([PositionId, { optional: VelocityId }], {
 });
 ```
 
+多组件 `hook()` 还支持第三个可选参数 `filter`（与 `createQuery()` 的过滤语义一致），可用于排除带有某些负面组件的实体：
+
+```typescript
+const DisabledId = component<void>();
+
+const unhook = world.hook(
+  [PositionId, VelocityId],
+  {
+    on_set: (entityId, position, velocity) => {
+      // 实体进入匹配集合时触发（包括移除 Disabled 后重新进入）
+      console.log("active", entityId, position, velocity);
+    },
+    on_remove: (entityId, position, velocity) => {
+      // 实体退出匹配集合时触发（包括新增 Disabled 后退出）
+      console.log("inactive", entityId, position, velocity);
+    },
+  },
+  {
+    negativeComponentTypes: [DisabledId],
+  },
+);
+```
+
 ### 通配符关系钩子
 
 ECS 支持通配符关系钩子，可以监听特定组件的所有关系变化：
@@ -226,7 +249,7 @@ bun run examples/simple/demo.ts
 - `delete(entity)`: 销毁实体及其所有组件
 - `query(componentIds)`: 快速查询具有指定组件的实体
 - `createQuery(componentIds)`: 创建可重用的查询对象
-- `hook(componentIds, hook)`: 注册生命周期钩子，返回卸载函数
+- `hook(componentIds, hook, filter?)`: 注册生命周期钩子，返回卸载函数（数组形式支持可选 filter）
 - `serialize()`: 序列化世界状态为快照对象
 - `sync()`: 执行所有延迟命令
 
