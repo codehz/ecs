@@ -13,6 +13,7 @@ import {
   EntityIdManager,
   RELATION_SHIFT,
   getComponentIdFromRelationId,
+  getComponentMerge,
   getDetailedIdType,
   getTargetIdFromRelationId,
   isCascadeDeleteRelation,
@@ -1157,28 +1158,45 @@ export class World {
       return;
     }
 
+    const pendingSetValues = new Map<EntityId<any>, any>();
+
     for (const command of commands) {
       if (command.type === "set" && command.componentType) {
+        const merge = getComponentMerge(command.componentType);
+        let nextValue = command.component;
+        if (merge !== undefined && pendingSetValues.has(command.componentType)) {
+          const prevValue = pendingSetValues.get(command.componentType);
+          nextValue = merge(prevValue, command.component);
+        }
+
+        pendingSetValues.set(command.componentType, nextValue);
         const data = this.getComponentEntityComponents(entityId, true)!;
-        data.set(command.componentType, command.component);
+        data.set(command.componentType, nextValue);
       } else if (command.type === "delete" && command.componentType) {
         const data = this.componentEntityComponents.get(entityId);
-        if (!data) continue;
 
         if (isWildcardRelationId(command.componentType)) {
           const componentId = getComponentIdFromRelationId(command.componentType);
           if (componentId !== undefined) {
-            for (const key of Array.from(data.keys())) {
+            if (data) {
+              for (const key of Array.from(data.keys())) {
+                if (getComponentIdFromRelationId(key) === componentId) {
+                  data.delete(key);
+                }
+              }
+            }
+            for (const key of Array.from(pendingSetValues.keys())) {
               if (getComponentIdFromRelationId(key) === componentId) {
-                data.delete(key);
+                pendingSetValues.delete(key);
               }
             }
           }
         } else {
-          data.delete(command.componentType);
+          data?.delete(command.componentType);
+          pendingSetValues.delete(command.componentType);
         }
 
-        if (data.size === 0) {
+        if (data?.size === 0) {
           this.clearComponentEntityComponents(entityId);
         }
       }

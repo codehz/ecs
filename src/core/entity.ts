@@ -49,6 +49,7 @@ export type { ComponentOptions } from "./component-registry";
 export {
   component,
   getComponentIdByName,
+  getComponentMerge,
   getComponentNameById,
   getComponentOptions,
   isCascadeDeleteComponent,

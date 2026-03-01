@@ -4,6 +4,7 @@ import type { Archetype } from "./archetype";
 import { normalizeComponentTypes } from "./component-type-utils";
 import {
   getComponentIdFromRelationId,
+  getComponentMerge,
   isDontFragmentComponent,
   isDontFragmentRelation,
   isDontFragmentWildcard,
@@ -65,6 +66,13 @@ function processSetCommand(
         changeset.set(wildcardMarker, undefined);
       }
     }
+  }
+
+  const merge = getComponentMerge(componentType);
+  if (merge !== undefined && changeset.adds.has(componentType)) {
+    const prev = changeset.adds.get(componentType);
+    changeset.set(componentType, merge(prev, component));
+    return;
   }
 
   changeset.set(componentType, component);

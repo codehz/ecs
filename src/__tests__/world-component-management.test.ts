@@ -41,6 +41,89 @@ describe("World - Component Management", () => {
     expect(world.get(entity, positionComponent)).toEqual(position2);
   });
 
+  it("should keep last value for repeated set in one sync when merge is not configured", () => {
+    const world = new World();
+    const entity = world.new();
+    const position1: Position = { x: 10, y: 20 };
+    const position2: Position = { x: 30, y: 40 };
+
+    world.set(entity, positionComponent, position1);
+    world.set(entity, positionComponent, position2);
+    world.sync();
+
+    expect(world.get(entity, positionComponent)).toEqual(position2);
+  });
+
+  it("should merge repeated sets in one sync for merge-enabled components", () => {
+    const world = new World();
+    const entity = world.new();
+    const Mailbox = component<string[]>({
+      merge: (prev, next) => [...prev, ...next],
+    });
+
+    world.set(entity, Mailbox, ["A"]);
+    world.set(entity, Mailbox, ["B", "C"]);
+    world.sync();
+
+    expect(world.get(entity, Mailbox)).toEqual(["A", "B", "C"]);
+  });
+
+  it("should reset merge accumulation after remove in one sync", () => {
+    const world = new World();
+    const entity = world.new();
+    const Mailbox = component<string[]>({
+      merge: (prev, next) => [...prev, ...next],
+    });
+
+    world.set(entity, Mailbox, ["A1"]);
+    world.set(entity, Mailbox, ["A2"]);
+    world.remove(entity, Mailbox);
+    world.set(entity, Mailbox, ["B1"]);
+    world.set(entity, Mailbox, ["B2"]);
+    world.sync();
+
+    expect(world.get(entity, Mailbox)).toEqual(["B1", "B2"]);
+  });
+
+  it("should merge relation sets by exact component type only", () => {
+    const world = new World();
+    const entity = world.new();
+    const target1 = world.new();
+    const target2 = world.new();
+    const MailRel = component<string[]>({
+      merge: (prev, next) => [...prev, ...next],
+    });
+    const rel1 = relation(MailRel, target1);
+    const rel2 = relation(MailRel, target2);
+
+    world.set(entity, rel1, ["T1-A"]);
+    world.set(entity, rel2, ["T2-A"]);
+    world.set(entity, rel1, ["T1-B"]);
+    world.set(entity, rel2, ["T2-B"]);
+    world.sync();
+
+    expect(world.get(entity, rel1)).toEqual(["T1-A", "T1-B"]);
+    expect(world.get(entity, rel2)).toEqual(["T2-A", "T2-B"]);
+  });
+
+  it("should apply merge for singleton(component entity) sets", () => {
+    const world = new World();
+    const Inbox = component<string[]>({
+      merge: (prev, next) => [...prev, ...next],
+    });
+
+    world.set(Inbox, ["A"]);
+    world.set(Inbox, ["B"]);
+    world.sync();
+    expect(world.get(Inbox)).toEqual(["A", "B"]);
+
+    world.remove(Inbox);
+    world.set(Inbox, ["C"]);
+    world.set(Inbox, ["D"]);
+    world.sync();
+    expect(world.get(Inbox)).toEqual(["C", "D"]);
+  });
+
   it("should remove components from entities", () => {
     const world = new World();
     const entity = world.new();

@@ -503,6 +503,15 @@ describe("Component Options", () => {
     expect(isDontFragmentComponent(combinedComp)).toBe(true);
   });
 
+  it("should store and retrieve component merge callback", () => {
+    const merge = (prev: number[], next: number[]) => [...prev, ...next];
+    const mailboxComp = component<number[]>({ merge });
+
+    const options = getComponentOptions(mailboxComp);
+    expect(options.merge).toBeDefined();
+    expect(options.merge?.([1], [2, 3])).toEqual([1, 2, 3]);
+  });
+
   it("should throw error for invalid component ID", () => {
     expect(() => getComponentOptions(0 as ComponentId)).toThrow("Invalid component ID");
     expect(() => getComponentOptions(1025 as ComponentId)).toThrow("Invalid component ID");

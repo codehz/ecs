@@ -13,11 +13,12 @@ import {
 const globalComponentIdAllocator = new ComponentIdAllocator();
 
 const ComponentIdForNames: Map<string, ComponentId<any>> = new Map();
+type ComponentMerge<T = any> = (prev: T, next: T) => T;
 
 /**
  * Component options that define intrinsic properties
  */
-export interface ComponentOptions {
+export interface ComponentOptions<T = any> {
   /**
    * Optional name for the component (for serialization/debugging)
    */
@@ -43,6 +44,10 @@ export interface ComponentOptions {
    * Inspired by Flecs' DontFragment trait.
    */
   dontFragment?: boolean;
+  /**
+   * Custom merge behavior for repeated set() of the same componentType in a single sync batch.
+   */
+  merge?: ComponentMerge<T>;
 }
 
 // Array for component names (Component ID range: 1-1023)
@@ -52,6 +57,7 @@ const componentNames: (string | undefined)[] = new Array(COMPONENT_ID_MAX + 1);
 const exclusiveFlags = new BitSet(COMPONENT_ID_MAX + 1);
 const cascadeDeleteFlags = new BitSet(COMPONENT_ID_MAX + 1);
 const dontFragmentFlags = new BitSet(COMPONENT_ID_MAX + 1);
+const componentMerges: (ComponentMerge<any> | undefined)[] = new Array(COMPONENT_ID_MAX + 1);
 
 /**
  * Allocate a new component ID from the global allocator.
@@ -67,11 +73,11 @@ const dontFragmentFlags = new BitSet(COMPONENT_ID_MAX + 1);
  * // With name and options
  * const ChildOf = component({ name: "ChildOf", exclusive: true });
  */
-export function component<T = void>(nameOrOptions?: string | ComponentOptions): ComponentId<T> {
+export function component<T = void>(nameOrOptions?: string | ComponentOptions<T>): ComponentId<T> {
   const id = globalComponentIdAllocator.allocate<T>();
 
   let name: string | undefined;
-  let options: ComponentOptions | undefined;
+  let options: ComponentOptions<T> | undefined;
 
   // Parse the parameter
   if (typeof nameOrOptions === "string") {
@@ -97,6 +103,7 @@ export function component<T = void>(nameOrOptions?: string | ComponentOptions): 
     if (options.exclusive) exclusiveFlags.set(id);
     if (options.cascadeDelete) cascadeDeleteFlags.set(id);
     if (options.dontFragment) dontFragmentFlags.set(id);
+    if (options.merge) componentMerges[id] = options.merge;
   }
 
   return id;
@@ -124,7 +131,7 @@ export function getComponentNameById(id: ComponentId<any>): string | undefined {
  * @param id The component ID
  * @returns The component options
  */
-export function getComponentOptions(id: ComponentId<any>): ComponentOptions {
+export function getComponentOptions<T = any>(id: ComponentId<T>): ComponentOptions<T> {
   if (!isComponentId(id)) {
     throw new Error("Invalid component ID");
   }
@@ -137,7 +144,28 @@ export function getComponentOptions(id: ComponentId<any>): ComponentOptions {
     exclusive: hasExclusive ? true : undefined,
     cascadeDelete: hasCascadeDelete ? true : undefined,
     dontFragment: hasDontFragment ? true : undefined,
+    merge: componentMerges[id] as ComponentMerge<T> | undefined,
   };
+}
+
+function getBaseComponentId(componentType: EntityId<any>): ComponentId<any> | undefined {
+  if (isComponentId(componentType)) {
+    return componentType;
+  }
+
+  const decoded = decodeRelationRaw(componentType);
+  if (decoded === null) return undefined;
+  return isValidComponentId(decoded.componentId) ? (decoded.componentId as ComponentId<any>) : undefined;
+}
+
+/**
+ * Get merge callback for a componentType (including relation component types).
+ * Returns undefined if the base component has no merge callback.
+ */
+export function getComponentMerge<T = any>(componentType: EntityId<any>): ComponentMerge<T> | undefined {
+  const baseComponentId = getBaseComponentId(componentType);
+  if (baseComponentId === undefined) return undefined;
+  return componentMerges[baseComponentId] as ComponentMerge<T> | undefined;
 }
 
 /**
