@@ -2,6 +2,8 @@
 // Provides usual operations: add, remove, get, has, keys, values, entries,
 // clear, deleteKey and size accessors.
 
+const _MISSING = Symbol("missing");
+
 class MultiMap<K, V> {
   private map: Map<K, Set<V>> = new Map();
 
@@ -20,11 +22,11 @@ class MultiMap<K, V> {
     return this.map.has(key);
   }
 
-  has(key: K, value?: V): boolean {
+  has(key: K, value: V | typeof _MISSING = _MISSING): boolean {
     const set = this.map.get(key);
     if (!set) return false;
-    if (arguments.length === 1) return true;
-    return set.has(value as V);
+    if (value === _MISSING) return true;
+    return set.has(value);
   }
 
   add(key: K, value: V): void {
