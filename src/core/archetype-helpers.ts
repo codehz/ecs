@@ -71,8 +71,8 @@ export function matchesRelationComponentId(componentType: EntityId<any>, compone
 export function findMatchingDontFragmentRelations(
   dontFragmentData: Map<EntityId<any>, any> | undefined,
   componentId: EntityId<any>,
+  relations: [EntityId<unknown>, any][] = [],
 ): [EntityId<unknown>, any][] {
-  const relations: [EntityId<unknown>, any][] = [];
   if (!dontFragmentData) return relations;
 
   for (const [relType, data] of dontFragmentData) {
@@ -126,7 +126,7 @@ export function buildWildcardRelationValue(
 
   // Add dontFragment relations
   if (targetComponentId !== undefined) {
-    relations.push(...findMatchingDontFragmentRelations(dontFragmentData, targetComponentId));
+    findMatchingDontFragmentRelations(dontFragmentData, targetComponentId, relations);
   }
 
   if (relations.length === 0) {

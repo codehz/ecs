@@ -50,6 +50,31 @@ describe("World - Query", () => {
     expect(result).toEqual([]);
   });
 
+  it("should query entities with included component data", () => {
+    const world = new World();
+    const entity1 = world.new();
+    const entity2 = world.new();
+
+    const pos1 = { x: 1, y: 2 };
+    const vel1 = { x: 0.1, y: 0.2 };
+    const pos2 = { x: 3, y: 4 };
+
+    world.set(entity1, positionComponent, pos1);
+    world.set(entity1, velocityComponent, vel1);
+    world.set(entity2, positionComponent, pos2);
+    world.sync();
+
+    const results = world.query([positionComponent], true);
+
+    expect(results).toHaveLength(2);
+
+    const result1 = results.find((result) => result.entity === entity1);
+    const result2 = results.find((result) => result.entity === entity2);
+
+    expect(result1?.components[0]).toEqual(pos1);
+    expect(result2?.components[0]).toEqual(pos2);
+  });
+
   it("should query entities with wildcard relations", () => {
     const world = new World();
     const entity1 = world.new();

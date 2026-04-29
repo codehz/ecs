@@ -1096,13 +1096,15 @@ export class World {
     if (includeComponents) {
       const result: Array<{ entity: EntityId; components: any }> = [];
       for (const archetype of matchingArchetypes) {
-        result.push(...archetype.getEntitiesWithComponents(componentTypes as EntityId<any>[]));
+        archetype.appendEntitiesWithComponents(componentTypes as EntityId<any>[], result);
       }
       return result;
     } else {
       const result: EntityId[] = [];
       for (const archetype of matchingArchetypes) {
-        result.push(...archetype.getEntities());
+        for (const entity of archetype.getEntities()) {
+          result.push(entity);
+        }
       }
       return result;
     }

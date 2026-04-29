@@ -63,7 +63,9 @@ export class Query {
     if (this.wildcardTypes.length === 0 && this.specificDontFragmentTypes.length === 0) {
       const result: EntityId[] = [];
       for (const archetype of this.cachedArchetypes) {
-        result.push(...archetype.getEntities());
+        for (const entity of archetype.getEntities()) {
+          result.push(entity);
+        }
       }
       return result;
     }
@@ -125,8 +127,7 @@ export class Query {
     }> = [];
 
     for (const archetype of this.cachedArchetypes) {
-      const entitiesWithData = archetype.getEntitiesWithComponents(componentTypes);
-      result.push(...entitiesWithData);
+      archetype.appendEntitiesWithComponents(componentTypes, result);
     }
 
     return result;
@@ -172,7 +173,9 @@ export class Query {
 
     const result: T[] = [];
     for (const archetype of this.cachedArchetypes) {
-      result.push(...archetype.getComponentData(componentType));
+      for (const data of archetype.getComponentData(componentType)) {
+        result.push(data);
+      }
     }
     return result;
   }

@@ -263,7 +263,7 @@ export class Archetype {
 
     // Check dontFragment relations
     if (componentId !== undefined) {
-      relations.push(...findMatchingDontFragmentRelations(this.dontFragmentRelations.get(entityId), componentId));
+      findMatchingDontFragmentRelations(this.dontFragmentRelations.get(entityId), componentId, relations);
     }
 
     return relations;
@@ -395,10 +395,17 @@ export class Archetype {
     componentTypes: T,
   ): Array<{ entity: EntityId; components: ComponentTuple<T> }> {
     const result: Array<{ entity: EntityId; components: ComponentTuple<T> }> = [];
+    this.appendEntitiesWithComponents(componentTypes, result);
+    return result;
+  }
+
+  appendEntitiesWithComponents<const T extends readonly ComponentType<any>[]>(
+    componentTypes: T,
+    result: Array<{ entity: EntityId; components: ComponentTuple<T> }>,
+  ): void {
     this.forEachWithComponents(componentTypes, (entity, ...components) => {
       result.push({ entity, components });
     });
-    return result;
   }
 
   *iterateWithComponents<const T extends readonly ComponentType<any>[]>(
