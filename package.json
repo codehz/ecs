@@ -38,5 +38,10 @@
     "*.{json,md}": [
       "prettier --write"
     ]
+  },
+  "perry": {
+    "compilePackages": [
+      "@codehz/pipeline"
+    ]
   }
 }
