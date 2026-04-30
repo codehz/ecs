@@ -27,14 +27,6 @@ export class EntityBuilder {
     return this;
   }
 
-  /**
-   * @deprecated Use `with(componentId)` instead for void components
-   */
-  withTag(componentId: EntityId<void>): this {
-    this.components.push({ type: "component", id: componentId, value: undefined as void });
-    return this;
-  }
-
   withRelation<T>(
     componentId: ComponentId<T>,
     targetEntity: EntityId<any>,
@@ -42,14 +34,6 @@ export class EntityBuilder {
   ): this {
     const value = (args.length > 0 ? args[0] : undefined) as T;
     this.components.push({ type: "relation", componentId, targetId: targetEntity, value });
-    return this;
-  }
-
-  /**
-   * @deprecated Use `withRelation(componentId, targetEntity)` instead for void relations
-   */
-  withRelationTag(componentId: ComponentId<void>, targetEntity: EntityId<any>): this {
-    this.components.push({ type: "relation", componentId, targetId: targetEntity, value: undefined as void });
     return this;
   }
 
