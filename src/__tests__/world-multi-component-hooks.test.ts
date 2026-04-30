@@ -483,14 +483,14 @@ describe("World - Multi-Component Hooks", () => {
       },
     };
 
-    world.hook([A, B], hook);
+    const unhook = world.hook([A, B], hook);
 
     const entity1 = world.spawn().with(A, 1).with(B, "first").build();
     world.sync();
 
     expect(calls.length).toBe(1);
 
-    world.unhook([A, B], hook);
+    unhook();
 
     const entity2 = world.spawn().with(A, 2).with(B, "second").build();
     world.sync();

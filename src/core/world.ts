@@ -748,23 +748,6 @@ export class World {
     };
   }
 
-  /** @deprecated use the unsubscribe function returned by hook() instead */
-  unhook<const T extends readonly ComponentType<any>[]>(componentTypes: T, hook: LifecycleHook<T>): void;
-  /** @deprecated use the unsubscribe function returned by hook() instead */
-  unhook(_componentTypes: readonly ComponentType<any>[], hook: LifecycleHook<any>): void {
-    // Note: Callback functions passed to hook() are converted to hook objects internally,
-    // so unhook() only accepts the original hook object references.
-    for (const entry of this.hooks) {
-      if (entry.hook === hook) {
-        this.hooks.delete(entry);
-        for (const archetype of this.archetypes) {
-          archetype.matchingMultiHooks.delete(entry);
-        }
-        break;
-      }
-    }
-  }
-
   /**
    * Synchronizes all buffered commands (set/remove/delete) to the world.
    * This method must be called after making changes via `set()`, `remove()`, or `delete()` for them to take effect.
