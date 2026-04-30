@@ -48,7 +48,7 @@ describe("World - Entity Management", () => {
     expect(query.getEntities()).toEqual([]);
 
     let hookCalls = 0;
-    world.hook(Payload, {
+    world.hook([Payload], {
       on_init: () => {
         hookCalls++;
       },

@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { component, type EntityId } from "../core/entity";
 import { World } from "../core/world";
 
-describe("World - Legacy Hooks", () => {
+describe("World - Single Component Hooks", () => {
   type Position = { x: number; y: number };
 
   const positionComponent = component<Position>();
@@ -15,24 +15,21 @@ describe("World - Legacy Hooks", () => {
     let hookCalled = false;
     let hookEntityId: EntityId | undefined;
 
-    let hookComponentType: EntityId<Position> | undefined;
     let hookComponent: Position | undefined;
 
     world.set(entity, positionComponent, position);
     world.sync();
 
-    world.hook(positionComponent, {
-      on_init: (entityId, componentType, component) => {
+    world.hook([positionComponent], {
+      on_init: (entityId, component) => {
         hookCalled = true;
         hookEntityId = entityId;
-        hookComponentType = componentType;
         hookComponent = component;
       },
     });
 
     expect(hookCalled).toBe(true);
     expect(hookEntityId).toBe(entity);
-    expect(hookComponentType).toBe(positionComponent);
     expect(hookComponent).toEqual(position);
   });
 
@@ -43,14 +40,12 @@ describe("World - Legacy Hooks", () => {
 
     let hookCalled = false;
     let hookEntityId: EntityId | undefined;
-    let hookComponentType: EntityId<Position> | undefined;
     let hookComponent: Position | undefined;
 
-    world.hook(positionComponent, {
-      on_set: (entityId, componentType, component) => {
+    world.hook([positionComponent], {
+      on_set: (entityId, component) => {
         hookCalled = true;
         hookEntityId = entityId;
-        hookComponentType = componentType;
         hookComponent = component;
       },
     });
@@ -60,7 +55,6 @@ describe("World - Legacy Hooks", () => {
 
     expect(hookCalled).toBe(true);
     expect(hookEntityId).toBe(entity);
-    expect(hookComponentType).toBe(positionComponent);
     expect(hookComponent).toEqual(position);
   });
 
@@ -74,14 +68,12 @@ describe("World - Legacy Hooks", () => {
 
     let hookCalled = false;
     let hookEntityId: EntityId | undefined;
-    let hookComponentType: EntityId<Position> | undefined;
     let hookComponent: Position | undefined;
 
-    world.hook(positionComponent, {
-      on_remove: (entityId, componentType, component) => {
+    world.hook([positionComponent], {
+      on_remove: (entityId, component) => {
         hookCalled = true;
         hookEntityId = entityId;
-        hookComponentType = componentType;
         hookComponent = component;
       },
     });
@@ -91,7 +83,6 @@ describe("World - Legacy Hooks", () => {
 
     expect(hookCalled).toBe(true);
     expect(hookEntityId).toBe(entity);
-    expect(hookComponentType).toBe(positionComponent);
     expect(hookComponent).toEqual(position);
   });
 
@@ -103,13 +94,13 @@ describe("World - Legacy Hooks", () => {
     let hook1Called = false;
     let hook2Called = false;
 
-    world.hook(positionComponent, {
+    world.hook([positionComponent], {
       on_set: () => {
         hook1Called = true;
       },
     });
 
-    world.hook(positionComponent, {
+    world.hook([positionComponent], {
       on_set: () => {
         hook2Called = true;
       },
@@ -130,7 +121,7 @@ describe("World - Legacy Hooks", () => {
     let addedCalled = false;
     let removedCalled = false;
 
-    world.hook(positionComponent, {
+    world.hook([positionComponent], {
       on_set: () => {
         addedCalled = true;
       },
@@ -158,7 +149,7 @@ describe("World - Legacy Hooks", () => {
 
     let addedCalled = false;
 
-    world.hook(positionComponent, {
+    world.hook([positionComponent], {
       on_set: () => {
         addedCalled = true;
       },
@@ -180,7 +171,7 @@ describe("World - Legacy Hooks", () => {
 
     let removedCalled = false;
 
-    world.hook(positionComponent, {
+    world.hook([positionComponent], {
       on_remove: () => {
         removedCalled = true;
       },

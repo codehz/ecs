@@ -8,11 +8,11 @@ describe("CommandBuffer iteration limit", () => {
     const Counter = component<{ value: number }>();
 
     // Create a hook that recursively increments a counter
-    world.hook(Counter, {
-      on_set: (entityId, componentType, data) => {
+    world.hook([Counter], {
+      on_set: (entityId, data) => {
         // Keep triggering new set commands beyond the iteration limit
         if (data.value < 200) {
-          world.set(entityId, componentType, { value: data.value + 1 });
+          world.set(entityId, Counter, { value: data.value + 1 });
         }
       },
     });
@@ -29,13 +29,13 @@ describe("CommandBuffer iteration limit", () => {
     const Increment = component<{ count: number }>();
 
     let hookCalls = 0;
-    world.hook(Increment, {
-      on_set: (entityId, componentType, data) => {
+    world.hook([Increment], {
+      on_set: (entityId, data) => {
         hookCalls++;
         // Only trigger new commands on first few calls to avoid exceeding limit
         // We have 2 entities, each initial set + cascading calls
         if (hookCalls < 25) {
-          world.set(entityId, componentType, { count: data.count + 1 });
+          world.set(entityId, Increment, { count: data.count + 1 });
         }
       },
     });

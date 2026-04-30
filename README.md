@@ -55,7 +55,7 @@ query.forEach([PositionId, VelocityId], (entity, position, velocity) => {
 
 ### 组件生命周期钩子
 
-ECS 支持监听组件的生命周期事件。可以监听单个组件或多个组件同时存在于实体时的事件。
+ECS 支持监听组件的生命周期事件。`hook()` 使用组件数组定义匹配条件，即使只监听单个组件也需要传入数组。
 
 ```typescript
 // 定义组件类型
@@ -124,7 +124,7 @@ const unhook = world.hook([PositionId, { optional: VelocityId }], {
 });
 ```
 
-多组件 `hook()` 还支持第三个可选参数 `filter`（与 `createQuery()` 的过滤语义一致），可用于排除带有某些负面组件的实体：
+`hook()` 还支持第三个可选参数 `filter`（与 `createQuery()` 的过滤语义一致），可用于排除带有某些负面组件的实体：
 
 ```typescript
 const DisabledId = component<void>();
@@ -249,7 +249,7 @@ bun run examples/simple/demo.ts
 - `delete(entity)`: 销毁实体及其所有组件
 - `query(componentIds)`: 快速查询具有指定组件的实体
 - `createQuery(componentIds)`: 创建可重用的查询对象
-- `hook(componentIds, hook, filter?)`: 注册生命周期钩子，返回卸载函数（数组形式支持可选 filter）
+- `hook(componentIds, hook, filter?)`: 注册生命周期钩子，返回卸载函数
 - `serialize()`: 序列化世界状态为快照对象
 - `sync()`: 执行所有延迟命令
 

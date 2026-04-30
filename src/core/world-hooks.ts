@@ -1,12 +1,6 @@
 import type { Archetype } from "./archetype";
-import {
-  getComponentIdFromRelationId,
-  getTargetIdFromRelationId,
-  isWildcardRelationId,
-  relation,
-  type EntityId,
-} from "./entity";
-import { isOptionalEntityId, type ComponentType, type LegacyLifecycleHook, type LifecycleHookEntry } from "./types";
+import { getComponentIdFromRelationId, getTargetIdFromRelationId, isWildcardRelationId, type EntityId } from "./entity";
+import { isOptionalEntityId, type ComponentType, type LifecycleHookEntry } from "./types";
 
 /**
  * Check if a component change matches a hook component type.
@@ -56,10 +50,7 @@ function findMatchingComponent(
   return undefined;
 }
 
-export type HooksMap = Map<EntityId<any>, Set<LegacyLifecycleHook<any>>>;
-
 export interface HooksContext {
-  hooks: HooksMap;
   multiHooks: Set<LifecycleHookEntry>;
   has: (entityId: EntityId, componentType: EntityId<any>) => boolean;
   get: <T>(entityId: EntityId, componentType: EntityId<T>) => T;
@@ -74,8 +65,6 @@ export function triggerLifecycleHooks(
   oldArchetype: Archetype,
   newArchetype: Archetype,
 ): void {
-  invokeHooksForComponents(ctx.hooks, entityId, addedComponents, "on_set");
-  invokeHooksForComponents(ctx.hooks, entityId, removedComponents, "on_remove");
   triggerMultiComponentHooks(ctx, entityId, addedComponents, removedComponents, oldArchetype, newArchetype);
 }
 
@@ -85,15 +74,12 @@ export function triggerLifecycleHooks(
  * is being completely removed.
  */
 export function triggerRemoveHooksForEntityDeletion(
-  ctx: HooksContext,
+  _ctx: HooksContext,
   entityId: EntityId,
   removedComponents: Map<EntityId<any>, any>,
   oldArchetype: Archetype,
 ): void {
   if (removedComponents.size === 0) return;
-
-  // Trigger legacy hooks for removed components
-  invokeHooksForComponents(ctx.hooks, entityId, removedComponents, "on_remove");
 
   // Trigger multi-component hooks - only on_remove since entity is being deleted
   for (const entry of oldArchetype.matchingMultiHooks) {
@@ -114,34 +100,6 @@ export function triggerRemoveHooksForEntityDeletion(
     // Collect component values from removedComponents directly (no entity lookup needed)
     const components = collectComponentsFromRemoved(componentTypes, removedComponents);
     hook.on_remove(entityId, ...components);
-  }
-}
-
-function invokeHooksForComponents(
-  hooks: HooksMap,
-  entityId: EntityId,
-  components: Map<EntityId<any>, any>,
-  hookType: "on_set" | "on_remove",
-): void {
-  for (const [componentType, component] of components) {
-    // Trigger direct component hooks
-    const directHooks = hooks.get(componentType);
-    if (directHooks) {
-      for (const hook of directHooks) {
-        hook[hookType]?.(entityId, componentType, component);
-      }
-    }
-
-    // Trigger wildcard relation hooks
-    const componentId = getComponentIdFromRelationId(componentType);
-    if (componentId !== undefined) {
-      const wildcardHooks = hooks.get(relation(componentId, "*"));
-      if (wildcardHooks) {
-        for (const hook of wildcardHooks) {
-          hook[hookType]?.(entityId, componentType, component);
-        }
-      }
-    }
   }
 }
 

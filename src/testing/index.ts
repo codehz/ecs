@@ -629,11 +629,6 @@ function deepClone<T>(value: T): T {
 
 export { component, relation } from "../core/entity";
 export type { ComponentId, EntityId, RelationId, WildcardRelationId } from "../core/entity";
-export type {
-  LegacyLifecycleCallback as LifecycleCallback,
-  LegacyLifecycleHook as LifecycleHook,
-  LifecycleCallback as MultiLifecycleCallback,
-  LifecycleHook as MultiLifecycleHook,
-} from "../core/types";
+export type { LifecycleCallback, LifecycleHook } from "../core/types";
 export { World } from "../core/world";
 export type { Query } from "../query/query";

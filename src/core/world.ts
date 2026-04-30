@@ -25,15 +25,7 @@ import {
 } from "./entity";
 import type { SerializedComponent, SerializedEntity, SerializedWorld } from "./serialization";
 import { decodeSerializedId, encodeEntityId } from "./serialization";
-import type {
-  ComponentTuple,
-  ComponentType,
-  LegacyLifecycleCallback,
-  LegacyLifecycleHook,
-  LifecycleCallback,
-  LifecycleHook,
-  LifecycleHookEntry,
-} from "./types";
+import type { ComponentTuple, ComponentType, LifecycleCallback, LifecycleHook, LifecycleHookEntry } from "./types";
 import { isOptionalEntityId } from "./types";
 import {
   applyChangeset,
@@ -78,7 +70,6 @@ export class World {
   private queryCache = new Map<string, { query: Query; refCount: number }>();
 
   // Lifecycle hooks (declared before cached contexts that reference them)
-  private legacyHooks = new Map<EntityId<any>, Set<LegacyLifecycleHook<any>>>();
   private hooks: Set<LifecycleHookEntry> = new Set();
 
   // Command execution
@@ -93,7 +84,6 @@ export class World {
   };
   /** Cached hooks context to avoid per-entity object allocation */
   private readonly _hooksCtx: HooksContext = {
-    hooks: this.legacyHooks,
     multiHooks: this.hooks,
     has: (eid, ct) => this.has(eid, ct),
     get: (eid, ct) => this.get(eid, ct),
@@ -654,12 +644,6 @@ export class World {
   /**
    * Registers a lifecycle hook that responds to component changes.
    * The hook callback is invoked when components matching the specified types are added, updated, or removed.
-   *
-   * @deprecated For single components, use the array overload with LifecycleCallback for better multi-component support
-   *
-   * @overload hook<T>(componentType: EntityId<T>, hook: LegacyLifecycleHook<T> | LegacyLifecycleCallback<T>): () => void
-   * Registers a hook for a single component type (legacy API).
-   *
    * @overload hook<const T extends readonly ComponentType<any>[]>(
    *   componentTypes: T,
    *   hook: LifecycleHook<T> | LifecycleCallback<T>,
@@ -668,15 +652,14 @@ export class World {
    * Registers a hook for multiple component types.
    * The hook is triggered when entities enter/exit the matching set.
    *
-   * @param componentTypesOrSingle - A single component type or an array of component types
+   * @param componentTypes - Component types that define the matching entity set
    * @param hook - Either a hook object with on_init/on_set/on_remove handlers, or a callback function
-   * @param filter - Optional filter, only applied to array overload
+   * @param filter - Optional query-style filter applied to the hook match set
    * @returns A function that unsubscribes the hook when called
    *
    * @throws {Error} If no required components are specified in array overload
    *
    * @example
-   * // Array overload (recommended)
    * const unsubscribe = world.hook([Position, Velocity], {
    *   on_init: (entityId, position, velocity) => console.log("Initialized"),
    *   on_set: (entityId, position, velocity) => console.log("Updated"),
@@ -698,146 +681,86 @@ export class World {
    *   { negativeComponentTypes: [Disabled] },
    * );
    */
-  hook<T>(componentType: EntityId<T>, hook: LegacyLifecycleHook<T> | LegacyLifecycleCallback<T>): () => void;
   hook<const T extends readonly ComponentType<any>[]>(
     componentTypes: T,
     hook: LifecycleHook<T> | LifecycleCallback<T>,
     filter?: QueryFilter,
   ): () => void;
   hook(
-    componentTypesOrSingle: EntityId<any> | readonly ComponentType<any>[],
-    hook: LegacyLifecycleHook<any> | LifecycleHook<any> | LegacyLifecycleCallback<any> | LifecycleCallback<any>,
+    componentTypes: readonly ComponentType<any>[],
+    hook: LifecycleHook<any> | LifecycleCallback<any>,
     filter?: QueryFilter,
   ): () => void {
-    // Normalize callback functions to hook objects
     if (typeof hook === "function") {
-      if (Array.isArray(componentTypesOrSingle)) {
-        const callback = hook as LifecycleCallback<any>;
-        hook = {
-          on_init: (entityId, ...components) => callback("init", entityId, ...components),
-          on_set: (entityId, ...components) => callback("set", entityId, ...components),
-          on_remove: (entityId, ...components) => callback("remove", entityId, ...components),
-        } as LifecycleHook<any>;
+      const callback = hook as LifecycleCallback<any>;
+      hook = {
+        on_init: (entityId, ...components) => callback("init", entityId, ...components),
+        on_set: (entityId, ...components) => callback("set", entityId, ...components),
+        on_remove: (entityId, ...components) => callback("remove", entityId, ...components),
+      } as LifecycleHook<any>;
+    }
+
+    const requiredComponents: EntityId<any>[] = [];
+    const optionalComponents: EntityId<any>[] = [];
+    for (const ct of componentTypes) {
+      if (!isOptionalEntityId(ct)) {
+        requiredComponents.push(ct as EntityId<any>);
       } else {
-        const callback = hook as LegacyLifecycleCallback<any>;
-        hook = {
-          on_init: (entityId, componentType, component) => callback("init", entityId, componentType, component),
-          on_set: (entityId, componentType, component) => callback("set", entityId, componentType, component),
-          on_remove: (entityId, componentType, component) => callback("remove", entityId, componentType, component),
-        } as LegacyLifecycleHook<any>;
+        optionalComponents.push(ct.optional);
       }
     }
 
-    if (Array.isArray(componentTypesOrSingle)) {
-      const componentTypes = componentTypesOrSingle as readonly ComponentType<any>[];
-      const requiredComponents: EntityId<any>[] = [];
-      const optionalComponents: EntityId<any>[] = [];
-      for (const ct of componentTypes) {
-        if (!isOptionalEntityId(ct)) {
-          requiredComponents.push(ct as EntityId<any>);
-        } else {
-          optionalComponents.push(ct.optional);
-        }
+    if (requiredComponents.length === 0) {
+      throw new Error("Hook must have at least one required component");
+    }
+
+    const entry: LifecycleHookEntry = {
+      componentTypes,
+      requiredComponents,
+      optionalComponents,
+      filter: filter || {},
+      hook: hook as LifecycleHook<any>,
+    };
+    this.hooks.add(entry);
+
+    for (const archetype of this.archetypes) {
+      if (this.archetypeMatchesHook(archetype, entry)) {
+        archetype.matchingMultiHooks.add(entry);
       }
+    }
 
-      if (requiredComponents.length === 0) {
-        throw new Error("Hook must have at least one required component");
-      }
-
-      const entry: LifecycleHookEntry = {
-        componentTypes,
-        requiredComponents,
-        optionalComponents,
-        filter: filter || {},
-        hook: hook as LifecycleHook<any>,
-      };
-      this.hooks.add(entry);
-
-      // Add to archetypes
+    const normalizedHook = hook as LifecycleHook<any>;
+    if (normalizedHook.on_init !== undefined) {
       for (const archetype of this.archetypes) {
-        if (this.archetypeMatchesHook(archetype, entry)) {
-          archetype.matchingMultiHooks.add(entry);
+        if (!this.archetypeMatchesHook(archetype, entry)) continue;
+        for (const entityId of archetype.getEntities()) {
+          const components = collectMultiHookComponents(this.createHooksContext(), entityId, componentTypes);
+          normalizedHook.on_init(entityId, ...components);
         }
       }
+    }
 
-      const multiHook = hook as LifecycleHook<any>;
-      if (multiHook.on_init !== undefined) {
-        for (const archetype of this.archetypes) {
-          if (!this.archetypeMatchesHook(archetype, entry)) continue;
-          for (const entityId of archetype.getEntities()) {
-            const components = collectMultiHookComponents(this.createHooksContext(), entityId, componentTypes);
-            multiHook.on_init(entityId, ...components);
-          }
-        }
+    return () => {
+      this.hooks.delete(entry);
+      for (const archetype of this.archetypes) {
+        archetype.matchingMultiHooks.delete(entry);
       }
+    };
+  }
 
-      return () => {
+  /** @deprecated use the unsubscribe function returned by hook() instead */
+  unhook<const T extends readonly ComponentType<any>[]>(componentTypes: T, hook: LifecycleHook<T>): void;
+  /** @deprecated use the unsubscribe function returned by hook() instead */
+  unhook(_componentTypes: readonly ComponentType<any>[], hook: LifecycleHook<any>): void {
+    // Note: Callback functions passed to hook() are converted to hook objects internally,
+    // so unhook() only accepts the original hook object references.
+    for (const entry of this.hooks) {
+      if (entry.hook === hook) {
         this.hooks.delete(entry);
         for (const archetype of this.archetypes) {
           archetype.matchingMultiHooks.delete(entry);
         }
-      };
-    } else {
-      const componentType = componentTypesOrSingle as EntityId<any>;
-      if (!this.legacyHooks.has(componentType)) {
-        this.legacyHooks.set(componentType, new Set());
-      }
-      const legacyHook = hook as LegacyLifecycleHook<any>;
-      this.legacyHooks.get(componentType)!.add(legacyHook);
-
-      if (legacyHook.on_init !== undefined) {
-        this.archetypesByComponent.get(componentType)?.forEach((archetype) => {
-          const entities = archetype.getEntityToIndexMap();
-          const componentData = archetype.getComponentData<any>(componentType);
-          for (const [entity, index] of entities) {
-            const data = componentData[index];
-            const value = data === MISSING_COMPONENT ? undefined : data;
-            legacyHook.on_init?.(entity, componentType, value);
-          }
-        });
-      }
-
-      return () => {
-        const hooks = this.legacyHooks.get(componentType);
-        if (hooks) {
-          hooks.delete(legacyHook);
-          if (hooks.size === 0) {
-            this.legacyHooks.delete(componentType);
-          }
-        }
-      };
-    }
-  }
-
-  /** @deprecated use the unsubscribe function returned by hook() instead */
-  unhook<T>(componentType: EntityId<T>, hook: LegacyLifecycleHook<T>): void;
-  /** @deprecated use the unsubscribe function returned by hook() instead */
-  unhook<const T extends readonly ComponentType<any>[]>(componentTypes: T, hook: LifecycleHook<T>): void;
-  /** @deprecated use the unsubscribe function returned by hook() instead */
-  unhook(
-    componentTypesOrSingle: EntityId<any> | readonly ComponentType<any>[],
-    hook: LegacyLifecycleHook<any> | LifecycleHook<any>,
-  ): void {
-    // Note: Callback functions passed to hook() are converted to hook objects internally,
-    // so unhook() only accepts the original hook object references.
-    if (Array.isArray(componentTypesOrSingle)) {
-      for (const entry of this.hooks) {
-        if (entry.hook === hook) {
-          this.hooks.delete(entry);
-          for (const archetype of this.archetypes) {
-            archetype.matchingMultiHooks.delete(entry);
-          }
-          break;
-        }
-      }
-    } else {
-      const componentType = componentTypesOrSingle as EntityId<any>;
-      const hooks = this.legacyHooks.get(componentType);
-      if (hooks) {
-        hooks.delete(hook as LegacyLifecycleHook<any>);
-        if (hooks.size === 0) {
-          this.legacyHooks.delete(componentType);
-        }
+        break;
       }
     }
   }
@@ -1133,7 +1056,7 @@ export class World {
       }
     });
 
-    const hasHooks = this.legacyHooks.size > 0 || this.hooks.size > 0;
+    const hasHooks = this.hooks.size > 0;
     const hasEntityRefs = changeset.removes.size > 0 || changeset.adds.size > 0;
 
     if (!hasHooks) {

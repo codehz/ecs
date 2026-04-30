@@ -411,11 +411,11 @@ describe("DontFragment Relations", () => {
     world.sync();
 
     // Set up hook to track removals
-    const removedRelations: Array<{ entity: number; componentType: number }> = [];
+    const removedRelations: Array<{ entity: number; relations: [number, void][] }> = [];
     const wildcardChildOf = relation(ChildOf, "*");
-    world.hook(wildcardChildOf, {
-      on_remove: (entity, componentType) => {
-        removedRelations.push({ entity, componentType });
+    world.hook([wildcardChildOf], {
+      on_remove: (entity, relations) => {
+        removedRelations.push({ entity, relations });
       },
     });
 
@@ -426,7 +426,7 @@ describe("DontFragment Relations", () => {
     // Hook should have been called
     expect(removedRelations.length).toBe(1);
     expect(removedRelations[0]!.entity).toBe(child);
-    expect(removedRelations[0]!.componentType).toBe(relation(ChildOf, parent));
+    expect(removedRelations[0]!.relations).toEqual([[parent, undefined]]);
   });
 
   it("should handle cascade delete with dontFragment relations correctly", () => {

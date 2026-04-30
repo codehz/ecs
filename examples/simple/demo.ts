@@ -67,17 +67,15 @@ function main() {
   console.log(`Child has ChildOf(parent2): ${world.has(child, relation(ChildOf, parent2))}`);
 
   // 注册组件钩子
-  world.hook(PositionId, {
-    on_set: (entityId, componentType, component) => {
-      console.log(
-        `组件添加钩子触发: 实体 ${entityId} 添加了 ${componentType} 组件，值为 (${component.x}, ${component.y})`,
-      );
+  world.hook([PositionId], {
+    on_set: (entityId, component) => {
+      console.log(`组件添加钩子触发: 实体 ${entityId} 的 Position 值为 (${component.x}, ${component.y})`);
     },
   });
 
-  world.hook(VelocityId, {
-    on_remove: (entityId, componentType) => {
-      console.log(`组件移除钩子触发: 实体 ${entityId} 移除了 ${componentType} 组件`);
+  world.hook([VelocityId], {
+    on_remove: (entityId) => {
+      console.log(`组件移除钩子触发: 实体 ${entityId} 移除了 Velocity 组件`);
     },
   });
 

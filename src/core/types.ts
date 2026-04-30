@@ -13,40 +13,11 @@ export type AnyComponentId = EntityId<any>;
  */
 export type AnyEntityId = EntityId<any>;
 
-/**
- * Hook types for component lifecycle events
- */
-export interface LegacyLifecycleHook<T = unknown> {
-  /**
-   * Called when a component is added to an entity
-   */
-  on_init?: (entityId: EntityId, componentType: EntityId<T>, component: T) => void;
-  /**
-   * Called when a component is updated on an entity
-   */
-  on_set?: (entityId: EntityId, componentType: EntityId<T>, component: T) => void;
-  /**
-   * Called when a component is deleted from an entity
-   */
-  on_remove?: (entityId: EntityId, componentType: EntityId<T>, component: T) => void;
-}
-
 export interface LifecycleHook<T extends readonly ComponentType<any>[]> {
   on_init?: (entityId: EntityId, ...components: ComponentTuple<T>) => void;
   on_set?: (entityId: EntityId, ...components: ComponentTuple<T>) => void;
   on_remove?: (entityId: EntityId, ...components: ComponentTuple<T>) => void;
 }
-
-/**
- * Convenience function type for single component lifecycle events
- * Combines on_init, on_set, and on_remove into a single callback
- */
-export type LegacyLifecycleCallback<T = unknown> = (
-  type: "init" | "set" | "remove",
-  entityId: EntityId,
-  componentType: EntityId<T>,
-  component: T,
-) => void;
 
 /**
  * Convenience function type for multi-component lifecycle events
