@@ -74,7 +74,6 @@ export function triggerLifecycleHooks(
  * is being completely removed.
  */
 export function triggerRemoveHooksForEntityDeletion(
-  _ctx: HooksContext,
   entityId: EntityId,
   removedComponents: Map<EntityId<any>, any>,
   oldArchetype: Archetype,

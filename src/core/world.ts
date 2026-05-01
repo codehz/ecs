@@ -270,7 +270,7 @@ export class World {
       this.entityToArchetype.delete(cur);
 
       // Trigger lifecycle hooks for removed components (fast path for entity deletion)
-      triggerRemoveHooksForEntityDeletion(this.createHooksContext(), cur, removedComponents, archetype);
+      triggerRemoveHooksForEntityDeletion(cur, removedComponents, archetype);
 
       this.cleanupArchetypesReferencingEntity(cur);
       this.entityIdManager.deallocate(cur);
