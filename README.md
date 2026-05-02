@@ -1,6 +1,6 @@
 # @codehz/ecs
 
-一个高性能的Entity Component System (ECS) 库，使用 TypeScript 和 Bun 运行时构建。
+一个高性能的 Entity Component System (ECS) 库，使用 TypeScript 和 Bun 运行时构建。
 
 ## 特性
 
@@ -9,7 +9,7 @@
 - 🏗️ 模块化：清晰的架构，支持自定义组件
 - 📦 轻量级：零依赖，易于集成
 - ⚡ 内存高效：连续内存布局，优化的迭代性能
-- 🎣 生命周期钩子：支持组件和通配符关系的事件监听
+- 🎣 生命周期钩子：支持多组件和通配符关系的事件监听
 
 ## 安装
 
@@ -22,283 +22,307 @@ bun install
 ### 基本示例
 
 ```typescript
-import { World } from "@codehz/ecs";
-import { component } from "@codehz/ecs";
+import { World, component } from "@codehz/ecs";
 
 // 定义组件类型
 type Position = { x: number; y: number };
 type Velocity = { x: number; y: number };
 
-// 定义组件ID
-const PositionId = component<Position>(1);
-const VelocityId = component<Velocity>(2);
+// 定义组件 ID（自动分配）
+const PositionId = component<Position>();
+const VelocityId = component<Velocity>();
 
 // 创建世界
 const world = new World();
 
-// 创建实体
+// 创建实体并设置组件（所有更改缓冲到 sync() 时应用）
 const entity = world.new();
 world.set(entity, PositionId, { x: 0, y: 0 });
 world.set(entity, VelocityId, { x: 1, y: 0.5 });
-
-// 应用更改
 world.sync();
 
-// 创建查询并更新
+// 创建可重用的查询
 const query = world.createQuery([PositionId, VelocityId]);
-const deltaTime = 1.0 / 60.0; // 假设60FPS
+
+// 更新循环
+const deltaTime = 1.0 / 60.0;
 query.forEach([PositionId, VelocityId], (entity, position, velocity) => {
   position.x += velocity.x * deltaTime;
   position.y += velocity.y * deltaTime;
 });
 ```
 
-### 组件生命周期钩子
+### 定义组件（ID 自动分配）
 
-ECS 支持监听组件的生命周期事件。`hook()` 使用组件数组定义匹配条件，即使只监听单个组件也需要传入数组。
+`component()` 自动从全局分配器中分配一个唯一 ID，也可以指定名称或选项：
 
 ```typescript
-// 定义组件类型
-type Position = { x: number; y: number };
-type Velocity = { x: number; y: number };
+import { component } from "@codehz/ecs";
 
-// 定义组件ID
-const PositionId = component<Position>();
-const VelocityId = component<Velocity>();
+// 无参自动分配 ID
+const Position = component<Position>();
 
-// 注册生命周期钩子，返回卸载函数
+// 指定名称（序列化时可读）
+const Velocity = component<Velocity>("Velocity");
+
+// 带选项的组件（关系专用）
+const ChildOf = component({ exclusive: true, name: "ChildOf" });
+```
+
+**`ComponentOptions` 选项：**
+
+| 选项            | 类型                | 说明                                                                           |
+| --------------- | ------------------- | ------------------------------------------------------------------------------ |
+| `name`          | `string`            | 组件名称，用于序列化/调试                                                      |
+| `exclusive`     | `boolean`           | 仅关系组件：同一实体对同一基础组件最多只能有一个关系                           |
+| `cascadeDelete` | `boolean`           | 仅实体关系：删除目标实体时，引用该实体的实体也会被删除（级联删除）             |
+| `dontFragment`  | `boolean`           | 仅关系组件：不同目标实体的关系存放在同一 Archetype，防止因目标不同而过度碎片化 |
+| `merge`         | `(prev, next) => T` | 在同一 sync 批次中对同一组件反复 `set()` 时的合并策略                          |
+
+### 生命周期钩子
+
+`world.hook()` 使用组件数组注册多组件生命周期钩子：
+
+```typescript
+// 返回卸载函数
 const unhook = world.hook([PositionId, VelocityId], {
   on_init: (entityId, position, velocity) => {
-    // 当钩子注册时，为已同时拥有 Position 和 Velocity 组件的实体调用
-    console.log(`实体 ${entityId} 同时拥有 Position 和 Velocity 组件`);
+    // 钩子注册时，为每个已同时满足条件的实体调用
   },
   on_set: (entityId, position, velocity) => {
-    // 当实体同时拥有 Position 和 Velocity 组件时调用
-    console.log(
-      `实体 ${entityId} 现在同时拥有 Position (${position.x}, ${position.y}) 和 Velocity (${velocity.x}, ${velocity.y})`,
-    );
+    // 当实体「进入」匹配集合时调用（添加/更新组件后）
   },
   on_remove: (entityId, position, velocity) => {
-    // 当实体失去 Position 或 Velocity 组件之一时调用（如果之前同时拥有两者）
-    console.log(`实体 ${entityId} 失去了 Position 或 Velocity 组件`);
+    // 当实体「退出」匹配集合时调用（移除组件或删除实体后）
   },
 });
-
-// 添加组件
-const entity = world.new();
-world.set(entity, PositionId, { x: 0, y: 0 });
-world.set(entity, VelocityId, { x: 1, y: 0.5 });
-world.sync(); // 钩子在这里被调用
-
-// 不再需要时，调用卸载函数移除钩子
+// 卸载钩子
 unhook();
 ```
 
-`hook()` 也支持只监听单个组件：
+也支持回调简写形式：
 
 ```typescript
-// 监听单个组件
-const unhook = world.hook([PositionId], {
-  on_set: (entityId, position) => {
-    console.log(`组件 Position 被添加到实体 ${entityId}`);
-  },
-  on_remove: (entityId, position) => {
-    console.log(`组件 Position 被从实体 ${entityId} 移除`);
-  },
+const unhook = world.hook([PositionId, VelocityId], (type, entityId, position, velocity) => {
+  if (type === "init") console.log("初始化");
+  if (type === "set") console.log("设置");
+  if (type === "remove") console.log("移除");
 });
 ```
 
-还可以使用可选组件，这样即使某些组件不存在也会触发钩子：
+可选组件与过滤器：
 
 ```typescript
-// 注册包含可选组件的生命周期钩子
-const unhook = world.hook([PositionId, { optional: VelocityId }], {
+// 可选组件：即使 Velocity 不存在也会触发钩子
+world.hook([PositionId, { optional: VelocityId }], {
   on_set: (entityId, position, velocity) => {
-    // 当实体拥有 Position 组件时调用，Velocity 组件可选
     if (velocity !== undefined) {
-      console.log(`实体 ${entityId} 拥有 Position 和 Velocity 组件`);
+      console.log("拥有速度和位置");
     } else {
-      console.log(`实体 ${entityId} 仅拥有 Position 组件`);
+      console.log("仅拥有位置");
     }
   },
 });
-```
 
-`hook()` 还支持第三个可选参数 `filter`（与 `createQuery()` 的过滤语义一致），可用于排除带有某些负面组件的实体：
-
-```typescript
+// 过滤器：排除带有指定负面组件的实体
 const DisabledId = component<void>();
-
-const unhook = world.hook(
+world.hook(
   [PositionId, VelocityId],
   {
-    on_set: (entityId, position, velocity) => {
-      // 实体进入匹配集合时触发（包括移除 Disabled 后重新进入）
-      console.log("active", entityId, position, velocity);
-    },
-    on_remove: (entityId, position, velocity) => {
-      // 实体退出匹配集合时触发（包括新增 Disabled 后退出）
-      console.log("inactive", entityId, position, velocity);
-    },
+    on_set: (entityId, position, velocity) => console.log("进入匹配集合"),
+    on_remove: (entityId, position, velocity) => console.log("退出匹配集合"),
   },
-  {
-    negativeComponentTypes: [DisabledId],
-  },
+  { negativeComponentTypes: [DisabledId] },
 );
 ```
 
-### 通配符关系钩子
-
-ECS 支持通配符关系钩子，可以监听特定组件的所有关系变化：
+### 关系组件
 
 ```typescript
 import { World, component, relation } from "@codehz/ecs";
 
-// 定义组件类型
-type Position = { x: number; y: number };
-
-// 定义组件ID
-const PositionId = component<Position>(1);
-
-// 创建世界
+const ChildOf = component<void>({ exclusive: true });
 const world = new World();
-
-// 创建实体
-const entity = world.new();
-
-// 创建通配符关系ID，用于监听所有 Position 相关的关系
-const wildcardPositionRelation = relation(PositionId, "*");
-
-// 注册通配符关系钩子，返回卸载函数
-const unhook = world.hook([wildcardPositionRelation], {
-  on_set: (entityId, relations) => {
-    console.log(`实体 ${entityId} 添加了 Position 关系`);
-    for (const [targetId, position] of relations) {
-      console.log(`  -> 目标实体 ${targetId}:`, position);
-    }
-  },
-  on_remove: (entityId, relations) => {
-    console.log(`实体 ${entityId} 移除了 Position 关系`);
-  },
-});
-
-// 创建实体间的关系
-const entity2 = world.new();
-const positionRelation = relation(PositionId, entity2);
-world.set(entity, positionRelation, { x: 10, y: 20 });
-world.sync(); // 通配符钩子会被触发
-
-// 不再需要时移除钩子
-unhook();
-```
-
-### Exclusive Relations
-
-ECS 支持 Exclusive Relations，确保实体对于指定的组件类型最多只能有一个关系。当添加新的关系时，会自动移除之前的所有同类型关系：
-
-```typescript
-import { World, component, relation } from "@codehz/ecs";
-
-// 定义组件ID，设置为独占关系
-const ChildOf = component({ exclusive: true }); // 空组件，用于关系
-
-// 创建世界
-const world = new World();
-
-// 创建实体
 const child = world.new();
 const parent1 = world.new();
 const parent2 = world.new();
 
-// 添加第一个关系
+// 添加关系
 world.set(child, relation(ChildOf, parent1));
 world.sync();
-console.log(world.has(child, relation(ChildOf, parent1))); // true
 
-// 添加第二个关系 - 会自动移除第一个
+// 独占关系：添加新关系时自动移除旧关系
 world.set(child, relation(ChildOf, parent2));
 world.sync();
 console.log(world.has(child, relation(ChildOf, parent1))); // false
 console.log(world.has(child, relation(ChildOf, parent2))); // true
 ```
 
+### 通配符关系钩子
+
+```typescript
+import { World, component, relation } from "@codehz/ecs";
+const PositionId = component<Position>();
+
+const world = new World();
+const wildcardPos = relation(PositionId, "*");
+
+// 监听所有该类型关系的变动
+world.hook([wildcardPos], {
+  on_set: (entityId, relations) => {
+    for (const [targetId, position] of relations) {
+      console.log(`实体 ${entityId} -> 目标 ${targetId}:`, position);
+    }
+  },
+  on_remove: (entityId, relations) => {
+    console.log(`实体 ${entityId} 移除了所有 Position 关系`);
+  },
+});
+```
+
+### EntityBuilder 流式创建
+
+```typescript
+const entity = world
+  .spawn()
+  .with(Position, { x: 0, y: 0 })
+  .with(Marker) // void 组件无需传值
+  .withRelation(ChildOf, parentEntity)
+  .build();
+world.sync(); // 统一应用
+```
+
+### 批量创建
+
+```typescript
+const entities = world.spawnMany(100, (builder, index) => builder.with(Position, { x: index * 10, y: 0 }));
+world.sync();
+```
+
 ### 运行示例
 
 ```bash
-bun run demo
-```
-
-或者直接运行：
-
-```bash
 bun run examples/simple/demo.ts
+bun run examples/advanced-scheduling/demo.ts
 ```
 
 ## API 概述
 
 ### World
 
-- `new()`: 创建新实体
-- `spawn()`: 创建 EntityBuilder 用于流式实体创建
-- `spawnMany(count, configure)`: 批量创建多个实体
-- `exists(entity)`: 检查实体是否存在
-- `set(entity, componentId, data)`: 向实体添加组件
-- `get(entity, componentId)`: 获取实体的组件数据（注意：只能获取已设置的组件，使用前请先用 `has()` 检查组件是否存在）
-- `has(entity, componentId)`: 检查实体是否拥有指定组件
-- `remove(entity, componentId)`: 从实体移除组件
-- `delete(entity)`: 销毁实体及其所有组件
-- `query(componentIds)`: 快速查询具有指定组件的实体
-- `createQuery(componentIds)`: 创建可重用的查询对象
-- `hook(componentIds, hook, filter?)`: 注册生命周期钩子，返回卸载函数
-- `serialize()`: 序列化世界状态为快照对象
-- `sync()`: 执行所有延迟命令
+| 方法                                  | 说明                                                                                |
+| ------------------------------------- | ----------------------------------------------------------------------------------- |
+| `new<T>()`                            | 创建新实体，返回 `EntityId<T>`                                                      |
+| `create<T>()`                         | `new()` 的语义别名                                                                  |
+| `spawn()`                             | 返回 `EntityBuilder` 用于流式创建                                                   |
+| `spawnMany(count, configure)`         | 批量创建多个实体                                                                    |
+| `exists(entity)`                      | 检查实体是否存在                                                                    |
+| `set(entity, componentId, data?)`     | 添加/更新组件（缓冲，`sync()` 后生效）。对 `void` 组件可不传 data                   |
+| `set(componentId, data)`              | 单例组件简写：`world.set(GlobalConfig, { ... })`                                    |
+| `get(entity, componentId?)`           | 获取组件数据。**若组件不存在会抛出异常**，请先用 `has()` 检查或使用 `getOptional()` |
+| `getOptional(entity, componentId?)`   | 安全获取组件，返回 `{ value: T } \| undefined`                                      |
+| `has(entity, componentId?)`           | 检查组件是否存在                                                                    |
+| `remove(entity, componentId?)`        | 移除组件（缓冲），也有单例简写                                                      |
+| `delete(entity)`                      | 销毁实体及其所有组件（缓冲）                                                        |
+| `query(componentIds)`                 | 快速查询（不缓存）                                                                  |
+| `query(componentIds, true)`           | 快速查询并返回实体及组件数据                                                        |
+| `createQuery(componentIds, filter?)`  | 创建可重用的缓存查询                                                                |
+| `releaseQuery(query)`                 | 释放查询（可选清理）                                                                |
+| `hook(componentTypes, hook, filter?)` | 注册生命周期钩子，返回卸载函数                                                      |
+| `serialize()`                         | 序列化世界状态为快照对象                                                            |
+| `sync()`                              | 执行所有延迟命令                                                                    |
 
-### 序列化（快照）
+### Query
 
-库提供了对世界状态的「内存快照」序列化接口，用于保存/恢复实体与组件的数据。注意关键点：
+查询通过 `world.createQuery()` 创建，应**跨帧复用**以获得最佳性能。
 
-- `world.serialize()` 返回一个内存中的快照对象（snapshot），快照会按引用保存组件的实际值；它不会对数据做 JSON.stringify 操作，也不会尝试把组件值转换为可序列化格式。
-- `new World(snapshot)` 通过构造函数接受由 `world.serialize()` 生成的快照对象并重建世界状态。它期望一个内存对象（非 JSON 字符串）。
+| 方法                                | 说明                                     |
+| ----------------------------------- | ---------------------------------------- |
+| `forEach(componentTypes, callback)` | 遍历匹配实体                             |
+| `getEntities()`                     | 获取所有匹配实体的 ID 列表               |
+| `getEntitiesWithComponents(types)`  | 获取实体及组件数据的对象数组             |
+| `iterate(types)`                    | 返回生成器，用于 `for...of` 遍历         |
+| `getComponentData(type)`            | 获取所有匹配实体的单组件数据数组         |
+| `dispose()`                         | 释放查询（引用计数减一，归零时完全释放） |
+| `get disposed()`                    | 检查查询是否已释放                       |
 
-为什么采用这种设计？很多情况下组件值可能包含函数、类实例、循环引用或其他无法用 JSON 表示的值。库不对组件值强行进行序列化/字符串化，以避免数据丢失或不可信的自动转换。
+### QueryFilter
 
-示例：内存回环（component 值可为任意对象）
+```typescript
+interface QueryFilter {
+  negativeComponentTypes?: EntityId<any>[]; // 排除的组件
+}
+```
 
-```ts
-// 获取快照（内存对象）
+### EntityBuilder
+
+| 方法                                         | 说明                                         |
+| -------------------------------------------- | -------------------------------------------- |
+| `with(componentId, ...args)`                 | 添加普通组件。`void` 类型不传值              |
+| `withRelation(componentId, target, ...args)` | 添加关系组件。`void` 类型不传值              |
+| `build()`                                    | 创建实体并返回 `EntityId`（仍需要 `sync()`） |
+
+### component()
+
+```typescript
+// 自动分配 ID
+component<T>();
+// 指定名称
+component<T>("Name");
+// 带选项
+component<T>({ name?: string, exclusive?: boolean, cascadeDelete?: boolean, dontFragment?: boolean, merge?: (prev, next) => T });
+```
+
+### relation()
+
+```typescript
+// 创建关系 ID
+relation(componentId, targetEntity);
+// 通配符（查询所有目标）
+relation(componentId, "*");
+// 单例目标（关联到另一个组件）
+relation(componentId, otherComponentId);
+```
+
+### 组件 / 实体 ID 规则
+
+- 组件 ID：`1` ~ `1023`
+- 实体 ID：`1024+`
+- 关系 ID：负数编码 `-(componentId * 2^42 + targetId)`
+
+## 序列化（快照）
+
+库提供对世界状态的「内存快照」序列化接口，用于保存/恢复实体与组件数据。
+
+```typescript
+// 创建快照（内存对象）
 const snapshot = world.serialize();
 
 // 在同一进程内直接恢复
 const restored = new World(snapshot);
 ```
 
-持久化到磁盘或跨进程传输
+**设计要点：**
 
-如果你需要把世界保存到文件或通过网络传输，需要自己实现组件值的编码/解码策略：
+- `world.serialize()` 返回内存快照对象，**不会**对组件值执行 `JSON.stringify`，也不会尝试将组件值转换为可序列化格式。
+- `new World(snapshot)` 是反序列化的唯一入口（没有 `World.deserialize()` 静态方法）。
+- 快照包含实体、组件以及 `EntityIdManager` 分配器状态（保留下一次分配的 ID）；**不会**自动恢复查询缓存或生命周期钩子。
 
-1. 使用 `World.serialize()` 得到 snapshot。
-2. 对 snapshot 中的组件值逐项进行可自定义的编码（例如将类实例转成纯数据、把函数替换为标识符，或使用自定义二进制编码）。
-3. 将编码后的对象字符串化并持久化。恢复时执行相反的解码步骤，得到与 `World.serialize()` 兼容的快照对象，然后调用 `World.deserialize(decodedSnapshot)`。
+**持久化示例（组件值为 JSON 友好时）：**
 
-简单示例：当组件值都是 JSON-友好时
-
-```ts
+```typescript
 const snapshot = world.serialize();
-// 如果组件值都可 JSON 化，可以直接 stringify
-const text = JSON.stringify(snapshot);
-// 写入文件或发送到网络
+const json = JSON.stringify(snapshot);
+// 写入文件或发送到网络 ...
 
-// 恢复：parse -> deserialize
-const parsed = JSON.parse(text);
+const parsed = JSON.parse(json);
 const restored = new World(parsed);
 ```
 
-示例：带自定义编码的持久化（伪代码）
+**自定义编码示例：**
 
-```ts
+```typescript
 const snapshot = world.serialize();
-
-// 将组件值编码为可持久化格式
 const encoded = {
   ...snapshot,
   entities: snapshot.entities.map((e) => ({
@@ -306,88 +330,28 @@ const encoded = {
     components: e.components.map((c) => ({ type: c.type, value: myEncode(c.value) })),
   })),
 };
+// 持久化 encoded ...
 
-// 持久化 encoded（JSON.stringify / 二进制写入等）
-
-// 恢复时解码回原始组件值
-const decoded = /* parse file and decode */ encoded;
-const readySnapshot = {
+// 恢复时反向解码
+const decodedSnapshot = {
   ...decoded,
   entities: decoded.entities.map((e) => ({
     id: e.id,
     components: e.components.map((c) => ({ type: c.type, value: myDecode(c.value) })),
   })),
 };
-
-const restored = new World(readySnapshot);
+const restored = new World(decodedSnapshot);
 ```
 
-注意事项
+**重要：** `get()` 在组件不存在时会抛出异常。由于 `undefined` 是组件的有效值，不能用 `get()` 的返回值是否为 `undefined` 来判断组件是否存在。请使用 `has()` 或 `getOptional()`。
 
-- **重要警告**：`get()` 方法只能获取实体已设置的组件。如果尝试获取不存在的组件，会抛出错误。由于 `undefined` 是组件的有效值，不能使用 `get()` 的返回值是否为 `undefined` 来判断组件是否存在。请在使用 `get()` 之前先用 `has()` 方法检查组件是否存在。
-- 快照只包含实体、组件、以及 `EntityIdManager` 的分配器状态（用于保留下一次分配的 ID）；并不会自动恢复查询缓存或生命周期钩子。恢复后应由应用负责重新注册钩子。
-- 若需要跨版本兼容，建议在持久化格式中包含 `version` 字段，并在恢复时进行格式兼容性检查与迁移。
+## System / Pipeline 集成
 
-### Entity
+从 v0.4.0 开始，库移除了内置的 `System` 和 `SystemScheduler`。推荐使用 `@codehz/pipeline` 来组织游戏循环，**务必在最后一个 pass 调用 `world.sync()`**。
 
-- `component<T>(id)`: 分配类型安全的组件ID（上限：1022个）
-
-### Query
-
-- `forEach(componentIds, callback)`: 遍历匹配的实体，为每个实体调用回调函数
-- `getEntities()`: 获取所有匹配实体的ID列表
-- `getEntitiesWithComponents(componentIds)`: 获取实体及其组件数据的对象数组
-- `iterate(componentIds)`: 返回一个生成器，用于遍历匹配的实体及其组件数据
-- `getComponentData(componentType)`: 获取指定组件类型的所有匹配实体的数据数组
-- `dispose()`: 释放查询资源，停止接收世界更新通知
-
-### EntityBuilder
-
-EntityBuilder 提供流式 API 用于便捷的实体创建：
-
-- `with(componentId, value?)`: 添加组件到构建器（对于 `void` 类型组件，value 参数可省略）
-- `withRelation(componentId, targetEntity, value?)`: 添加关系组件到构建器（对于 `void` 类型关系，value 参数可省略）
-- `build()`: 创建实体并应用所有组件（需要手动调用 `world.sync()`）
-
-### World
-
-从 v0.4.0 开始，本库移除了内置的 `System` 和 `SystemScheduler` 功能。推荐使用 `@codehz/pipeline` 作为替代方案来组织游戏循环逻辑。
-
-### 为什么移除 System？
-
-- **简化库的维护**：System 调度器增加了代码复杂度，但其功能可以通过更通用的 pipeline 模式实现
-- **更灵活的执行控制**：Pipeline 模式允许更细粒度的控制，支持异步操作和条件执行
-- **更好的关注点分离**：ECS 库专注于实体和组件管理，系统调度由外部库处理
-
-### 迁移示例
-
-**旧代码（使用 System）**：
-
-```typescript
-import { World, component } from "@codehz/ecs";
-import type { System } from "@codehz/ecs";
-
-class MovementSystem implements System<[deltaTime: number]> {
-  private query: Query;
-
-  constructor(world: World<[deltaTime: number]>) {
-    this.query = world.createQuery([PositionId, VelocityId]);
-  }
-
-  update(deltaTime: number): void {
-    this.query.forEach([PositionId, VelocityId], (entity, position, velocity) => {
-      position.x += velocity.x * deltaTime;
-      position.y += velocity.y * deltaTime;
-    });
-  }
-}
-
-const world = new World<[deltaTime: number]>();
-world.registerSystem(new MovementSystem(world));
-world.update(0.016); // 自动调用 sync()
+```bash
+bun add @codehz/pipeline
 ```
-
-**新代码（使用 Pipeline）**：
 
 ```typescript
 import { pipeline } from "@codehz/pipeline";
@@ -403,76 +367,66 @@ const gameLoop = pipeline<{ deltaTime: number }>()
       position.y += velocity.y * env.deltaTime;
     });
   })
-  // 重要：world.sync() 必须作为最后一个 pass 调用，以还原之前 world.update() 的自动提交行为
   .addPass(() => {
-    world.sync();
+    world.sync(); // 必须作为最后一个 pass
   })
   .build();
 
 gameLoop({ deltaTime: 0.016 });
 ```
 
-### 关键变化
-
-1. **移除泛型参数**：`World` 不再需要 `UpdateParams` 泛型参数
-2. **移除的方法**：`registerSystem()` 和 `update()` 方法已移除
-3. **手动调用 sync()**：之前 `world.update()` 会自动调用 `sync()`，现在需要在 pipeline 末尾显式调用
-4. **执行顺序**：Pass 的执行顺序由添加顺序决定，无需手动声明依赖关系
-
-### 安装 Pipeline
-
-```bash
-bun add @codehz/pipeline
-```
-
-## 性能特点
-
-- **Archetype 系统**：实体按组件组合分组，实现连续内存访问
-- **缓存查询**：查询结果自动缓存，减少重复计算
-- **命令缓冲区**：延迟执行组件添加/移除，提高批处理效率
-- **类型安全**：编译时类型检查，无运行时开销
-
-## 开发
-
-### 运行测试
-
-```bash
-bun test
-```
-
-### 类型检查
-
-```bash
-bunx tsc --noEmit
-```
-
 ## 项目结构
 
 ```
 src/
-├── index.ts              # 入口文件
-├── entity.ts             # 实体和组件管理
-├── world.ts              # 世界管理
-├── archetype.ts          # Archetype 系统（高效组件存储）
-├── query.ts              # 查询系统
-├── query-filter.ts       # 查询过滤器
-├── command-buffer.ts     # 命令缓冲区
-├── types.ts              # 类型定义
-├── utils.ts              # 工具函数
-├── *.test.ts             # 单元测试
-├── query.example.ts      # 查询示例
-└── *.perf.test.ts        # 性能测试
+├── index.ts                 # 入口文件（统一导出）
+├── core/                    # 核心实现
+│   ├── world.ts             # 世界管理
+│   ├── archetype.ts         # Archetype 系统（高效组件存储）
+│   ├── builder.ts           # EntityBuilder 流式创建
+│   ├── component-registry.ts # 组件注册表
+│   ├── component-entity-store.ts # 单例组件存储
+│   ├── component-type-utils.ts   # 组件类型工具
+│   ├── dont-fragment-store.ts    # DontFragment 存储
+│   ├── entity.ts            # 实体/组件/关系类型导出（聚合）
+│   ├── entity-types.ts      # 实体 ID 类型定义与常量
+│   ├── entity-relation.ts   # 关系 ID 编码/解码
+│   ├── entity-manager.ts    # ID 分配器
+│   ├── query-registry.ts    # 查询注册表
+│   ├── serialization.ts     # 序列化 ID 编解码
+│   ├── world-serialization.ts # 世界序列化/反序列化
+│   ├── world-commands.ts    # 世界命令
+│   ├── world-hooks.ts       # 钩子执行逻辑
+│   ├── world-references.ts  # 实体引用追踪
+│   └── types.ts             # 类型定义
+├── query/                   # 查询系统
+│   ├── query.ts             # Query 类
+│   └── filter.ts            # 查询过滤器
+├── commands/                # 命令缓冲区
+├── utils/                   # 工具函数
+├── testing/                 # 测试工具
+└── __tests__/               # 单元测试 & 性能测试
 
 examples/
 ├── simple/
-│   ├── demo.ts           # 基本示例
-│   └── README.md         # 示例说明
+│   ├── demo.ts              # 基本示例
+│   └── README.md            # 示例说明
 └── advanced-scheduling/
-    └── demo.ts           # Pipeline 调度示例
+    └── demo.ts              # Pipeline 调度示例
 
 scripts/
-├── build.ts             # 构建脚本
-└── release.ts           # 发布脚本
+├── build.ts                 # 构建脚本
+└── release.ts               # 发布脚本
+```
+
+## 开发
+
+```bash
+bun install
+bun test                    # 运行测试
+bunx tsc --noEmit           # 类型检查
+bun run examples/simple/demo.ts  # 运行示例
+bun run scripts/build.ts    # 构建
 ```
 
 ## 许可证
