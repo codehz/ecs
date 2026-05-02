@@ -7,6 +7,7 @@ import {
   isRelationType,
 } from "./archetype-helpers";
 import { normalizeComponentTypes } from "./component-type-utils";
+import type { DontFragmentStore } from "./dont-fragment-store";
 import type { EntityId, WildcardRelationId } from "./entity";
 import {
   getComponentIdFromRelationId,
@@ -55,11 +56,11 @@ export class Archetype {
   private entityToIndex: Map<EntityId, number> = new Map();
 
   /**
-   * Reference to dontFragment relations storage from World
+   * DontFragmentStore for relation data keyed by entity ID.
    * This allows entities with different relation targets to share the same archetype
-   * Stored in World to avoid migration overhead when entities change archetypes
+   * without migration overhead when entities change archetypes.
    */
-  private dontFragmentRelations: Map<EntityId, Map<EntityId<any>, any>>;
+  private dontFragmentRelations: DontFragmentStore;
 
   /**
    * Multi-hooks that match this archetype
@@ -71,7 +72,7 @@ export class Archetype {
    */
   private componentDataSourcesCache: Map<string, (any[] | EntityId<any>[] | undefined)[]> = new Map();
 
-  constructor(componentTypes: EntityId<any>[], dontFragmentRelations: Map<EntityId, Map<EntityId<any>, any>>) {
+  constructor(componentTypes: EntityId<any>[], dontFragmentRelations: DontFragmentStore) {
     this.componentTypes = normalizeComponentTypes(componentTypes);
     this.componentTypeSet = new Set(this.componentTypes);
     this.dontFragmentRelations = dontFragmentRelations;

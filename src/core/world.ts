@@ -1,19 +1,19 @@
 import { ComponentChangeset } from "../commands/changeset";
 import { CommandBuffer, type Command } from "../commands/command-buffer";
 import { matchesFilter, serializeQueryFilter, type QueryFilter } from "../query/filter";
-import { Query } from "../query/query";
+import type { Query } from "../query/query";
 import { getOrCompute } from "../utils/utils";
-import { Archetype, MISSING_COMPONENT } from "./archetype";
-import { hasWildcardRelation } from "./archetype-helpers";
+import { Archetype } from "./archetype";
 import { EntityBuilder } from "./builder";
+import { ComponentEntityStore } from "./component-entity-store";
 import { normalizeComponentTypes } from "./component-type-utils";
+import { DontFragmentStoreImpl } from "./dont-fragment-store";
 import type { ComponentId, EntityId, WildcardRelationId } from "./entity";
 import {
   ENTITY_ID_START,
   EntityIdManager,
   RELATION_SHIFT,
   getComponentIdFromRelationId,
-  getComponentMerge,
   getDetailedIdType,
   getTargetIdFromRelationId,
   isCascadeDeleteRelation,
@@ -23,8 +23,8 @@ import {
   isExclusiveComponent,
   isWildcardRelationId,
 } from "./entity";
-import type { SerializedComponent, SerializedEntity, SerializedWorld } from "./serialization";
-import { decodeSerializedId, encodeEntityId } from "./serialization";
+import { QueryRegistry } from "./query-registry";
+import type { SerializedWorld } from "./serialization";
 import type { ComponentTuple, ComponentType, LifecycleCallback, LifecycleHook, LifecycleHookEntry } from "./types";
 import { isOptionalEntityId } from "./types";
 import {
@@ -48,6 +48,7 @@ import {
   untrackEntityReference,
   type EntityReferencesMap,
 } from "./world-references";
+import { deserializeWorld, serializeWorld } from "./world-serialization";
 
 /**
  * World class for ECS architecture
@@ -61,13 +62,13 @@ export class World {
   private entityToArchetype = new Map<EntityId, Archetype>();
   private archetypesByComponent = new Map<EntityId<any>, Archetype[]>();
   private entityReferences: EntityReferencesMap = new Map();
-  private dontFragmentRelations: Map<EntityId, Map<EntityId<any>, any>> = new Map();
-  private componentEntityComponents: Map<EntityId, Map<EntityId<any>, any>> = new Map();
-  private relationEntityIdsByTarget: Map<EntityId, Set<EntityId>> = new Map();
+  /** DontFragment relation storage, shared with all Archetype instances */
+  private readonly dontFragmentStore = new DontFragmentStoreImpl();
+  /** Component entity (singleton) storage */
+  private readonly componentEntities = new ComponentEntityStore();
 
-  // Query management
-  private queries: Query[] = [];
-  private queryCache = new Map<string, { query: Query; refCount: number }>();
+  // Query registry – manages caching, ref counts, and archetype notifications
+  private readonly queryRegistry = new QueryRegistry();
 
   // Lifecycle hooks (declared before cached contexts that reference them)
   private hooks: Set<LifecycleHookEntry> = new Set();
@@ -79,7 +80,7 @@ export class World {
   private readonly _changeset = new ComponentChangeset();
   /** Cached command processor context to avoid per-entity object allocation */
   private readonly _commandCtx: CommandProcessorContext = {
-    dontFragmentRelations: this.dontFragmentRelations,
+    dontFragmentStore: this.dontFragmentStore,
     ensureArchetype: (ct) => this.ensureArchetype(ct),
   };
   /** Cached hooks context to avoid per-entity object allocation */
@@ -92,61 +93,16 @@ export class World {
 
   constructor(snapshot?: SerializedWorld) {
     if (snapshot && typeof snapshot === "object") {
-      this.deserializeSnapshot(snapshot);
-    }
-  }
-
-  private deserializeSnapshot(snapshot: SerializedWorld): void {
-    if (snapshot.entityManager) {
-      this.entityIdManager.deserializeState(snapshot.entityManager);
-    }
-
-    if (Array.isArray(snapshot.componentEntities)) {
-      for (const entry of snapshot.componentEntities) {
-        const entityId = decodeSerializedId(entry.id);
-        if (!this.isComponentEntityId(entityId)) continue;
-
-        const componentsArray: SerializedComponent[] = entry.components || [];
-        const componentMap = new Map<EntityId<any>, any>();
-
-        for (const componentEntry of componentsArray) {
-          const componentType = decodeSerializedId(componentEntry.type);
-          componentMap.set(componentType, componentEntry.value);
-        }
-
-        this.componentEntityComponents.set(entityId, componentMap);
-        this.registerRelationEntityId(entityId);
-      }
-    }
-
-    if (Array.isArray(snapshot.entities)) {
-      for (const entry of snapshot.entities) {
-        const entityId = decodeSerializedId(entry.id);
-        const componentsArray: SerializedComponent[] = entry.components || [];
-
-        const componentMap = new Map<EntityId<any>, any>();
-        const componentTypes: EntityId<any>[] = [];
-
-        for (const componentEntry of componentsArray) {
-          const componentType = decodeSerializedId(componentEntry.type);
-          componentMap.set(componentType, componentEntry.value);
-          componentTypes.push(componentType);
-        }
-
-        const archetype = this.ensureArchetype(componentTypes);
-        archetype.addEntity(entityId, componentMap);
-        this.entityToArchetype.set(entityId, archetype);
-
-        for (const compType of componentTypes) {
-          const detailedType = getDetailedIdType(compType);
-          if (detailedType.type === "entity-relation") {
-            // Safe: targetId is guaranteed to exist for entity-relation type
-            trackEntityReference(this.entityReferences, entityId, compType, detailedType.targetId);
-          } else if (detailedType.type === "entity") {
-            trackEntityReference(this.entityReferences, entityId, compType, compType);
-          }
-        }
-      }
+      deserializeWorld(
+        {
+          entityIdManager: this.entityIdManager,
+          componentEntities: this.componentEntities,
+          entityReferences: this.entityReferences,
+          ensureArchetype: (ct) => this.ensureArchetype(ct),
+          setEntityToArchetype: (eid, arch) => this.entityToArchetype.set(eid, arch),
+        },
+        snapshot,
+      );
     }
   }
 
@@ -172,69 +128,6 @@ export class World {
     emptyArchetype.addEntity(entityId, new Map());
     this.entityToArchetype.set(entityId, emptyArchetype);
     return entityId as EntityId<T>;
-  }
-
-  private isComponentEntityId(entityId: EntityId): boolean {
-    const detailed = getDetailedIdType(entityId);
-    return detailed.type !== "entity" && detailed.type !== "invalid";
-  }
-
-  private registerRelationEntityId(entityId: EntityId): void {
-    const detailed = getDetailedIdType(entityId);
-    if (detailed.type !== "entity-relation") return;
-
-    const targetId = detailed.targetId;
-    if (targetId === undefined) return;
-
-    const existing = this.relationEntityIdsByTarget.get(targetId);
-    if (existing) {
-      existing.add(entityId);
-      return;
-    }
-
-    this.relationEntityIdsByTarget.set(targetId, new Set([entityId]));
-  }
-
-  private unregisterRelationEntityId(entityId: EntityId): void {
-    const detailed = getDetailedIdType(entityId);
-    if (detailed.type !== "entity-relation") return;
-
-    const targetId = detailed.targetId;
-    if (targetId === undefined) return;
-
-    const existing = this.relationEntityIdsByTarget.get(targetId);
-    if (!existing) return;
-
-    existing.delete(entityId);
-    if (existing.size === 0) {
-      this.relationEntityIdsByTarget.delete(targetId);
-    }
-  }
-
-  private getComponentEntityComponents(entityId: EntityId, create: boolean): Map<EntityId<any>, any> | undefined {
-    let data = this.componentEntityComponents.get(entityId);
-    if (!data && create) {
-      data = new Map();
-      this.componentEntityComponents.set(entityId, data);
-      this.registerRelationEntityId(entityId);
-    }
-    return data;
-  }
-
-  private clearComponentEntityComponents(entityId: EntityId): void {
-    if (this.componentEntityComponents.delete(entityId)) {
-      this.unregisterRelationEntityId(entityId);
-    }
-  }
-
-  private cleanupComponentEntitiesReferencingEntity(targetId: EntityId): void {
-    const relationEntities = this.relationEntityIdsByTarget.get(targetId);
-    if (!relationEntities) return;
-
-    for (const relationEntityId of relationEntities) {
-      this.componentEntityComponents.delete(relationEntityId);
-    }
-    this.relationEntityIdsByTarget.delete(targetId);
   }
 
   private destroyEntityImmediate(entityId: EntityId): void {
@@ -274,7 +167,7 @@ export class World {
 
       this.cleanupArchetypesReferencingEntity(cur);
       this.entityIdManager.deallocate(cur);
-      this.cleanupComponentEntitiesReferencingEntity(cur);
+      this.componentEntities.cleanupReferencesTo(cur);
     }
   }
 
@@ -290,7 +183,7 @@ export class World {
    * }
    */
   exists(entityId: EntityId): boolean {
-    if (this.isComponentEntityId(entityId)) return true;
+    if (this.componentEntities.exists(entityId)) return true;
     return this.entityToArchetype.has(entityId);
   }
 
@@ -357,32 +250,6 @@ export class World {
     this.assertComponentTypeValid(componentType);
 
     return { entityId: targetEntityId, componentType };
-  }
-
-  private getComponentEntityWildcardRelations<T>(
-    entityId: EntityId,
-    wildcardComponentType: WildcardRelationId<T>,
-  ): [EntityId<unknown>, T][] {
-    const componentId = getComponentIdFromRelationId(wildcardComponentType);
-    const data = this.componentEntityComponents.get(entityId);
-    if (componentId === undefined || !data) {
-      return [];
-    }
-
-    const relations: [EntityId<unknown>, T][] = [];
-    for (const [key, value] of data.entries()) {
-      if (getComponentIdFromRelationId(key) !== componentId) {
-        continue;
-      }
-
-      const detailed = getDetailedIdType(key);
-      if (detailed.type === "entity-relation" || detailed.type === "component-relation") {
-        // Safe: targetId is guaranteed to exist for entity-relation and component-relation types
-        relations.push([detailed.targetId, value]);
-      }
-    }
-
-    return relations;
   }
 
   /**
@@ -497,21 +364,16 @@ export class World {
     // Handle singleton component overload: has(componentId)
     if (componentType === undefined) {
       const componentId = entityId as ComponentId<T>;
-      return this.componentEntityComponents.get(componentId)?.has(componentId) ?? false;
+      return this.componentEntities.hasSingleton(componentId);
     }
 
-    if (this.isComponentEntityId(entityId)) {
+    if (this.componentEntities.exists(entityId)) {
       if (isWildcardRelationId(componentType)) {
         const componentId = getComponentIdFromRelationId(componentType);
         if (componentId === undefined) return false;
-
-        const data = this.componentEntityComponents.get(entityId);
-        if (!data) return false;
-
-        return hasWildcardRelation(data, componentId);
+        return this.componentEntities.hasWildcard(entityId, componentId);
       }
-
-      return this.componentEntityComponents.get(entityId)?.has(componentType) ?? false;
+      return this.componentEntities.has(entityId, componentType);
     }
 
     const archetype = this.entityToArchetype.get(entityId);
@@ -520,7 +382,7 @@ export class World {
     if (archetype.componentTypeSet.has(componentType)) return true;
 
     if (isDontFragmentRelation(componentType)) {
-      return this.dontFragmentRelations.get(entityId)?.has(componentType) ?? false;
+      return this.dontFragmentStore.get(entityId)?.has(componentType) ?? false;
     }
 
     return false;
@@ -554,18 +416,11 @@ export class World {
     entityId: EntityId,
     componentType: EntityId<T> | WildcardRelationId<T> = entityId as EntityId<T>,
   ): T | [EntityId<unknown>, any][] {
-    if (this.isComponentEntityId(entityId)) {
+    if (this.componentEntities.exists(entityId)) {
       if (isWildcardRelationId(componentType as EntityId<any>)) {
-        return this.getComponentEntityWildcardRelations(entityId, componentType as WildcardRelationId<T>);
+        return this.componentEntities.getWildcard(entityId, componentType as WildcardRelationId<T>);
       }
-
-      const data = this.componentEntityComponents.get(entityId);
-      if (!data || !data.has(componentType as EntityId<any>)) {
-        throw new Error(
-          `Entity ${entityId} does not have component ${componentType}. Use has() to check component existence before calling get().`,
-        );
-      }
-      return data.get(componentType as EntityId<any>);
+      return this.componentEntities.get(entityId, componentType as EntityId<T>);
     }
 
     const archetype = this.entityToArchetype.get(entityId);
@@ -576,8 +431,7 @@ export class World {
     if (componentType >= 0 || componentType % RELATION_SHIFT !== 0) {
       const inArchetype = archetype.componentTypeSet.has(componentType);
       const hasDontFragment = isDontFragmentRelation(componentType);
-      const hasComponent =
-        inArchetype || (hasDontFragment && this.dontFragmentRelations.get(entityId)?.has(componentType));
+      const hasComponent = inArchetype || (hasDontFragment && this.dontFragmentStore.get(entityId)?.has(componentType));
 
       if (!hasComponent) {
         throw new Error(
@@ -612,16 +466,13 @@ export class World {
   getOptional<T>(entityId: EntityId<T>): { value: T } | undefined;
   getOptional<T>(entityId: EntityId, componentType: EntityId<T>): { value: T } | undefined;
   getOptional<T>(entityId: EntityId, componentType: EntityId<T> = entityId as EntityId<T>): { value: T } | undefined {
-    if (this.isComponentEntityId(entityId)) {
+    if (this.componentEntities.exists(entityId)) {
       if (isWildcardRelationId(componentType)) {
-        const relations = this.getComponentEntityWildcardRelations(entityId, componentType as WildcardRelationId<any>);
+        const relations = this.componentEntities.getWildcard(entityId, componentType as WildcardRelationId<any>);
         if (relations.length === 0) return undefined;
         return { value: relations as T };
       }
-
-      const data = this.componentEntityComponents.get(entityId);
-      if (!data || !data.has(componentType)) return undefined;
-      return { value: data.get(componentType) };
+      return this.componentEntities.getOptional(entityId, componentType);
     }
 
     const archetype = this.entityToArchetype.get(entityId);
@@ -794,17 +645,7 @@ export class World {
     const sortedTypes = normalizeComponentTypes(componentTypes);
     const filterKey = serializeQueryFilter(filter);
     const key = `${this.createArchetypeSignature(sortedTypes)}${filterKey ? `|${filterKey}` : ""}`;
-
-    const cached = this.queryCache.get(key);
-    if (cached) {
-      cached.refCount++;
-      return cached.query;
-    }
-
-    const query = new Query(this, sortedTypes, filter);
-    query._cacheKey = key;
-    this.queryCache.set(key, { query, refCount: 1 });
-    return query;
+    return this.queryRegistry.getOrCreate(this, sortedTypes, key, filter);
   }
 
   /**
@@ -850,14 +691,11 @@ export class World {
   }
 
   _registerQuery(query: Query): void {
-    this.queries.push(query);
+    this.queryRegistry.register(query);
   }
 
   _unregisterQuery(query: Query): void {
-    const index = this.queries.indexOf(query);
-    if (index !== -1) {
-      this.queries.splice(index, 1);
-    }
+    this.queryRegistry.unregister(query);
   }
 
   /**
@@ -872,18 +710,7 @@ export class World {
    * world.releaseQuery(query); // Optional cleanup
    */
   releaseQuery(query: Query): void {
-    const key = query._cacheKey;
-    if (!key) return;
-
-    const cached = this.queryCache.get(key);
-    if (!cached || cached.query !== query) return;
-
-    cached.refCount--;
-    if (cached.refCount <= 0) {
-      this.queryCache.delete(key);
-      this._unregisterQuery(query);
-      cached.query._disposeInternal();
-    }
+    this.queryRegistry.release(query);
   }
 
   /**
@@ -1016,39 +843,45 @@ export class World {
     }
   }
 
-  executeEntityCommands(entityId: EntityId, commands: Command[]): ComponentChangeset {
-    const changeset = this._changeset;
-    changeset.clear();
+  executeEntityCommands(entityId: EntityId, commands: Command[]): void {
+    this._changeset.clear();
 
-    if (this.isComponentEntityId(entityId)) {
-      this.executeComponentEntityCommands(entityId, commands);
-      return changeset;
+    // 1. Route: component entities use flat-map storage
+    if (this.componentEntities.exists(entityId)) {
+      this.componentEntities.executeCommands(entityId, commands);
+      return;
     }
 
+    // 2. Route: destroy uses fast path
     if (commands.some((cmd) => cmd.type === "destroy")) {
       this.destroyEntityImmediate(entityId);
-      return changeset;
+      return;
     }
 
-    const currentArchetype = this.entityToArchetype.get(entityId);
-    if (!currentArchetype) return changeset;
+    // 3. Apply structural changes
+    this.applyEntityCommands(entityId, commands);
+  }
 
+  private applyEntityCommands(entityId: EntityId, commands: Command[]): void {
+    const currentArchetype = this.entityToArchetype.get(entityId);
+    if (!currentArchetype) return;
+
+    const changeset = this._changeset;
     processCommands(entityId, currentArchetype, commands, changeset, (eid, arch, compId) => {
       if (isExclusiveComponent(compId)) {
         removeMatchingRelations(eid, arch, compId, changeset);
       }
     });
 
-    const hasHooks = this.hooks.size > 0;
     const hasEntityRefs = changeset.removes.size > 0 || changeset.adds.size > 0;
 
-    if (!hasHooks) {
+    if (this.hooks.size === 0) {
       // Fast path: no hooks, skip removedComponents map allocation and hook triggering
       applyChangesetNoHooks(this._commandCtx, entityId, currentArchetype, changeset, this.entityToArchetype);
       if (hasEntityRefs) {
         this.updateEntityReferences(entityId, changeset);
       }
-      return changeset;
+      return;
     }
 
     const { removedComponents, newArchetype } = applyChangeset(
@@ -1070,59 +903,6 @@ export class World {
       currentArchetype,
       newArchetype,
     );
-
-    return changeset;
-  }
-
-  private executeComponentEntityCommands(entityId: EntityId, commands: Command[]): void {
-    if (commands.some((cmd) => cmd.type === "destroy")) {
-      this.clearComponentEntityComponents(entityId);
-      return;
-    }
-
-    const pendingSetValues = new Map<EntityId<any>, any>();
-
-    for (const command of commands) {
-      if (command.type === "set" && command.componentType) {
-        const merge = getComponentMerge(command.componentType);
-        let nextValue = command.component;
-        if (merge !== undefined && pendingSetValues.has(command.componentType)) {
-          const prevValue = pendingSetValues.get(command.componentType);
-          nextValue = merge(prevValue, command.component);
-        }
-
-        pendingSetValues.set(command.componentType, nextValue);
-        const data = this.getComponentEntityComponents(entityId, true)!;
-        data.set(command.componentType, nextValue);
-      } else if (command.type === "delete" && command.componentType) {
-        const data = this.componentEntityComponents.get(entityId);
-
-        if (isWildcardRelationId(command.componentType)) {
-          const componentId = getComponentIdFromRelationId(command.componentType);
-          if (componentId !== undefined) {
-            if (data) {
-              for (const key of Array.from(data.keys())) {
-                if (getComponentIdFromRelationId(key) === componentId) {
-                  data.delete(key);
-                }
-              }
-            }
-            for (const key of Array.from(pendingSetValues.keys())) {
-              if (getComponentIdFromRelationId(key) === componentId) {
-                pendingSetValues.delete(key);
-              }
-            }
-          }
-        } else {
-          data?.delete(command.componentType);
-          pendingSetValues.delete(command.componentType);
-        }
-
-        if (data?.size === 0) {
-          this.clearComponentEntityComponents(entityId);
-        }
-      }
-    }
   }
 
   private createHooksContext(): HooksContext {
@@ -1191,7 +971,7 @@ export class World {
   }
 
   private createNewArchetype(componentTypes: EntityId<any>[]): Archetype {
-    const newArchetype = new Archetype(componentTypes, this.dontFragmentRelations);
+    const newArchetype = new Archetype(componentTypes, this.dontFragmentStore);
     this.archetypes.push(newArchetype);
 
     for (const componentType of componentTypes) {
@@ -1200,10 +980,7 @@ export class World {
       this.archetypesByComponent.set(componentType, archetypes);
     }
 
-    for (const query of this.queries) {
-      query.checkNewArchetype(newArchetype);
-    }
-
+    this.queryRegistry.onNewArchetype(newArchetype);
     this.updateArchetypeHookMatches(newArchetype);
 
     return newArchetype;
@@ -1266,9 +1043,7 @@ export class World {
       }
     }
 
-    for (const query of this.queries) {
-      query.removeArchetype(archetype);
-    }
+    this.queryRegistry.onArchetypeRemoved(archetype);
   }
 
   /**
@@ -1293,37 +1068,6 @@ export class World {
    * const newWorld = new World(savedData);
    */
   serialize(): SerializedWorld {
-    const entities: SerializedEntity[] = [];
-
-    for (const archetype of this.archetypes) {
-      const dumpedEntities = archetype.dump();
-      for (const { entity, components } of dumpedEntities) {
-        entities.push({
-          id: encodeEntityId(entity),
-          components: Array.from(components.entries()).map(([rawType, value]) => ({
-            type: encodeEntityId(rawType),
-            value: value === MISSING_COMPONENT ? undefined : value,
-          })),
-        });
-      }
-    }
-
-    const componentEntities: SerializedEntity[] = [];
-    for (const [entityId, components] of this.componentEntityComponents.entries()) {
-      componentEntities.push({
-        id: encodeEntityId(entityId),
-        components: Array.from(components.entries()).map(([rawType, value]) => ({
-          type: encodeEntityId(rawType),
-          value: value === MISSING_COMPONENT ? undefined : value,
-        })),
-      });
-    }
-
-    return {
-      version: 1,
-      entityManager: this.entityIdManager.serializeState(),
-      entities,
-      componentEntities,
-    };
+    return serializeWorld(this.archetypes, this.componentEntities, this.entityIdManager);
   }
 }

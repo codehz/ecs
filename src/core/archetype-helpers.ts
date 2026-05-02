@@ -1,4 +1,5 @@
 import { MISSING_COMPONENT } from "./archetype";
+import type { DontFragmentStore } from "./dont-fragment-store";
 import type { ComponentId, EntityId, WildcardRelationId } from "./entity";
 import {
   getComponentIdFromRelationId,
@@ -165,7 +166,7 @@ export function buildSingleComponent(
   entityIndex: number,
   entityId: EntityId,
   getComponentData: (type: EntityId<any>) => any[],
-  dontFragmentRelations: Map<EntityId, Map<EntityId<any>, any>>,
+  dontFragmentRelations: DontFragmentStore,
 ): any {
   const optional = isOptionalEntityId(compType);
   const actualType = optional ? compType.optional : compType;

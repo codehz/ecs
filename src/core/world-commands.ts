@@ -2,6 +2,7 @@ import type { ComponentChangeset } from "../commands/changeset";
 import type { Command } from "../commands/command-buffer";
 import type { Archetype } from "./archetype";
 import { normalizeComponentTypes } from "./component-type-utils";
+import type { DontFragmentStore } from "./dont-fragment-store";
 import {
   getComponentIdFromRelationId,
   getComponentMerge,
@@ -15,7 +16,7 @@ import {
 } from "./entity";
 
 export interface CommandProcessorContext {
-  dontFragmentRelations: Map<EntityId, Map<EntityId<any>, any>>;
+  dontFragmentStore: DontFragmentStore;
   ensureArchetype: (componentTypes: Iterable<EntityId<any>>) => Archetype;
 }
 
@@ -326,7 +327,7 @@ function updateEntityInSameArchetype(
   removedComponents: Map<EntityId<any>, any>,
 ): void {
   // Process dontFragment relation changes directly on World's storage
-  applyDontFragmentChanges(ctx.dontFragmentRelations, entityId, changeset, removedComponents);
+  applyDontFragmentChanges(ctx.dontFragmentStore, entityId, changeset, removedComponents);
 
   // Direct update for regular components in archetype
   for (const [componentType, component] of changeset.adds) {
@@ -369,7 +370,7 @@ function updateEntityInSameArchetypeNoHooks(
   changeset: ComponentChangeset,
 ): void {
   // Process dontFragment relation changes directly on World's storage
-  applyDontFragmentChangesNoHooks(ctx.dontFragmentRelations, entityId, changeset);
+  applyDontFragmentChangesNoHooks(ctx.dontFragmentStore, entityId, changeset);
 
   // Direct update for regular components in archetype
   for (const [componentType, component] of changeset.adds) {
@@ -381,7 +382,7 @@ function updateEntityInSameArchetypeNoHooks(
 }
 
 function applyDontFragmentChanges(
-  dontFragmentRelations: Map<EntityId, Map<EntityId<any>, any>>,
+  dontFragmentRelations: DontFragmentStore,
   entityId: EntityId,
   changeset: ComponentChangeset,
   removedComponents: Map<EntityId<any>, any>,
@@ -421,7 +422,7 @@ function applyDontFragmentChanges(
  * No-hooks variant of applyDontFragmentChanges that skips tracking removed component data.
  */
 function applyDontFragmentChangesNoHooks(
-  dontFragmentRelations: Map<EntityId, Map<EntityId<any>, any>>,
+  dontFragmentRelations: DontFragmentStore,
   entityId: EntityId,
   changeset: ComponentChangeset,
 ): void {
