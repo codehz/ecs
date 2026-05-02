@@ -1,4 +1,4 @@
-// scripts/dist.ts - 构建脚本
+// Build script
 
 import { $ } from "bun";
 import { build as tsdownBuild } from "tsdown";
@@ -6,14 +6,14 @@ import { build as tsdownBuild } from "tsdown";
 export async function build() {
   const startTime = Date.now();
 
-  // 清空 dist 目录
+  // Clean dist directory
   console.log("🧹 Cleaning dist directory...");
   await $`rm -rf dist`;
 
   const entrypoints = ["src/index.ts"];
   console.log(`📋 Found ${entrypoints.length} entrypoints to build`);
 
-  // 使用 Bun.build 构建所有入口点
+  // Build all entry points with tsdown
   console.log("🔨 Building workflow library...");
   await tsdownBuild({
     entry: entrypoints,
@@ -22,17 +22,17 @@ export async function build() {
     sourcemap: true,
   });
 
-  // 输出构建结果
+  // Output build result
   const buildTime = Date.now() - startTime;
   console.log(`✅ Build successful in ${buildTime}ms!`);
 
-  // 生成类型定义
+  // Generate type declarations
   console.log("📝 Generating TypeScript declarations...");
   await $`bunx tsc --project tsconfig.build.json`;
   console.log("✅ TypeScript declarations generated!");
 }
 
-// 如果直接运行此脚本，执行构建
+// If this script is run directly, execute build
 if (import.meta.main) {
   await build();
 }

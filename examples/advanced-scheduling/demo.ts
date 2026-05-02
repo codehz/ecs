@@ -1,33 +1,33 @@
 import { pipeline } from "@codehz/pipeline";
 import { World, component, type Query } from "../../src";
 
-// 定义组件类型
+// Define component types
 type Position = { x: number; y: number };
 type Velocity = { x: number; y: number };
 type Health = { value: number };
 
-// 定义组件ID
+// Define component IDs
 const PositionId = component<Position>();
 const VelocityId = component<Velocity>();
 const HealthId = component<Health>();
 
-// 创建世界
+// Create the world
 const world = new World();
 
-// 缓存查询
+// Cache queries
 const movementQuery: Query = world.createQuery([PositionId, VelocityId]);
 const damageQuery: Query = world.createQuery([PositionId, HealthId]);
 const renderQuery: Query = world.createQuery([PositionId]);
 
-// 使用 pipeline 构建游戏循环
-// Pass 的执行顺序由添加顺序决定，无需手动管理依赖关系
+// Build game loop using pipeline
+// Pass execution order is determined by addition order; no need to manually manage dependencies
 const gameLoop = pipeline<{ deltaTime: number }>()
-  // Input pass - 处理用户输入
+  // Input pass - handle user input
   .addPass(() => {
     console.log(`[InputPass] Processing input at ${Date.now()}`);
-    // 这里可以处理键盘/鼠标输入等
+    // Keyboard/mouse input handling etc. goes here
   })
-  // Movement pass - 更新位置
+  // Movement pass - update positions
   .addPass((env) => {
     console.log(`[MovementPass] Updating positions`);
     movementQuery.forEach([PositionId, VelocityId], (entity, position, velocity) => {
@@ -36,24 +36,24 @@ const gameLoop = pipeline<{ deltaTime: number }>()
       console.log(`  Entity ${entity}: Position (${position.x.toFixed(2)}, ${position.y.toFixed(2)})`);
     });
   })
-  // Damage pass - 根据位置计算伤害
+  // Damage pass - calculate damage based on position
   .addPass(() => {
     console.log(`[DamagePass] Applying damage based on position`);
     damageQuery.forEach([PositionId, HealthId], (entity, position, health) => {
-      // 根据位置计算伤害（示例逻辑）
+      // Calculate damage based on position (example logic)
       const damage = Math.abs(position.x) * 0.1;
       health.value -= damage;
       console.log(`  Entity ${entity}: Health reduced by ${damage.toFixed(2)}, now ${health.value.toFixed(2)}`);
     });
   })
-  // Render pass - 渲染实体
+  // Render pass - render entities
   .addPass(() => {
     console.log(`[RenderPass] Rendering entities`);
     renderQuery.forEach([PositionId], (entity, position) => {
       console.log(`  Rendering Entity ${entity} at (${position.x.toFixed(2)}, ${position.y.toFixed(2)})`);
     });
   })
-  // Sync pass - 必须作为最后一个 pass 调用以执行所有延迟命令
+  // Sync pass - must be called as the last pass to execute all deferred commands
   .addPass(() => {
     world.sync();
   })
@@ -63,7 +63,7 @@ function main() {
   console.log("ECS Advanced Scheduling Demo - Pipeline-based Execution");
   console.log("========================================================");
 
-  // 创建一些实体
+  // Create some entities
   const entity1 = world.new();
   world.set(entity1, PositionId, { x: 0, y: 0 });
   world.set(entity1, VelocityId, { x: 2, y: 1 });
@@ -74,10 +74,10 @@ function main() {
   world.set(entity2, VelocityId, { x: -1, y: 0.5 });
   world.set(entity2, HealthId, { value: 80 });
 
-  // 执行初始同步
+  // Execute initial sync
   world.sync();
 
-  // 运行几帧
+  // Run a few frames
   console.log("\n--- Frame 1 ---");
   gameLoop({ deltaTime: 1.0 });
 

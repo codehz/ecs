@@ -27,7 +27,7 @@ import { build } from "tsdown";
 console.log("🚀 Starting release process...");
 const startTime = Date.now();
 
-// 获取最新 git tag
+// Get latest git tag
 console.log("🏷️  Getting latest git tag...");
 const tagOutput = await Bun.$`git describe --tags --abbrev=0`;
 const tag = tagOutput.text().trim();
@@ -38,7 +38,7 @@ const pkgPath = "package.json";
 const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
 pkg.version = version;
 
-// 运行构建
+// Run build
 console.log("🔨 Running build process...");
 const entries = [
   { name: "index", path: "/index.ts" },
@@ -52,7 +52,7 @@ await build({
   hash: false,
 });
 
-// 生成 exports
+// Generate exports
 const exports: Record<string, any> = Object.fromEntries(
   entries.map((e) => [
     `.${e.name === "index" ? "" : "/" + e.name}`,
@@ -64,7 +64,7 @@ const exports: Record<string, any> = Object.fromEntries(
 );
 console.log(`📦 Generated exports for ${Object.keys(exports).length} files`);
 
-// 创建 dist/package.json
+// Create dist/package.json
 console.log("📄 Creating dist/package.json...");
 const publishPkg = {
   name: pkg.name,
@@ -82,12 +82,12 @@ const publishPkg = {
 writeFileSync(join("dist", "package.json"), JSON.stringify(publishPkg, null, 2));
 console.log("✅ dist/package.json created");
 
-// 复制 LICENSE 文件到 dist
+// Copy LICENSE file to dist
 console.log("📋 Copying LICENSE file...");
 await Bun.$`cp LICENSE dist/LICENSE`;
 console.log("✅ LICENSE copied");
 
-// 复制所有 README 文件到 dist
+// Copy all README files to dist复制所有 README 文件到 dist
 console.log("📖 Copying README files...");
 const readmeFiles = readdirSync(".").filter(
   (f) => typeof f === "string" && f.startsWith("README") && f.endsWith(".md"),

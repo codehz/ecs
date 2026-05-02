@@ -1,22 +1,22 @@
 import { pipeline } from "@codehz/pipeline";
 import { component, relation, World, type Query } from "../../src";
 
-// 定义组件类型
+// Define component types
 type Position = { x: number; y: number };
 type Velocity = { x: number; y: number };
 
-// 定义组件ID
+// Define component IDs
 const PositionId = component<Position>();
 const VelocityId = component<Velocity>();
 const ChildOf = component({ exclusive: true }); // Exclusive relation component
 
-// 创建世界
+// Create the world
 const world = new World();
 
-// 预先缓存查询
+// Pre-cache queries
 const movementQuery: Query = world.createQuery([PositionId, VelocityId]);
 
-// 使用 pipeline 构建游戏循环
+// Build game loop using pipeline
 const gameLoop = pipeline<{ deltaTime: number }>()
   // Movement pass
   .addPass((env) => {
@@ -26,7 +26,7 @@ const gameLoop = pipeline<{ deltaTime: number }>()
       console.log(`Entity ${entity}: Position (${position.x.toFixed(2)}, ${position.y.toFixed(2)})`);
     });
   })
-  // Sync pass - 必须作为最后一个 pass 调用以执行所有延迟命令
+  // Sync pass - must be called as the last pass to execute all deferred commands
   .addPass(() => {
     world.sync();
   })
@@ -35,17 +35,17 @@ const gameLoop = pipeline<{ deltaTime: number }>()
 function main() {
   console.log("ECS Simple Demo");
 
-  // 创建实体1
+  // Create entity 1
   const entity1 = world.new();
   world.set(entity1, PositionId, { x: 0, y: 0 });
   world.set(entity1, VelocityId, { x: 1, y: 0.5 });
 
-  // 创建实体2
+  // Create entity 2
   const entity2 = world.new();
   world.set(entity2, PositionId, { x: 10, y: 10 });
   world.set(entity2, VelocityId, { x: -0.5, y: 1 });
 
-  // 演示Exclusive Relations
+  // Demonstrate Exclusive Relations
   console.log("\nExclusive Relations Demo:");
   const parent1 = world.new();
   const parent2 = world.new();
@@ -53,49 +53,49 @@ function main() {
 
   // ChildOf is already marked as exclusive in component definition
 
-  // 添加第一个parent relation
+  // Add first parent relation
   world.set(child, relation(ChildOf, parent1));
   world.sync();
   console.log(`Child has ChildOf(parent1): ${world.has(child, relation(ChildOf, parent1))}`);
   console.log(`Child has ChildOf(parent2): ${world.has(child, relation(ChildOf, parent2))}`);
 
-  // 添加第二个parent relation - 应该替换第一个
+  // Add second parent relation - should replace the first
   world.set(child, relation(ChildOf, parent2));
   world.sync();
   console.log(`After adding ChildOf(parent2):`);
   console.log(`Child has ChildOf(parent1): ${world.has(child, relation(ChildOf, parent1))}`);
   console.log(`Child has ChildOf(parent2): ${world.has(child, relation(ChildOf, parent2))}`);
 
-  // 注册组件钩子
+  // Register component hooks
   world.hook([PositionId], {
     on_set: (entityId, component) => {
-      console.log(`组件添加钩子触发: 实体 ${entityId} 的 Position 值为 (${component.x}, ${component.y})`);
+      console.log(`Component set hook triggered: Entity ${entityId} Position is (${component.x}, ${component.y})`);
     },
   });
 
   world.hook([VelocityId], {
     on_remove: (entityId) => {
-      console.log(`组件移除钩子触发: 实体 ${entityId} 移除了 Velocity 组件`);
+      console.log(`Component remove hook triggered: Entity ${entityId} removed Velocity component`);
     },
   });
 
-  // 执行命令以应用组件添加
+  // Execute commands to apply component additions
   world.sync();
 
-  // 运行几个更新循环
-  const deltaTime = 1.0; // 1秒
+  // Run a few update cycles
+  const deltaTime = 1.0; // 1 second
   for (let i = 0; i < 5; i++) {
     console.log(`\nUpdate ${i + 1}:`);
     gameLoop({ deltaTime });
   }
 
-  // 演示组件移除钩子
-  console.log("\n移除组件演示:");
+  // Demonstrate component removal hooks
+  console.log("\nComponent Removal Demo:");
   world.remove(entity1, VelocityId);
   world.sync();
 
   console.log("\nDemo completed!");
 }
 
-// 运行demo
+// Run demo
 main();

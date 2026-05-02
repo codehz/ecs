@@ -1,46 +1,46 @@
-# @codehz/ecs AI 指南
+# @codehz/ecs AI Guide
 
-## 项目概览
+## Project Overview
 
-- TypeScript + Bun 的高性能 ECS（Archetype 存储 + Query 缓存 + CommandBuffer 延迟结构变更）。
-- 无内置 System/Scheduler；游戏循环推荐使用 `@codehz/pipeline`，并在最后一个 pass 调用 `world.sync()`。
+- High-performance ECS in TypeScript + Bun (Archetype storage + Query cache + CommandBuffer deferred structural changes).
+- No built-in System/Scheduler; the game loop is recommended to use `@codehz/pipeline`, with `world.sync()` called in the last pass.
 
-## 关键目录
+## Key Directories
 
-- 核心实现：src/core（world、archetype、entity、query、command-buffer）。
-- 入口导出：src/index.ts 统一对外 API。
-- 示例：examples/simple/demo.ts 与 examples/advanced-scheduling/demo.ts。
-- 构建/发布：scripts/build.ts、scripts/release.ts。
+- Core implementation: `src/core` (world, archetype, entity, query, command-buffer).
+- Entry exports: `src/index.ts` unified external API.
+- Examples: `examples/simple/demo.ts` and `examples/advanced-scheduling/demo.ts`.
+- Build/Release: `scripts/build.ts`, `scripts/release.ts`.
 
-## 运行与验证（Bun）
+## Running & Verification (Bun)
 
-- 安装：bun install
-- 测试：bun test（_.test.ts，性能用 _.perf.test.ts）
-- 类型检查：bunx tsc --noEmit
-- 示例：bun run examples/simple/demo.ts
-- 构建：bun run scripts/build.ts
+- Install: `bun install`
+- Test: `bun test` (`*.test.ts`, performance with `*.perf.test.ts`)
+- Type check: `bunx tsc --noEmit`
+- Example: `bun run examples/simple/demo.ts`
+- Build: `bun run scripts/build.ts`
 
-## 设计与数据流（必须理解）
+## Design & Data Flow (Must Understand)
 
-- 结构变更（set/remove/delete/spawn/build）会进入命令缓冲区，**必须调用 `world.sync()` 才生效**。
-- Query 需长期复用：通过 `world.createQuery(...)` 预创建并缓存，循环内直接 `forEach`。
-- Entity/Component ID 规则：组件 ID 1–1023，实体 ID 1024+，关系 ID 为负编码（relation）。
+- Structural changes (`set`/`remove`/`delete`/`spawn`/`build`) enter the command buffer; **`world.sync()` must be called for them to take effect**.
+- Queries should be reused long-term: pre-create and cache via `world.createQuery(...)`, then use `forEach` directly in the loop.
+- Entity/Component ID rules: Component IDs 1–1023, Entity IDs 1024+, Relation IDs are negative-encoded (relation).
 
-## 易踩坑与约定
+## Common Pitfalls & Conventions
 
-- `world.get()` 在组件不存在时抛错；`undefined` 是合法值。务必先 `has()` 或使用 `getOptional()`。
-- 序列化为“内存快照”：`world.serialize()` 返回对象，`new World(snapshot)` 复原；若要持久化需自定义编码/解码。
-- 关系组件：`relation(componentId, targetId)`；通配符关系用 `relation(componentId, "*")` 监听所有目标。
-- 独占关系：组件声明 `exclusive: true`，同类型关系会自动互斥。
+- `world.get()` throws an error if the component does not exist; `undefined` is a valid value. Always use `has()` first or use `getOptional()`.
+- Serialization is an "in-memory snapshot": `world.serialize()` returns an object, `new World(snapshot)` restores it; for persistence, custom encode/decode is needed.
+- Relation components: `relation(componentId, targetId)`; wildcard relations use `relation(componentId, "*")` to listen to all targets.
+- Exclusive relations: declare `exclusive: true` in the component definition; same-type relations automatically exclude each other.
 
-## 示例模式（来自代码库）
+## Example Patterns (from the codebase)
 
-- Pipeline 末尾统一 `world.sync()`：见 examples/simple/demo.ts。
-- 多组件/可选组件钩子：见 README.md “多组件生命周期钩子”。
-- EntityBuilder：`world.spawn().with(...).build(); world.sync();`。
+- Unified `world.sync()` at the end of a Pipeline: see `examples/simple/demo.ts`.
+- Multi-component/optional component hooks: see README.md "Multi-Component Lifecycle Hooks".
+- EntityBuilder: `world.spawn().with(...).build(); world.sync();`.
 
-## 修改时需注意
+## Notes for Modifications
 
-- 保持公共 API：`World`、`component`、`relation` 等导出不要改名/删除。
-- 入口为 ESM；允许 `.ts` 扩展导入。
-- 优先在 src/core 内补充核心逻辑，在 src/index.ts 暴露新 API。
+- Keep the public API: `World`, `component`, `relation`, etc. exports should not be renamed or removed.
+- Entry is ESM; `.ts` extension imports are allowed.
+- Prioritize adding core logic in `src/core`, and expose new APIs in `src/index.ts`.

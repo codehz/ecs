@@ -1,35 +1,35 @@
 import { World, component } from "../index";
 
-// 定义组件类型
+// Define component types
 type Position = { x: number; y: number };
 type Velocity = { x: number; y: number };
 type Health = { value: number };
 
-// 创建组件ID
+// Create component IDs
 const positionComponent = component<Position>();
 const velocityComponent = component<Velocity>();
 const healthComponent = component<Health>();
 
-// 性能测试函数
+// Performance test function
 function performanceTest() {
   console.log("=== Query Performance Test ===");
 
   const world = new World();
 
-  // 创建大量实体
+  // Create many entities
   console.log("Creating 1000 entities...");
   const startCreate = performance.now();
 
   for (let i = 0; i < 1000; i++) {
     const entity = world.new();
 
-    // 添加位置组件
+    // Add position component
     world.set(entity, positionComponent, {
       x: Math.random() * 100,
       y: Math.random() * 100,
     });
 
-    // 50%的实体有速度组件
+    // 50% of entities have velocity component
     if (i % 2 === 0) {
       world.set(entity, velocityComponent, {
         x: Math.random() - 0.5,
@@ -37,7 +37,7 @@ function performanceTest() {
       });
     }
 
-    // 25%的实体有生命值组件
+    // 25% of entities have health component
     if (i % 4 === 0) {
       world.set(entity, healthComponent, {
         value: Math.floor(Math.random() * 100) + 1,
@@ -50,11 +50,11 @@ function performanceTest() {
   const endCreate = performance.now();
   console.log(`Entity creation time: ${(endCreate - startCreate).toFixed(2)}ms`);
 
-  // 创建查询
+  // Create queries
   const positionVelocityQuery = world.createQuery([positionComponent, velocityComponent]);
   const healthQuery = world.createQuery([healthComponent]);
 
-  // 测试getEntitiesWithComponents性能
+  // Test getEntitiesWithComponents performance
   console.log("\nTesting getEntitiesWithComponents performance...");
   const iterations = 100;
 
@@ -67,19 +67,19 @@ function performanceTest() {
   }
   console.log(`Average getEntitiesWithComponents time: ${(totalTime / iterations).toFixed(4)}ms`);
 
-  // 测试forEach性能
+  // Test forEach performance
   totalTime = 0;
   for (let i = 0; i < iterations; i++) {
     const start = performance.now();
     positionVelocityQuery.forEach([positionComponent, velocityComponent], (_entity, _position, _velocity) => {
-      // 空操作，只是为了测量遍历性能
+      // No-op, just for measuring iteration performance
     });
     const end = performance.now();
     totalTime += end - start;
   }
   console.log(`Average forEach time: ${(totalTime / iterations).toFixed(4)}ms`);
 
-  // 验证结果正确性
+  // Verify result correctness
   const entitiesWithData = positionVelocityQuery.getEntitiesWithComponents([positionComponent, velocityComponent]);
   console.log(`\nFound ${entitiesWithData.length} entities with position and velocity`);
 
@@ -89,7 +89,7 @@ function performanceTest() {
   });
   console.log(`forEach iterated over ${forEachCount} entities`);
 
-  // 清理
+  // Cleanup
   positionVelocityQuery.dispose();
   healthQuery.dispose();
 

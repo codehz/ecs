@@ -1120,7 +1120,7 @@ export class World {
   private removeArchetype(archetype: Archetype): void {
     const index = this.archetypes.indexOf(archetype);
     if (index !== -1) {
-      // swap-and-pop: O(1) 删除
+      // swap-and-pop: O(1) removal
       const last = this.archetypes[this.archetypes.length - 1]!;
       this.archetypes[index] = last;
       this.archetypes.pop();
