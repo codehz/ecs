@@ -3,6 +3,25 @@ import { getComponentIdFromRelationId, getTargetIdFromRelationId, isWildcardRela
 import { isOptionalEntityId, type ComponentType, type LifecycleHookEntry } from "./types";
 
 /**
+ * Unified hook invocation: prefers entry.callback (callback style) over hook.on_* (object style).
+ */
+function invokeHook(
+  entry: LifecycleHookEntry,
+  event: "init" | "set" | "remove",
+  entityId: EntityId,
+  components: any[],
+): void {
+  if (entry.callback) {
+    entry.callback(event as any, entityId, ...components);
+    return;
+  }
+  const hook = entry.hook;
+  if (event === "init") hook.on_init?.(entityId, ...components);
+  else if (event === "set") hook.on_set?.(entityId, ...components);
+  else hook.on_remove?.(entityId, ...components);
+}
+
+/**
  * Check if a component change matches a hook component type.
  * Handles wildcard-relation matching: if hookComponent is a wildcard relation (e.g., relation(A, "*")),
  * it matches any concrete relation with the same component ID (e.g., relation(A, entity1)).
@@ -82,8 +101,10 @@ export function triggerRemoveHooksForEntityDeletion(
 
   // Trigger multi-component hooks - only on_remove since entity is being deleted
   for (const entry of oldArchetype.matchingMultiHooks) {
-    const { hook, requiredComponents, componentTypes } = entry;
-    if (!hook.on_remove) continue;
+    const { requiredComponents, componentTypes } = entry;
+
+    // Skip if neither callback-style nor hook-style on_remove is provided
+    if (!entry.callback && !entry.hook.on_remove) continue;
 
     // Check if any required component was removed
     const anyRequiredRemoved = requiredComponents.some((c) => anyComponentMatches(removedComponents, c));
@@ -98,7 +119,7 @@ export function triggerRemoveHooksForEntityDeletion(
 
     // Collect component values from removedComponents directly (no entity lookup needed)
     const components = collectComponentsFromRemoved(componentTypes, removedComponents);
-    hook.on_remove(entityId, ...components);
+    invokeHook(entry, "remove", entityId, components);
   }
 }
 
@@ -114,8 +135,10 @@ function triggerMultiComponentHooks(
   // 1. Required/optional components changed while entity still matches
   // 2. Entity entered the matching set (e.g. removed a negative filter component)
   for (const entry of newArchetype.matchingMultiHooks) {
-    const { hook, requiredComponents, optionalComponents, componentTypes } = entry;
-    if (!hook.on_set) continue;
+    const { requiredComponents, optionalComponents, componentTypes } = entry;
+
+    // Skip if neither callback-style nor hook-style on_set is provided
+    if (!entry.callback && !entry.hook.on_set) continue;
 
     const anyRequiredAdded = requiredComponents.some((c) => anyComponentMatches(addedComponents, c));
     const anyOptionalAdded = optionalComponents.some((c) => anyComponentMatches(addedComponents, c));
@@ -126,7 +149,8 @@ function triggerMultiComponentHooks(
       enteredMatchingSet || (hasRelevantComponentChange && entityHasAllComponents(ctx, entityId, requiredComponents));
 
     if (shouldTriggerSet) {
-      hook.on_set(entityId, ...collectMultiHookComponents(ctx, entityId, componentTypes));
+      const components = collectMultiHookComponents(ctx, entityId, componentTypes);
+      invokeHook(entry, "set", entityId, components);
     }
   }
 
@@ -134,8 +158,10 @@ function triggerMultiComponentHooks(
   // 1. Required component removal made the entity stop matching
   // 2. Entity exited the matching set (e.g. added a negative filter component)
   for (const entry of oldArchetype.matchingMultiHooks) {
-    const { hook, requiredComponents, componentTypes } = entry;
-    if (!hook.on_remove) continue;
+    const { requiredComponents, componentTypes } = entry;
+
+    // Skip if neither callback-style nor hook-style on_remove is provided
+    if (!entry.callback && !entry.hook.on_remove) continue;
 
     const anyRequiredRemoved = requiredComponents.some((c) => anyComponentMatches(removedComponents, c));
     const lostRequiredMatch =
@@ -146,10 +172,8 @@ function triggerMultiComponentHooks(
     const shouldTriggerRemove = lostRequiredMatch || exitedMatchingSet;
 
     if (shouldTriggerRemove) {
-      hook.on_remove(
-        entityId,
-        ...collectMultiHookComponentsWithRemoved(ctx, entityId, componentTypes, removedComponents),
-      );
+      const components = collectMultiHookComponentsWithRemoved(ctx, entityId, componentTypes, removedComponents);
+      invokeHook(entry, "remove", entityId, components);
     }
   }
 }

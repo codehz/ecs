@@ -2,6 +2,7 @@ import type { Archetype } from "../core/archetype";
 import { normalizeComponentTypes } from "../core/component-type-utils";
 import type { EntityId, WildcardRelationId } from "../core/entity";
 import { getDetailedIdType, isDontFragmentComponent } from "../core/entity";
+import type { QueryRegistry } from "../core/query-registry";
 import type { ComponentTuple, ComponentType } from "../core/types";
 import type { World } from "../core/world";
 import { matchesComponentTypes, matchesFilter, type QueryFilter } from "./filter";
@@ -38,7 +39,7 @@ export class Query {
   /**
    * @internal Queries should be created via {@link World.createQuery}, not instantiated directly.
    */
-  constructor(world: World, componentTypes: EntityId<any>[], filter: QueryFilter = {}) {
+  constructor(world: World, componentTypes: EntityId<any>[], filter: QueryFilter = {}, registry?: QueryRegistry) {
     this.world = world;
     this.componentTypes = normalizeComponentTypes(componentTypes);
     this.filter = filter;
@@ -56,8 +57,10 @@ export class Query {
       );
     });
     this.updateCache();
-    // Register with world for archetype updates
-    world._registerQuery(this);
+    // Register with registry for archetype updates
+    if (registry) {
+      registry.register(this);
+    }
   }
 
   /**
@@ -279,10 +282,12 @@ export class Query {
   /**
    * @internal Fully disposes the query when the world's refCount reaches zero.
    */
-  _disposeInternal(): void {
+  _disposeInternal(registry?: QueryRegistry): void {
     if (!this.isDisposed) {
-      // Unregister from world (remove from notification list)
-      this.world._unregisterQuery(this);
+      // Unregister from registry (remove from notification list)
+      if (registry) {
+        registry.unregister(this);
+      }
       this.cachedArchetypes = [];
       this.isDisposed = true;
     }

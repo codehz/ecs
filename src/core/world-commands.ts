@@ -239,148 +239,48 @@ export function applyChangeset(
   currentArchetype: Archetype,
   changeset: ComponentChangeset,
   entityToArchetype: Map<EntityId, Archetype>,
-): { removedComponents: Map<EntityId<any>, any>; newArchetype: Archetype } {
-  const removedComponents = new Map<EntityId<any>, any>();
-  pruneMissingRemovals(changeset, currentArchetype, entityId);
-  const archetypeChanged = hasArchetypeStructuralChange(changeset, currentArchetype);
-
-  if (archetypeChanged) {
-    const finalRegularTypes = buildFinalRegularComponentTypes(currentArchetype, changeset);
-    const newArchetype = moveEntityToNewArchetype(
-      ctx,
-      entityId,
-      currentArchetype,
-      finalRegularTypes,
-      changeset,
-      removedComponents,
-      entityToArchetype,
-    );
-    return { removedComponents, newArchetype };
-  }
-
-  // No archetype move needed: only component payload updates and/or dontFragment relation updates.
-  updateEntityInSameArchetype(ctx, entityId, currentArchetype, changeset, removedComponents);
-
-  return { removedComponents, newArchetype: currentArchetype };
-}
-
-/**
- * Optimized variant of applyChangeset for when no lifecycle hooks are registered.
- * Skips creating the removedComponents map, reducing allocations in the hot path.
- */
-export function applyChangesetNoHooks(
-  ctx: CommandProcessorContext,
-  entityId: EntityId,
-  currentArchetype: Archetype,
-  changeset: ComponentChangeset,
-  entityToArchetype: Map<EntityId, Archetype>,
+  removedComponents: Map<EntityId<any>, any> | null,
 ): Archetype {
   pruneMissingRemovals(changeset, currentArchetype, entityId);
   const archetypeChanged = hasArchetypeStructuralChange(changeset, currentArchetype);
 
   if (archetypeChanged) {
     const finalRegularTypes = buildFinalRegularComponentTypes(currentArchetype, changeset);
-    return moveEntityToNewArchetypeNoHooks(
-      ctx,
-      entityId,
-      currentArchetype,
-      finalRegularTypes,
-      changeset,
-      entityToArchetype,
-    );
+    const newArchetype = ctx.ensureArchetype(finalRegularTypes);
+    const currentComponents = currentArchetype.removeEntity(entityId)!;
+
+    if (removedComponents !== null) {
+      for (const componentType of changeset.removes) {
+        removedComponents.set(componentType, currentComponents.get(componentType));
+      }
+    }
+
+    newArchetype.addEntity(entityId, changeset.applyTo(currentComponents));
+    entityToArchetype.set(entityId, newArchetype);
+    return newArchetype;
   }
 
-  // No archetype move: only component payload updates and/or dontFragment relation updates.
-  updateEntityInSameArchetypeNoHooks(ctx, entityId, currentArchetype, changeset);
+  // No archetype move needed: only component payload updates and/or dontFragment relation updates.
+  if (removedComponents !== null) {
+    applyDontFragmentChanges(ctx.dontFragmentStore, entityId, changeset, removedComponents);
+  } else {
+    applyDontFragmentChangesNoHooks(ctx.dontFragmentStore, entityId, changeset);
+  }
+
+  // Direct update for regular components in archetype
+  for (const [componentType, component] of changeset.adds) {
+    if (isDontFragmentRelation(componentType)) {
+      continue;
+    }
+    currentArchetype.set(entityId, componentType, component);
+  }
 
   return currentArchetype;
 }
 
-function moveEntityToNewArchetype(
-  ctx: CommandProcessorContext,
-  entityId: EntityId,
-  currentArchetype: Archetype,
-  finalComponentTypes: EntityId<any>[],
-  changeset: ComponentChangeset,
-  removedComponents: Map<EntityId<any>, any>,
-  entityToArchetype: Map<EntityId, Archetype>,
-): Archetype {
-  const newArchetype = ctx.ensureArchetype(finalComponentTypes);
-  const currentComponents = currentArchetype.removeEntity(entityId)!;
-
-  // Track removed components
-  for (const componentType of changeset.removes) {
-    removedComponents.set(componentType, currentComponents.get(componentType));
-  }
-
-  // Add to new archetype with updated components
-  newArchetype.addEntity(entityId, changeset.applyTo(currentComponents));
-  entityToArchetype.set(entityId, newArchetype);
-  return newArchetype;
-}
-
-function updateEntityInSameArchetype(
-  ctx: CommandProcessorContext,
-  entityId: EntityId,
-  currentArchetype: Archetype,
-  changeset: ComponentChangeset,
-  removedComponents: Map<EntityId<any>, any>,
-): void {
-  // Process dontFragment relation changes directly on World's storage
-  applyDontFragmentChanges(ctx.dontFragmentStore, entityId, changeset, removedComponents);
-
-  // Direct update for regular components in archetype
-  for (const [componentType, component] of changeset.adds) {
-    if (isDontFragmentRelation(componentType)) {
-      continue;
-    }
-    currentArchetype.set(entityId, componentType, component);
-  }
-}
-
 /**
- * No-hooks variant: moves entity to new archetype without collecting removed component data.
- * Only called from applyChangesetNoHooks when no lifecycle hooks are registered.
+ * No-hooks variant of applyDontFragmentChanges that skips tracking removed component data.
  */
-function moveEntityToNewArchetypeNoHooks(
-  ctx: CommandProcessorContext,
-  entityId: EntityId,
-  currentArchetype: Archetype,
-  finalComponentTypes: EntityId<any>[],
-  changeset: ComponentChangeset,
-  entityToArchetype: Map<EntityId, Archetype>,
-): Archetype {
-  const newArchetype = ctx.ensureArchetype(finalComponentTypes);
-  const currentComponents = currentArchetype.removeEntity(entityId)!;
-
-  // Add to new archetype with updated components
-  newArchetype.addEntity(entityId, changeset.applyTo(currentComponents));
-  entityToArchetype.set(entityId, newArchetype);
-  return newArchetype;
-}
-
-/**
- * No-hooks variant: updates entity in same archetype without tracking removed component data.
- * Only called from applyChangesetNoHooks when no lifecycle hooks are registered.
- */
-function updateEntityInSameArchetypeNoHooks(
-  ctx: CommandProcessorContext,
-  entityId: EntityId,
-  currentArchetype: Archetype,
-  changeset: ComponentChangeset,
-): void {
-  // Process dontFragment relation changes directly on World's storage
-  applyDontFragmentChangesNoHooks(ctx.dontFragmentStore, entityId, changeset);
-
-  // Direct update for regular components in archetype
-  for (const [componentType, component] of changeset.adds) {
-    if (isDontFragmentRelation(componentType)) {
-      continue;
-    }
-    currentArchetype.set(entityId, componentType, component);
-  }
-}
-
 function applyDontFragmentChanges(
   dontFragmentRelations: DontFragmentStore,
   entityId: EntityId,
@@ -418,9 +318,6 @@ function applyDontFragmentChanges(
   }
 }
 
-/**
- * No-hooks variant of applyDontFragmentChanges that skips tracking removed component data.
- */
 function applyDontFragmentChangesNoHooks(
   dontFragmentRelations: DontFragmentStore,
   entityId: EntityId,

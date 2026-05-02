@@ -29,7 +29,6 @@ import type { ComponentTuple, ComponentType, LifecycleCallback, LifecycleHook, L
 import { isOptionalEntityId } from "./types";
 import {
   applyChangeset,
-  applyChangesetNoHooks,
   filterRegularComponentTypes,
   maybeRemoveWildcardMarker,
   processCommands,
@@ -60,8 +59,10 @@ export class World {
   private archetypes: Archetype[] = [];
   private archetypeBySignature = new Map<string, Archetype>();
   private entityToArchetype = new Map<EntityId, Archetype>();
-  private archetypesByComponent = new Map<EntityId<any>, Archetype[]>();
+  private archetypesByComponent = new Map<EntityId<any>, Set<Archetype>>();
   private entityReferences: EntityReferencesMap = new Map();
+  /** Reverse index: entity ID → set of archetypes whose componentTypes include that entity ID */
+  private entityToReferencingArchetypes = new Map<EntityId, Set<Archetype>>();
   /** DontFragment relation storage, shared with all Archetype instances */
   private readonly dontFragmentStore = new DontFragmentStoreImpl();
   /** Component entity (singleton) storage */
@@ -78,6 +79,7 @@ export class World {
 
   // Reusable instances to reduce per-frame allocations
   private readonly _changeset = new ComponentChangeset();
+  private readonly _removeChangeset = new ComponentChangeset();
   /** Cached command processor context to avoid per-entity object allocation */
   private readonly _commandCtx: CommandProcessorContext = {
     dontFragmentStore: this.dontFragmentStore,
@@ -130,7 +132,47 @@ export class World {
     return entityId as EntityId<T>;
   }
 
+  /**
+   * Semantic alias for `new()` to avoid confusion with the `new` keyword.
+   * Creates a new entity with an empty component set.
+   *
+   * @example
+   * const entity = world.create<MyComponent>();
+   */
+  create<T = void>(): EntityId<T> {
+    return this.new<T>();
+  }
+
+  /** Fast path: destroy an entity that is not referenced by any other entity, skipping BFS */
+  private destroySingleEntity(entityId: EntityId): void {
+    const archetype = this.entityToArchetype.get(entityId);
+    if (!archetype) return;
+
+    // Handle entity references (this entity references other entities)
+    for (const [sourceEntityId, componentType] of getEntityReferences(this.entityReferences, entityId)) {
+      if (this.entityToArchetype.has(sourceEntityId)) {
+        this.removeComponentImmediate(sourceEntityId, componentType, entityId);
+      }
+    }
+
+    this.entityReferences.delete(entityId);
+    const removedComponents = archetype.removeEntity(entityId)!;
+    this.entityToArchetype.delete(entityId);
+
+    triggerRemoveHooksForEntityDeletion(entityId, removedComponents, archetype);
+
+    this.cleanupArchetypesReferencingEntity(entityId);
+    this.entityIdManager.deallocate(entityId);
+    this.componentEntities.cleanupReferencesTo(entityId);
+  }
+
   private destroyEntityImmediate(entityId: EntityId): void {
+    // Fast path: no other entity references this one, delete directly
+    if (!this.entityReferences.has(entityId)) {
+      this.destroySingleEntity(entityId);
+      return;
+    }
+
     const queue: EntityId[] = [entityId];
     const visited = new Set<EntityId>();
     let queueIndex = 0;
@@ -542,14 +584,8 @@ export class World {
     hook: LifecycleHook<any> | LifecycleCallback<any>,
     filter?: QueryFilter,
   ): () => void {
-    if (typeof hook === "function") {
-      const callback = hook as LifecycleCallback<any>;
-      hook = {
-        on_init: (entityId, ...components) => callback("init", entityId, ...components),
-        on_set: (entityId, ...components) => callback("set", entityId, ...components),
-        on_remove: (entityId, ...components) => callback("remove", entityId, ...components),
-      } as LifecycleHook<any>;
-    }
+    const isCallback = typeof hook === "function";
+    const callback = isCallback ? (hook as LifecycleCallback<any>) : undefined;
 
     const requiredComponents: EntityId<any>[] = [];
     const optionalComponents: EntityId<any>[] = [];
@@ -570,31 +606,43 @@ export class World {
       requiredComponents,
       optionalComponents,
       filter: filter || {},
-      hook: hook as LifecycleHook<any>,
+      hook: isCallback ? ({} as LifecycleHook<any>) : (hook as LifecycleHook<any>),
+      callback,
+      matchedArchetypes: new Set(),
     };
     this.hooks.add(entry);
 
+    // Single pass: collect matching archetypes
+    const matchedArchetypes: Archetype[] = [];
     for (const archetype of this.archetypes) {
       if (this.archetypeMatchesHook(archetype, entry)) {
         archetype.matchingMultiHooks.add(entry);
+        entry.matchedArchetypes!.add(archetype);
+        matchedArchetypes.push(archetype);
       }
     }
 
-    const normalizedHook = hook as LifecycleHook<any>;
-    if (normalizedHook.on_init !== undefined) {
-      for (const archetype of this.archetypes) {
-        if (!this.archetypeMatchesHook(archetype, entry)) continue;
+    // Callback style: invoke callback("init", ...); hook style: invoke hook.on_init(...)
+    const shouldFireInit = isCallback || (hook as LifecycleHook<any>).on_init !== undefined;
+    if (shouldFireInit) {
+      for (const archetype of matchedArchetypes) {
         for (const entityId of archetype.getEntities()) {
           const components = collectMultiHookComponents(this.createHooksContext(), entityId, componentTypes);
-          normalizedHook.on_init(entityId, ...components);
+          if (isCallback) {
+            (callback as LifecycleCallback<any>)("init", entityId, ...components);
+          } else {
+            (hook as LifecycleHook<any>).on_init!(entityId, ...components);
+          }
         }
       }
     }
 
     return () => {
       this.hooks.delete(entry);
-      for (const archetype of this.archetypes) {
-        archetype.matchingMultiHooks.delete(entry);
+      if (entry.matchedArchetypes) {
+        for (const archetype of entry.matchedArchetypes) {
+          archetype.matchingMultiHooks.delete(entry);
+        }
       }
     };
   }
@@ -690,14 +738,6 @@ export class World {
     return entities;
   }
 
-  _registerQuery(query: Query): void {
-    this.queryRegistry.register(query);
-  }
-
-  _unregisterQuery(query: Query): void {
-    this.queryRegistry.unregister(query);
-  }
-
   /**
    * Releases a cached query and frees its resources if no longer needed.
    * Call this when you're done using a query to allow the world to clean up its cache entry.
@@ -743,13 +783,12 @@ export class World {
     let matchingArchetypes = this.getArchetypesWithComponents(regularComponents);
 
     for (const { componentId, relationId } of wildcardRelations) {
-      const archetypesWithMarker = this.archetypesByComponent.get(relationId) || [];
+      const markerSet = this.archetypesByComponent.get(relationId);
+      const archetypesWithMarker = markerSet ? Array.from(markerSet) : [];
       matchingArchetypes =
         matchingArchetypes.length === 0
           ? archetypesWithMarker
-          : matchingArchetypes.filter(
-              (a) => archetypesWithMarker.includes(a) || a.hasRelationWithComponentId(componentId),
-            );
+          : matchingArchetypes.filter((a) => markerSet?.has(a) || a.hasRelationWithComponentId(componentId));
     }
 
     return matchingArchetypes;
@@ -757,34 +796,36 @@ export class World {
 
   private getArchetypesWithComponents(componentTypes: EntityId<any>[]): Archetype[] {
     if (componentTypes.length === 0) return [...this.archetypes];
-    if (componentTypes.length === 1) return this.archetypesByComponent.get(componentTypes[0]!) || [];
-
-    // Sort by list length to start intersection from the smallest set
-    const archetypeLists = componentTypes
-      .map((type) => this.archetypesByComponent.get(type) || [])
-      .sort((a, b) => a.length - b.length);
-
-    const shortest = archetypeLists[0]!;
-    if (shortest.length === 0) return [];
-
-    // Optimized 2-component case: filter shortest array directly against second array
-    if (archetypeLists.length === 2) {
-      const second = archetypeLists[1]!;
-      // Use Set only for the longer list since we iterate the shorter one
-      const secondSet = new Set(second);
-      return shortest.filter((a) => secondSet.has(a));
+    if (componentTypes.length === 1) {
+      const set = this.archetypesByComponent.get(componentTypes[0]!);
+      return set ? Array.from(set) : [];
     }
 
-    // General case: Use Set-based intersection starting from the shortest list
-    let result = new Set(shortest);
-    for (let i = 1; i < archetypeLists.length; i++) {
-      const listSet = new Set(archetypeLists[i]!);
+    // Sort by Set size, intersect starting from the smallest
+    const sets = componentTypes
+      .map((type) => this.archetypesByComponent.get(type))
+      .filter((s): s is Set<Archetype> => s !== undefined && s.size > 0)
+      .sort((a, b) => a.size - b.size);
+
+    if (sets.length === 0) return [];
+    if (sets.length < componentTypes.length) return []; // One component has no matching archetypes
+
+    const smallest = sets[0]!;
+
+    // 2-component fast path
+    if (sets.length === 2) {
+      const other = sets[1]!;
+      return Array.from(smallest).filter((a) => other.has(a));
+    }
+
+    // Multi-component intersection
+    let result = new Set(smallest);
+    for (let i = 1; i < sets.length; i++) {
       for (const item of result) {
-        if (!listSet.has(item)) result.delete(item);
+        if (!sets[i]!.has(item)) result.delete(item);
       }
       if (result.size === 0) return [];
     }
-
     return Array.from(result);
   }
 
@@ -873,26 +914,28 @@ export class World {
       }
     });
 
-    const hasEntityRefs = changeset.removes.size > 0 || changeset.adds.size > 0;
+    const hasStructuralChange = changeset.removes.size > 0 || changeset.adds.size > 0;
 
     if (this.hooks.size === 0) {
       // Fast path: no hooks, skip removedComponents map allocation and hook triggering
-      applyChangesetNoHooks(this._commandCtx, entityId, currentArchetype, changeset, this.entityToArchetype);
-      if (hasEntityRefs) {
+      applyChangeset(this._commandCtx, entityId, currentArchetype, changeset, this.entityToArchetype, null);
+      if (hasStructuralChange) {
         this.updateEntityReferences(entityId, changeset);
       }
       return;
     }
 
-    const { removedComponents, newArchetype } = applyChangeset(
+    const removedComponents = new Map<EntityId<any>, any>();
+    const newArchetype = applyChangeset(
       this._commandCtx,
       entityId,
       currentArchetype,
       changeset,
       this.entityToArchetype,
+      removedComponents,
     );
 
-    if (hasEntityRefs) {
+    if (hasStructuralChange) {
       this.updateEntityReferences(entityId, changeset);
     }
     triggerLifecycleHooks(
@@ -913,7 +956,8 @@ export class World {
     const sourceArchetype = this.entityToArchetype.get(entityId);
     if (!sourceArchetype) return;
 
-    const changeset = new ComponentChangeset();
+    const changeset = this._removeChangeset;
+    changeset.clear();
     changeset.delete(componentType);
     maybeRemoveWildcardMarker(
       entityId,
@@ -924,12 +968,13 @@ export class World {
     );
 
     const removedComponent = sourceArchetype.get(entityId, componentType);
-    const { newArchetype } = applyChangeset(
+    const newArchetype = applyChangeset(
       this._commandCtx,
       entityId,
       sourceArchetype,
       changeset,
       this.entityToArchetype,
+      null,
     );
     untrackEntityReference(this.entityReferences, entityId, componentType, targetEntityId);
     triggerLifecycleHooks(
@@ -970,14 +1015,63 @@ export class World {
     return getOrCompute(this.archetypeBySignature, hashKey, () => this.createNewArchetype(sortedTypes));
   }
 
+  /** Add componentType to the reverse index if it contains an entity ID */
+  private addToReferencingIndex(componentType: EntityId<any>, archetype: Archetype): void {
+    const detailedType = getDetailedIdType(componentType);
+    let entityId: EntityId | undefined;
+
+    if (detailedType.type === "entity") {
+      entityId = componentType as EntityId;
+    } else if (detailedType.type === "entity-relation") {
+      entityId = detailedType.targetId;
+    }
+
+    if (entityId !== undefined) {
+      let refs = this.entityToReferencingArchetypes.get(entityId);
+      if (!refs) {
+        refs = new Set();
+        this.entityToReferencingArchetypes.set(entityId, refs);
+      }
+      refs.add(archetype);
+    }
+  }
+
+  /** Remove componentType from the reverse index */
+  private removeFromReferencingIndex(componentType: EntityId<any>, archetype: Archetype): void {
+    const detailedType = getDetailedIdType(componentType);
+    let entityId: EntityId | undefined;
+
+    if (detailedType.type === "entity") {
+      entityId = componentType as EntityId;
+    } else if (detailedType.type === "entity-relation") {
+      entityId = detailedType.targetId;
+    }
+
+    if (entityId !== undefined) {
+      const refs = this.entityToReferencingArchetypes.get(entityId);
+      if (refs) {
+        refs.delete(archetype);
+        if (refs.size === 0) {
+          this.entityToReferencingArchetypes.delete(entityId);
+        }
+      }
+    }
+  }
+
   private createNewArchetype(componentTypes: EntityId<any>[]): Archetype {
     const newArchetype = new Archetype(componentTypes, this.dontFragmentStore);
     this.archetypes.push(newArchetype);
 
     for (const componentType of componentTypes) {
-      const archetypes = this.archetypesByComponent.get(componentType) || [];
-      archetypes.push(newArchetype);
-      this.archetypesByComponent.set(componentType, archetypes);
+      let archetypes = this.archetypesByComponent.get(componentType);
+      if (!archetypes) {
+        archetypes = new Set();
+        this.archetypesByComponent.set(componentType, archetypes);
+      }
+      archetypes.add(newArchetype);
+
+      // Update reverse index
+      this.addToReferencingIndex(componentType, newArchetype);
     }
 
     this.queryRegistry.onNewArchetype(newArchetype);
@@ -990,6 +1084,9 @@ export class World {
     for (const entry of this.hooks) {
       if (this.archetypeMatchesHook(archetype, entry)) {
         archetype.matchingMultiHooks.add(entry);
+        if (entry.matchedArchetypes) {
+          entry.matchedArchetypes.add(archetype);
+        }
       }
     }
   }
@@ -1007,25 +1104,26 @@ export class World {
     );
   }
 
-  private archetypeReferencesEntity(archetype: Archetype, entityId: EntityId): boolean {
-    return archetype.componentTypes.some(
-      (ct) => ct === entityId || (isEntityRelation(ct) && getTargetIdFromRelationId(ct) === entityId),
-    );
-  }
-
   private cleanupArchetypesReferencingEntity(entityId: EntityId): void {
-    for (let i = this.archetypes.length - 1; i >= 0; i--) {
-      const archetype = this.archetypes[i]!;
-      if (archetype.getEntities().length === 0 && this.archetypeReferencesEntity(archetype, entityId)) {
+    const refs = this.entityToReferencingArchetypes.get(entityId);
+    if (!refs) return;
+
+    for (const archetype of refs) {
+      if (archetype.getEntities().length === 0) {
         this.removeArchetype(archetype);
       }
     }
+    // removeArchetype already cleans up the reverse index entries
+    this.entityToReferencingArchetypes.delete(entityId);
   }
 
   private removeArchetype(archetype: Archetype): void {
     const index = this.archetypes.indexOf(archetype);
     if (index !== -1) {
-      this.archetypes.splice(index, 1);
+      // swap-and-pop: O(1) 删除
+      const last = this.archetypes[this.archetypes.length - 1]!;
+      this.archetypes[index] = last;
+      this.archetypes.pop();
     }
 
     this.archetypeBySignature.delete(this.createArchetypeSignature(archetype.componentTypes));
@@ -1033,14 +1131,14 @@ export class World {
     for (const componentType of archetype.componentTypes) {
       const archetypes = this.archetypesByComponent.get(componentType);
       if (archetypes) {
-        const compIndex = archetypes.indexOf(archetype);
-        if (compIndex !== -1) {
-          archetypes.splice(compIndex, 1);
-          if (archetypes.length === 0) {
-            this.archetypesByComponent.delete(componentType);
-          }
+        archetypes.delete(archetype);
+        if (archetypes.size === 0) {
+          this.archetypesByComponent.delete(componentType);
         }
       }
+
+      // Clean up reverse index
+      this.removeFromReferencingIndex(componentType, archetype);
     }
 
     this.queryRegistry.onArchetypeRemoved(archetype);

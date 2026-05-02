@@ -92,4 +92,8 @@ export interface LifecycleHookEntry {
   optionalComponents: EntityId<any>[];
   filter: QueryFilter;
   hook: LifecycleHook<any>;
+  /** Raw callback function; takes precedence over hook.on_* when present */
+  callback?: LifecycleCallback<any>;
+  /** Archetypes that match this hook, used for precise cleanup on unsubscription */
+  matchedArchetypes?: Set<any>;
 }

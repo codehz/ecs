@@ -17,7 +17,7 @@ import type { World } from "./world";
  */
 export class QueryRegistry {
   /** All live queries that should receive archetype notifications. */
-  private readonly queries: Query[] = [];
+  private readonly queries = new Set<Query>();
   /** Cache of reusable queries keyed by a deterministic signature string. */
   private readonly cache = new Map<string, { query: Query; refCount: number }>();
   /** Maps each query to its cache key without polluting the Query public API. */
@@ -39,7 +39,7 @@ export class QueryRegistry {
       return cached.query;
     }
 
-    const query = new Query(world, sortedTypes, filter);
+    const query = new Query(world, sortedTypes, filter, this);
     this.cacheKeys.set(query, key);
     this.cache.set(key, { query, refCount: 1 });
     return query;
@@ -59,8 +59,7 @@ export class QueryRegistry {
     cached.refCount--;
     if (cached.refCount <= 0) {
       this.cache.delete(key);
-      this.unregister(query);
-      cached.query._disposeInternal();
+      cached.query._disposeInternal(this);
     }
   }
 
@@ -69,7 +68,7 @@ export class QueryRegistry {
    * Called automatically by the `Query` constructor via `world._registerQuery`.
    */
   register(query: Query): void {
-    this.queries.push(query);
+    this.queries.add(query);
   }
 
   /**
@@ -77,10 +76,7 @@ export class QueryRegistry {
    * Called by `Query._disposeInternal` via `world._unregisterQuery`.
    */
   unregister(query: Query): void {
-    const index = this.queries.indexOf(query);
-    if (index !== -1) {
-      this.queries.splice(index, 1);
-    }
+    this.queries.delete(query);
   }
 
   /**
