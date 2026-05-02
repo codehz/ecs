@@ -41,9 +41,28 @@ type RelationIdType<T, R> =
       : never;
 
 /**
- * Create a relation ID by associating a component with another ID (entity or component)
- * @param componentId The component ID (0-1023)
- * @param targetId The target ID (entity, component, or '*' for wildcard)
+ * Create a relation ID by associating a component with a target entity, component, or wildcard.
+ *
+ * Relations are encoded as negative numbers and can be used anywhere a regular component ID is accepted.
+ * Use `"*"` as the target to create a wildcard relation for querying all targets of a given relation type.
+ *
+ * @param componentId - The base component ID (must be a valid component)
+ * @param targetId - The target entity ID, component ID, or `"*"` for wildcard
+ * @returns A relation ID that encodes both the component and target
+ *
+ * @throws {Error} If `componentId` is not a valid component ID
+ * @throws {Error} If `targetId` is not a valid entity, component, or `"*"`
+ *
+ * @example
+ * const ChildOf = component();
+ * const parent = world.new();
+ *
+ * // Entity relation
+ * const childRelation = relation(ChildOf, parent);
+ * world.set(child, childRelation);
+ *
+ * // Wildcard relation (queries all targets)
+ * const allChildren = world.createQuery([relation(ChildOf, "*")]);
  */
 export function relation<T>(componentId: ComponentId<T>, targetId: "*"): WildcardRelationId<T>;
 export function relation<T, R extends EntityId<any>>(componentId: ComponentId<T>, targetId: R): RelationIdType<T, R>;
@@ -67,7 +86,10 @@ export function relation<T>(componentId: ComponentId<T>, targetId: EntityId<any>
 }
 
 /**
- * Check if an ID is a wildcard relation id
+ * Check if an ID is a wildcard relation (created with `relation(componentId, "*")`).
+ *
+ * @param id - The ID to check
+ * @returns `true` if the ID is a wildcard relation, `false` otherwise
  */
 export function isWildcardRelationId<T>(id: EntityId<T>): id is WildcardRelationId<T> {
   const decoded = decodeRelationRaw(id);

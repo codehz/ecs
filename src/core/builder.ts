@@ -13,6 +13,17 @@ export type ComponentDef<T = unknown> =
   | { type: "component"; id: EntityId<T>; value: T }
   | { type: "relation"; componentId: ComponentId<T>; targetId: EntityId<any>; value: T };
 
+/**
+ * Fluent API for constructing entities with multiple components.
+ * Create instances via {@link World.spawn}.
+ *
+ * @example
+ * const entity = world.spawn()
+ *   .with(Position, { x: 0, y: 0 })
+ *   .withRelation(Parent, parentEntity)
+ *   .build();
+ * world.sync();
+ */
 export class EntityBuilder {
   private world: World;
   private components: ComponentDef[] = [];
@@ -21,12 +32,37 @@ export class EntityBuilder {
     this.world = world;
   }
 
+  /**
+   * Add a regular component to the entity under construction.
+   *
+   * @template T - The component data type
+   * @param componentId - The component type to add
+   * @param args - Component data (omit for void components)
+   * @returns This builder for chaining
+   *
+   * @example
+   * builder.with(Position, { x: 10, y: 20 });
+   * builder.with(Marker); // void component
+   */
   with<T>(componentId: EntityId<T>, ...args: T extends void ? [] | [void] : [T]): this {
     const value = (args.length > 0 ? args[0] : undefined) as T;
     this.components.push({ type: "component", id: componentId, value });
     return this;
   }
 
+  /**
+   * Add a relation component to the entity under construction.
+   *
+   * @template T - The relation data type
+   * @param componentId - The base component type for the relation
+   * @param targetEntity - The target entity or component for the relation
+   * @param args - Relation data (omit for void relations)
+   * @returns This builder for chaining
+   *
+   * @example
+   * builder.withRelation(Parent, parentEntity);
+   * builder.withRelation(ChildOf, childEntity, { order: 1 });
+   */
   withRelation<T>(
     componentId: ComponentId<T>,
     targetEntity: EntityId<any>,
@@ -38,10 +74,16 @@ export class EntityBuilder {
   }
 
   /**
-   * Create an entity and enqueue components to be applied. This method
-   * does NOT call `world.sync()` automatically; callers must invoke
-   * `world.sync()` to apply deferred commands.
-   * (Previously auto-synced; now a breaking change — buildDeferred() removed.)
+   * Create the entity and enqueue all configured components.
+   * The entity and components are only materialised after {@link World.sync} is called.
+   *
+   * @returns The newly created entity ID
+   *
+   * @example
+   * const entity = world.spawn()
+   *   .with(Position, { x: 0, y: 0 })
+   *   .build();
+   * world.sync(); // Apply changes
    */
   build(): EntityId {
     const entity = this.world.new();

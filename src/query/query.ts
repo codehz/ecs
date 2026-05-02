@@ -7,7 +7,20 @@ import type { World } from "../core/world";
 import { matchesComponentTypes, matchesFilter, type QueryFilter } from "./filter";
 
 /**
- * Query class for efficient entity queries with cached archetypes
+ * Cached query for efficiently iterating entities with specific components.
+ *
+ * Queries are created via {@link World.createQuery} and should be **reused across frames**
+ * for optimal performance. The world automatically keeps the query's internal archetype cache
+ * up to date as entities are created and destroyed.
+ *
+ * @example
+ * const movementQuery = world.createQuery([Position, Velocity]);
+ *
+ * // In the game loop
+ * movementQuery.forEach([Position, Velocity], (entity, pos, vel) => {
+ *   pos.x += vel.x;
+ *   pos.y += vel.y;
+ * });
  */
 export class Query {
   private world: World;
@@ -22,6 +35,9 @@ export class Query {
   /** Cached specific dontFragment relation types that need entity-level filtering */
   private specificDontFragmentTypes: EntityId<any>[];
 
+  /**
+   * @internal Queries should be created via {@link World.createQuery}, not instantiated directly.
+   */
   constructor(world: World, componentTypes: EntityId<any>[], filter: QueryFilter = {}) {
     this.world = world;
     this.componentTypes = normalizeComponentTypes(componentTypes);
@@ -54,7 +70,15 @@ export class Query {
   }
 
   /**
-   * Get all entities matching the query
+   * Returns all entity IDs that match this query.
+   *
+   * @returns Array of matching entity IDs
+   *
+   * @example
+   * const entities = query.getEntities();
+   * for (const entity of entities) {
+   *   const pos = world.get(entity, Position);
+   * }
    */
   getEntities(): EntityId[] {
     this.ensureNotDisposed();
@@ -109,9 +133,16 @@ export class Query {
   }
 
   /**
-   * Get entities with their component data
-   * @param componentTypes Array of component types to retrieve
-   * @returns Array of objects with entity and component data
+   * Returns all matching entities along with their component data.
+   *
+   * @param componentTypes - Array of component types to retrieve
+   * @returns Array of objects containing the entity ID and its component tuple
+   *
+   * @example
+   * const results = query.getEntitiesWithComponents([Position, Velocity]);
+   * results.forEach(({ entity, components: [pos, vel] }) => {
+   *   pos.x += vel.x;
+   * });
    */
   getEntitiesWithComponents<const T extends readonly ComponentType<any>[]>(
     componentTypes: T,
@@ -134,9 +165,17 @@ export class Query {
   }
 
   /**
-   * Iterate over entities with their component data
-   * @param componentTypes Array of component types to retrieve
-   * @param callback Function called for each entity with its components
+   * Iterates over all matching entities and invokes the callback with their component data.
+   * This is the preferred way to read and mutate components in a hot loop.
+   *
+   * @param componentTypes - Array of component types to retrieve
+   * @param callback - Function called for each matching entity with its components
+   *
+   * @example
+   * query.forEach([Position, Velocity], (entity, pos, vel) => {
+   *   pos.x += vel.x;
+   *   pos.y += vel.y;
+   * });
    */
   forEach<const T extends readonly ComponentType<any>[]>(
     componentTypes: T,
@@ -150,8 +189,15 @@ export class Query {
   }
 
   /**
-   * Iterate over entities with their component data (generator)
-   * @param componentTypes Array of component types to retrieve
+   * Generator that yields each matching entity together with its component data.
+   *
+   * @param componentTypes - Array of component types to retrieve
+   * @yields Tuples of `[entityId, ...components]`
+   *
+   * @example
+   * for (const [entity, pos, vel] of query.iterate([Position, Velocity])) {
+   *   pos.x += vel.x;
+   * }
    */
   *iterate<const T extends readonly ComponentType<any>[]>(
     componentTypes: T,
@@ -164,9 +210,13 @@ export class Query {
   }
 
   /**
-   * Get component data arrays for all matching entities
-   * @param componentType The component type to retrieve
-   * @returns Array of component data for all matching entities
+   * Returns an array containing the data of a single component for every matching entity.
+   *
+   * @param componentType - The component type to retrieve
+   * @returns Array of component data (one entry per matching entity)
+   *
+   * @example
+   * const positions = query.getComponentData(Position);
    */
   getComponentData<T>(componentType: EntityId<T>): T[] {
     this.ensureNotDisposed();
@@ -181,8 +231,7 @@ export class Query {
   }
 
   /**
-   * Update the cached archetypes
-   * Called when new archetypes are created
+   * @internal Rebuilds the cached archetype list. Called automatically by the world.
    */
   updateCache(): void {
     if (this.isDisposed) return;
@@ -193,7 +242,7 @@ export class Query {
   }
 
   /**
-   * Check if a new archetype matches this query and add to cache if it does
+   * @internal Called by the world when a new archetype is created.
    */
   checkNewArchetype(archetype: Archetype): void {
     if (this.isDisposed) return;
@@ -207,7 +256,7 @@ export class Query {
   }
 
   /**
-   * Remove an archetype from the cached archetypes
+   * @internal Called by the world when an archetype is destroyed.
    */
   removeArchetype(archetype: Archetype): void {
     if (this.isDisposed) return;
@@ -228,7 +277,7 @@ export class Query {
   }
 
   /**
-   * Internal full dispose called by World when refCount reaches zero.
+   * @internal Fully disposes the query when the world's refCount reaches zero.
    */
   _disposeInternal(): void {
     if (!this.isDisposed) {
@@ -240,14 +289,18 @@ export class Query {
   }
 
   /**
-   * Symbol.dispose implementation for automatic resource management
+   * Using-with-disposals support. Calls {@link dispose} automatically.
+   *
+   * @example
+   * using query = world.createQuery([Position]);
+   * // query is released automatically when the block exits
    */
   [Symbol.dispose](): void {
     this.dispose();
   }
 
   /**
-   * Check if the query has been disposed
+   * Whether the query has been disposed and can no longer be used.
    */
   get disposed(): boolean {
     return this.isDisposed;

@@ -15,15 +15,58 @@ declare const __entityIdTypeTag: unique symbol;
  * - Entity IDs: 1024+
  * - Relation IDs: negative numbers encoding component and entity associations
  */
+/**
+ * Branded numeric type representing an ECS identifier.
+ *
+ * - {@link ComponentId}: positive values in range `1–1023`
+ * - Entity IDs: values `1024+`
+ * - {@link RelationId}: negative values encoding `(componentId, targetId)`
+ *
+ * @template T - The data type associated with this ID
+ * @template U - Discriminant for the ID kind (e.g. `"component"`, `"entity-relation"`)
+ */
 export type EntityId<T = unknown, U = unknown> = number & {
   readonly [__componentTypeMarker]: T;
   readonly [__entityIdTypeTag]: U;
 };
 
+/**
+ * Component identifier. Valid values are `1` through `1023`.
+ * Created with {@link component}.
+ *
+ * @template T - The data type stored by this component (`void` for tag components)
+ */
 export type ComponentId<T = void> = EntityId<T, "component">;
+
+/**
+ * Relation identifier targeting an entity.
+ * Created with {@link relation}.
+ *
+ * @template T - The data type stored by this relation
+ */
 export type EntityRelationId<T = void> = EntityId<T, "entity-relation">;
+
+/**
+ * Relation identifier targeting another component (singleton relation).
+ * Created with {@link relation}.
+ *
+ * @template T - The data type stored by this relation
+ */
 export type ComponentRelationId<T = void> = EntityId<T, "component-relation">;
+
+/**
+ * Wildcard relation identifier used to query all targets of a given relation component.
+ * Created with `relation(componentId, "*")`.
+ *
+ * @template T - The data type stored by the relation
+ */
 export type WildcardRelationId<T = void> = EntityId<T, "wildcard-relation">;
+
+/**
+ * Union of all relation identifier kinds.
+ *
+ * @template T - The data type stored by the relation
+ */
 export type RelationId<T = void> = EntityRelationId<T> | ComponentRelationId<T> | WildcardRelationId<T>;
 
 /**
