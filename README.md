@@ -1,5 +1,7 @@
 # @codehz/ecs
 
+> **English version:** [README.en.md](./README.en.md)
+
 一个高性能的 Entity Component System (ECS) 库，使用 TypeScript 和 Bun 运行时构建。
 
 ## 特性
