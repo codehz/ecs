@@ -1,8 +1,8 @@
+import type { Archetype } from "../archetype/archetype";
+import type { EntityId } from "../entity";
 import type { QueryFilter } from "../query/filter";
 import { Query } from "../query/query";
-import type { Archetype } from "./archetype";
-import type { EntityId } from "./entity";
-import type { World } from "./world";
+import type { World } from "../world/world";
 
 /**
  * Manages the lifecycle and caching of `Query` instances.

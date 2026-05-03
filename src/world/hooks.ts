@@ -1,6 +1,11 @@
-import type { Archetype } from "./archetype";
-import { getComponentIdFromRelationId, getTargetIdFromRelationId, isWildcardRelationId, type EntityId } from "./entity";
-import { isOptionalEntityId, type ComponentType, type LifecycleHookEntry } from "./types";
+import type { Archetype } from "../archetype/archetype";
+import {
+  getComponentIdFromRelationId,
+  getTargetIdFromRelationId,
+  isWildcardRelationId,
+  type EntityId,
+} from "../entity";
+import { isOptionalEntityId, type ComponentType, type LifecycleHookEntry } from "../types";
 
 /**
  * Unified hook invocation: prefers entry.callback (callback style) over hook.on_* (object style).

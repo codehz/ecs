@@ -1,14 +1,14 @@
-import { MISSING_COMPONENT } from "./archetype";
-import type { DontFragmentStore } from "./dont-fragment-store";
-import type { ComponentId, EntityId, WildcardRelationId } from "./entity";
+import type { ComponentId, EntityId, WildcardRelationId } from "../entity";
 import {
   getComponentIdFromRelationId,
   getDetailedIdType,
   getIdType,
   getTargetIdFromRelationId,
   isRelationId,
-} from "./entity";
-import { isOptionalEntityId, type ComponentType } from "./types";
+} from "../entity";
+import { isOptionalEntityId, type ComponentType } from "../types";
+import { MISSING_COMPONENT } from "./archetype";
+import type { DontFragmentStore } from "./store";
 
 type DetailedIdType = ReturnType<typeof getDetailedIdType>;
 

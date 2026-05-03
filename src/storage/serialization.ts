@@ -1,5 +1,5 @@
-import type { ComponentId, EntityId } from "./entity";
-import { getComponentIdByName, getComponentNameById, getDetailedIdType, relation } from "./entity";
+import type { ComponentId, EntityId } from "../entity";
+import { getComponentIdByName, getComponentNameById, getDetailedIdType, relation } from "../entity";
 
 // -----------------------------------------------------------------------------
 // Serialization helpers for IDs

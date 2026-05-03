@@ -1,5 +1,5 @@
-import type { ComponentId, EntityId } from "./entity-types";
-import { COMPONENT_ID_MAX, ENTITY_ID_START, isEntityId } from "./entity-types";
+import type { ComponentId, EntityId } from "./types";
+import { COMPONENT_ID_MAX, ENTITY_ID_START, isEntityId } from "./types";
 
 /**
  * Entity ID Manager for automatic allocation and freelist recycling

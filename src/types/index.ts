@@ -1,5 +1,5 @@
+import type { EntityId, WildcardRelationId } from "../entity";
 import type { QueryFilter } from "../query/filter";
-import type { EntityId, WildcardRelationId } from "./entity";
 
 /**
  * Type-erased component ID, used for runtime container storage

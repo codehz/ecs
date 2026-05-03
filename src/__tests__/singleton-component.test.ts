@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { component } from "../core/entity";
-import { World } from "../core/world";
+import { component } from "../entity";
+import { World } from "../world/world";
 
 describe("World - Singleton Component", () => {
   type GlobalConfig = { debug: boolean; version: string };

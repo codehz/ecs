@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { Archetype } from "../core/archetype";
-import type { ComponentId, EntityId } from "../core/entity";
-import { relation } from "../core/entity";
+import { Archetype } from "../archetype/archetype";
+import type { ComponentId, EntityId } from "../entity";
+import { relation } from "../entity";
 import { matchesComponentTypes, matchesFilter, type QueryFilter } from "../query/filter";
 
 // Mock component IDs for testing

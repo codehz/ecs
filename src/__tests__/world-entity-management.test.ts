@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { component, createEntityId, relation } from "../core/entity";
-import { World } from "../core/world";
+import { component, createEntityId, relation } from "../entity";
+import { World } from "../world/world";
 
 describe("World - Entity Management", () => {
   it("should create entities", () => {

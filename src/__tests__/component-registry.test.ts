@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { ComponentIdAllocator } from "../core/entity-manager";
-import { COMPONENT_ID_MAX, createComponentId } from "../core/entity-types";
+import { ComponentIdAllocator } from "../entity/manager";
+import { COMPONENT_ID_MAX, createComponentId } from "../entity/types";
 
 describe("ComponentIdAllocator", () => {
   it("should allocate component IDs sequentially", () => {

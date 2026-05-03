@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { component } from "../core/entity";
-import { World } from "../core/world";
+import { component } from "../entity";
+import { World } from "../world/world";
 
 describe("CommandBuffer iteration limit", () => {
   it("should throw when exceeding MAX_ITERATIONS", () => {

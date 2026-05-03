@@ -1,14 +1,10 @@
+import { Archetype } from "../archetype/archetype";
+import { DontFragmentStoreImpl } from "../archetype/store";
+import { CommandBuffer, type Command } from "../commands/buffer";
 import { ComponentChangeset } from "../commands/changeset";
-import { CommandBuffer, type Command } from "../commands/command-buffer";
-import { matchesFilter, serializeQueryFilter, type QueryFilter } from "../query/filter";
-import type { Query } from "../query/query";
-import { getOrCompute } from "../utils/utils";
-import { Archetype } from "./archetype";
-import { EntityBuilder } from "./builder";
-import { ComponentEntityStore } from "./component-entity-store";
-import { normalizeComponentTypes } from "./component-type-utils";
-import { DontFragmentStoreImpl } from "./dont-fragment-store";
-import type { ComponentId, EntityId, WildcardRelationId } from "./entity";
+import { ComponentEntityStore } from "../component/entity-store";
+import { normalizeComponentTypes } from "../component/type-utils";
+import type { ComponentId, EntityId, WildcardRelationId } from "../entity";
 import {
   ENTITY_ID_START,
   EntityIdManager,
@@ -22,11 +18,15 @@ import {
   isEntityRelation,
   isExclusiveComponent,
   isWildcardRelationId,
-} from "./entity";
-import { QueryRegistry } from "./query-registry";
-import type { SerializedWorld } from "./serialization";
-import type { ComponentTuple, ComponentType, LifecycleCallback, LifecycleHook, LifecycleHookEntry } from "./types";
-import { isOptionalEntityId } from "./types";
+} from "../entity";
+import { matchesFilter, serializeQueryFilter, type QueryFilter } from "../query/filter";
+import type { Query } from "../query/query";
+import { QueryRegistry } from "../query/registry";
+import type { SerializedWorld } from "../storage/serialization";
+import type { ComponentTuple, ComponentType, LifecycleCallback, LifecycleHook, LifecycleHookEntry } from "../types";
+import { isOptionalEntityId } from "../types";
+import { getOrCompute } from "../utils/utils";
+import { EntityBuilder } from "./builder";
 import {
   applyChangeset,
   filterRegularComponentTypes,
@@ -34,20 +34,20 @@ import {
   processCommands,
   removeMatchingRelations,
   type CommandProcessorContext,
-} from "./world-commands";
+} from "./commands";
 import {
   collectMultiHookComponents,
   triggerLifecycleHooks,
   triggerRemoveHooksForEntityDeletion,
   type HooksContext,
-} from "./world-hooks";
+} from "./hooks";
 import {
   getEntityReferences,
   trackEntityReference,
   untrackEntityReference,
   type EntityReferencesMap,
-} from "./world-references";
-import { deserializeWorld, serializeWorld } from "./world-serialization";
+} from "./references";
+import { deserializeWorld, serializeWorld } from "./serialization";
 
 /**
  * World class for ECS architecture

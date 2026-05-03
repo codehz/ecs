@@ -1,4 +1,4 @@
-import type { EntityId } from "../core/entity";
+import type { EntityId } from "../entity";
 
 /**
  * Maximum number of command buffer execution iterations to prevent infinite loops

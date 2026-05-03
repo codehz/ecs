@@ -33,12 +33,12 @@
  * ```
  */
 
-import type { ComponentId, EntityId, WildcardRelationId } from "../core/entity";
-import { isWildcardRelationId, relation } from "../core/entity";
-import { World } from "../core/world";
+import type { ComponentId, EntityId, WildcardRelationId } from "../entity";
+import { isWildcardRelationId, relation } from "../entity";
 import type { Query } from "../query/query";
-export { EntityBuilder } from "../core/builder";
-export type { ComponentDef } from "../core/builder";
+import { World } from "../world/world";
+export { EntityBuilder } from "../world/builder";
+export type { ComponentDef } from "../world/builder";
 
 // =============================================================================
 // Types
@@ -47,7 +47,7 @@ export type { ComponentDef } from "../core/builder";
 /**
  * A component definition for entity building, supporting both regular components and relations
  */
-import type { EntityBuilder } from "../core/builder";
+import type { EntityBuilder } from "../world/builder";
 
 /**
  * Snapshot of a single entity's component state
@@ -627,8 +627,8 @@ function deepClone<T>(value: T): T {
 // Re-exports for convenience
 // =============================================================================
 
-export { component, relation } from "../core/entity";
-export type { ComponentId, EntityId, RelationId, WildcardRelationId } from "../core/entity";
-export type { LifecycleCallback, LifecycleHook } from "../core/types";
-export { World } from "../core/world";
+export { component, relation } from "../entity";
+export type { ComponentId, EntityId, RelationId, WildcardRelationId } from "../entity";
 export type { Query } from "../query/query";
+export type { LifecycleCallback, LifecycleHook } from "../types";
+export { World } from "../world/world";

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { component, relation } from "../core/entity";
-import { World } from "../core/world";
+import { component, relation } from "../entity";
+import { World } from "../world/world";
 
 describe("World - Query", () => {
   type Position = { x: number; y: number };

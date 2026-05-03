@@ -1,4 +1,4 @@
-import type { EntityId } from "./entity";
+import type { EntityId } from "../entity";
 
 /**
  * Minimal interface for storing dontFragment relation data keyed by entity ID.

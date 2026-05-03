@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { EntityIdManager } from "../core/entity-manager";
+import { EntityIdManager } from "../entity/manager";
 import type { EntityId } from "../testing";
 
 describe("EntityIdManager", () => {

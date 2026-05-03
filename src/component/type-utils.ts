@@ -1,4 +1,4 @@
-import type { EntityId } from "./entity";
+import type { EntityId } from "../entity";
 
 /**
  * Normalize component type collections into a stable ascending order.

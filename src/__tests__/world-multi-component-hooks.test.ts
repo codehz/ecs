@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { component, relation, type EntityId } from "../core/entity";
-import { World } from "../core/world";
+import { component, relation, type EntityId } from "../entity";
+import { World } from "../world/world";
 
 describe("World - Multi-Component Hooks", () => {
   it("should trigger init, set, remove events correctly when using array syntax with single element", () => {

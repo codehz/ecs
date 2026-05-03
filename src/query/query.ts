@@ -1,11 +1,11 @@
-import type { Archetype } from "../core/archetype";
-import { normalizeComponentTypes } from "../core/component-type-utils";
-import type { EntityId, WildcardRelationId } from "../core/entity";
-import { getDetailedIdType, isDontFragmentComponent } from "../core/entity";
-import type { QueryRegistry } from "../core/query-registry";
-import type { ComponentTuple, ComponentType } from "../core/types";
-import type { World } from "../core/world";
+import type { Archetype } from "../archetype/archetype";
+import { normalizeComponentTypes } from "../component/type-utils";
+import type { EntityId, WildcardRelationId } from "../entity";
+import { getDetailedIdType, isDontFragmentComponent } from "../entity";
+import type { ComponentTuple, ComponentType } from "../types";
+import type { World } from "../world/world";
 import { matchesComponentTypes, matchesFilter, type QueryFilter } from "./filter";
+import type { QueryRegistry } from "./registry";
 
 /**
  * Cached query for efficiently iterating entities with specific components.

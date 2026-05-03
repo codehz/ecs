@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import { component, relation, type ComponentId } from "../core/entity";
-import { World } from "../core/world";
+import { component, relation, type ComponentId } from "../entity";
 import {
   AssertionError,
   Assertions,
@@ -9,6 +8,7 @@ import {
   WorldFixture,
   type WorldSnapshot,
 } from "../testing/index";
+import { World } from "../world/world";
 
 // Test components
 type Position = { x: number; y: number };

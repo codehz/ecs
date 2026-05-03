@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { component, type EntityId } from "../core/entity";
-import { World } from "../core/world";
+import { component, type EntityId } from "../entity";
+import { World } from "../world/world";
 
 describe("World - Single Component Hooks", () => {
   type Position = { x: number; y: number };

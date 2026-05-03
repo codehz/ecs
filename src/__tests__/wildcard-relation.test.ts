@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { component, relation } from "../core/entity";
-import { World } from "../core/world";
+import { component, relation } from "../entity";
+import { World } from "../world/world";
 
 describe("Wildcard relation edge cases", () => {
   it("should handle empty wildcard matches", () => {

@@ -1,5 +1,5 @@
-import type { Command } from "../commands/command-buffer";
-import { hasWildcardRelation } from "./archetype-helpers";
+import { hasWildcardRelation } from "../archetype/helpers";
+import type { Command } from "../commands/buffer";
 import {
   getComponentIdFromRelationId,
   getComponentMerge,
@@ -8,7 +8,7 @@ import {
   type ComponentId,
   type EntityId,
   type WildcardRelationId,
-} from "./entity";
+} from "../entity";
 
 /**
  * Manages component entity (singleton) storage.

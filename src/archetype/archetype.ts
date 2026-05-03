@@ -1,3 +1,13 @@
+import { normalizeComponentTypes } from "../component/type-utils";
+import type { EntityId, WildcardRelationId } from "../entity";
+import {
+  getComponentIdFromRelationId,
+  getDetailedIdType,
+  getIdType,
+  isDontFragmentComponent,
+  isWildcardRelationId,
+} from "../entity";
+import { isOptionalEntityId, type ComponentTuple, type ComponentType, type LifecycleHookEntry } from "../types";
 import { getOrCompute } from "../utils/utils";
 import {
   buildCacheKey,
@@ -5,18 +15,8 @@ import {
   findMatchingDontFragmentRelations,
   getWildcardRelationDataSource,
   isRelationType,
-} from "./archetype-helpers";
-import { normalizeComponentTypes } from "./component-type-utils";
-import type { DontFragmentStore } from "./dont-fragment-store";
-import type { EntityId, WildcardRelationId } from "./entity";
-import {
-  getComponentIdFromRelationId,
-  getDetailedIdType,
-  getIdType,
-  isDontFragmentComponent,
-  isWildcardRelationId,
-} from "./entity";
-import { isOptionalEntityId, type ComponentTuple, type ComponentType, type LifecycleHookEntry } from "./types";
+} from "./helpers";
+import type { DontFragmentStore } from "./store";
 
 /**
  * Special value to represent missing component data

@@ -1,14 +1,14 @@
-import { MISSING_COMPONENT, type Archetype } from "./archetype";
-import type { ComponentEntityStore } from "./component-entity-store";
-import { getDetailedIdType, type EntityId, type EntityIdManager } from "./entity";
+import { MISSING_COMPONENT, type Archetype } from "../archetype/archetype";
+import type { ComponentEntityStore } from "../component/entity-store";
+import { getDetailedIdType, type EntityId, type EntityIdManager } from "../entity";
 import {
   decodeSerializedId,
   encodeEntityId,
   type SerializedComponent,
   type SerializedEntity,
   type SerializedWorld,
-} from "./serialization";
-import { trackEntityReference, type EntityReferencesMap } from "./world-references";
+} from "../storage/serialization";
+import { trackEntityReference, type EntityReferencesMap } from "./references";
 
 /**
  * Serializes the full world state to a plain JS object suitable for JSON encoding.

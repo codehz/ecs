@@ -8,7 +8,7 @@ export type {
   EntityRelationId,
   RelationId,
   WildcardRelationId,
-} from "./entity-types";
+} from "./types";
 
 export {
   COMPONENT_ID_MAX,
@@ -22,7 +22,7 @@ export {
   isEntityId,
   isRelationId,
   isValidComponentId,
-} from "./entity-types";
+} from "./types";
 
 // Relation functions
 export {
@@ -38,13 +38,13 @@ export {
   isEntityRelation,
   isWildcardRelationId,
   relation,
-} from "./entity-relation";
+} from "./relation";
 
 // Entity and component managers
-export { ComponentIdAllocator, EntityIdManager } from "./entity-manager";
+export { ComponentIdAllocator, EntityIdManager } from "./manager";
 
 // Component registry
-export type { ComponentOptions } from "./component-registry";
+export type { ComponentOptions } from "../component/registry";
 
 export {
   component,
@@ -60,4 +60,4 @@ export {
   isExclusiveComponent,
   isExclusiveRelation,
   isExclusiveWildcard,
-} from "./component-registry";
+} from "../component/registry";

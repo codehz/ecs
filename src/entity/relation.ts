@@ -5,7 +5,7 @@ import type {
   EntityRelationId,
   RelationId,
   WildcardRelationId,
-} from "./entity-types";
+} from "./types";
 import {
   ENTITY_ID_START,
   isComponentId,
@@ -13,7 +13,7 @@ import {
   isValidComponentId,
   RELATION_SHIFT,
   WILDCARD_TARGET_ID,
-} from "./entity-types";
+} from "./types";
 
 /**
  * Internal function to decode a relation ID into raw component and target IDs

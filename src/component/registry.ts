@@ -1,14 +1,14 @@
-import { BitSet } from "../utils/bit-set";
-import { ComponentIdAllocator } from "./entity-manager";
-import { decodeRelationRaw } from "./entity-relation";
-import type { ComponentId, EntityId } from "./entity-types";
+import { ComponentIdAllocator } from "../entity/manager";
+import { decodeRelationRaw } from "../entity/relation";
+import type { ComponentId, EntityId } from "../entity/types";
 import {
   COMPONENT_ID_MAX,
   ENTITY_ID_START,
   isComponentId,
   isValidComponentId,
   WILDCARD_TARGET_ID,
-} from "./entity-types";
+} from "../entity/types";
+import { BitSet } from "../utils/bit-set";
 
 const globalComponentIdAllocator = new ComponentIdAllocator();
 

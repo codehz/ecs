@@ -1,5 +1,5 @@
-import type { ComponentId, EntityId } from "./entity";
-import { relation } from "./entity";
+import type { ComponentId, EntityId } from "../entity";
+import { relation } from "../entity";
 import type { World } from "./world";
 
 // =============================================================================

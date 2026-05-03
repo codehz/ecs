@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import { component, createEntityId, relation, type ComponentId, type EntityId } from "../core/entity";
-import { World } from "../core/world";
+import { component, createEntityId, relation, type ComponentId, type EntityId } from "../entity";
+import { World } from "../world/world";
 
 describe("World - Component Management", () => {
   type Position = { x: number; y: number };

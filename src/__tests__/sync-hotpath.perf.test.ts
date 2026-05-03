@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { component, relation, type EntityId } from "../core/entity";
-import { World } from "../core/world";
+import { component, relation, type EntityId } from "../entity";
+import { World } from "../world/world";
 
 function benchmark(label: string, warmupRounds: number, measuredRounds: number, fn: (round: number) => void): number {
   const durations: number[] = [];

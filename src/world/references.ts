@@ -1,5 +1,5 @@
+import type { EntityId } from "../entity";
 import { MultiMap } from "../utils/multi-map";
-import type { EntityId } from "./entity";
 
 export type EntityReferencesMap = Map<EntityId, MultiMap<EntityId, EntityId>>;
 

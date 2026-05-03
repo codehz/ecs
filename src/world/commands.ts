@@ -1,8 +1,8 @@
+import type { Archetype } from "../archetype/archetype";
+import type { DontFragmentStore } from "../archetype/store";
+import type { Command } from "../commands/buffer";
 import type { ComponentChangeset } from "../commands/changeset";
-import type { Command } from "../commands/command-buffer";
-import type { Archetype } from "./archetype";
-import { normalizeComponentTypes } from "./component-type-utils";
-import type { DontFragmentStore } from "./dont-fragment-store";
+import { normalizeComponentTypes } from "../component/type-utils";
 import {
   getComponentIdFromRelationId,
   getComponentMerge,
@@ -13,7 +13,7 @@ import {
   relation,
   type ComponentId,
   type EntityId,
-} from "./entity";
+} from "../entity";
 
 export interface CommandProcessorContext {
   dontFragmentStore: DontFragmentStore;
@@ -224,7 +224,7 @@ function buildFinalRegularComponentTypes(currentArchetype: Archetype, changeset:
     }
   }
 
-  for (const componentType of changeset.adds.keys()) {
+  for (const [componentType] of changeset.adds) {
     if (!isDontFragmentRelation(componentType)) {
       finalRegularTypes.add(componentType);
     }
