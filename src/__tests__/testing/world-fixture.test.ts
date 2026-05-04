@@ -4,12 +4,10 @@ import { WorldFixture } from "../../testing/index";
 import { World } from "../../world/world";
 
 let PositionId: ComponentId<{ x: number; y: number }>;
-let VelocityId: ComponentId<{ x: number; y: number }>;
 
 describe("WorldFixture", () => {
   beforeEach(() => {
     PositionId = component<{ x: number; y: number }>();
-    VelocityId = component<{ x: number; y: number }>();
   });
 
   it("should create a world instance", () => {
