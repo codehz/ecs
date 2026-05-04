@@ -904,7 +904,7 @@ export class World {
     }
   }
 
-  executeEntityCommands(entityId: EntityId, commands: Command[]): void {
+  private executeEntityCommands(entityId: EntityId, commands: Command[]): void {
     this._changeset.clear();
 
     // 1. Route: component entities use flat-map storage
