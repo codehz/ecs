@@ -60,7 +60,40 @@ type ComponentMerge<T = any> = (prev: T, next: T) => T;
  */
 export interface ComponentOptions<T = any> {
   /**
-   * Optional name for the component (for serialization/debugging)
+   * An optional human-readable name for the component, used for debugging and
+   * serialization.
+   *
+   * While `name` is **optional** at registration time, omitting it can cause
+   * problems when serializing and later deserializing the world:
+   *
+   * 1. **Cross-session portability**: Without a name, the component is
+   *    serialized as a raw numeric ID. Component IDs are allocated sequentially
+   *    at registration time, so if the order of `component()` calls changes
+   *    between sessions (e.g. due to code refactoring, lazy-loading, or
+   *    tree-shaking), those numeric IDs will no longer point to the same
+   *    component type, leading to **silent data corruption** on restore.
+   *
+   * 2. **Runtime warnings**: `encodeEntityId` logs a `console.warn` for every
+   *    unnamed component it encounters during `world.serialize()`, which can be
+   *    noisy in production when serialization is used for save-games or
+   *    snapshots.
+   *
+   * 3. **Debugging ergonomics**: Named components make serialized snapshots
+   *    human-readable (e.g. `"Position"` instead of `42`), which is invaluable
+   *    when inspecting save files or network dumps.
+   *
+   * **Recommendation**: Always provide a `name` for any component that may
+   * appear in a serialized world — even if it's just the same string as the
+   * variable name.
+   *
+   * @example
+   * ```ts
+   * // ✅ Good: explicit name ensures stable serialization
+   * const Position = component<{ x: number; y: number }>({ name: "Position" });
+   *
+   * // ⚠️ Risky: no name — serialization falls back to numeric ID
+   * const Velocity = component<{ dx: number; dy: number }>();
+   * ```
    */
   name?: string;
   /**
