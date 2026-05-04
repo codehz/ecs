@@ -64,15 +64,19 @@ function main() {
   console.log("========================================================");
 
   // Create some entities
-  const entity1 = world.new();
-  world.set(entity1, PositionId, { x: 0, y: 0 });
-  world.set(entity1, VelocityId, { x: 2, y: 1 });
-  world.set(entity1, HealthId, { value: 100 });
+  const entity1 = world
+    .spawn()
+    .with(PositionId, { x: 0, y: 0 })
+    .with(VelocityId, { x: 2, y: 1 })
+    .with(HealthId, { value: 100 })
+    .build();
 
-  const entity2 = world.new();
-  world.set(entity2, PositionId, { x: 5, y: 3 });
-  world.set(entity2, VelocityId, { x: -1, y: 0.5 });
-  world.set(entity2, HealthId, { value: 80 });
+  const entity2 = world
+    .spawn()
+    .with(PositionId, { x: 5, y: 3 })
+    .with(VelocityId, { x: -1, y: 0.5 })
+    .with(HealthId, { value: 80 })
+    .build();
 
   // Execute initial sync
   world.sync();

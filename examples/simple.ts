@@ -36,20 +36,17 @@ function main() {
   console.log("ECS Simple Demo");
 
   // Create entity 1
-  const entity1 = world.new();
-  world.set(entity1, PositionId, { x: 0, y: 0 });
-  world.set(entity1, VelocityId, { x: 1, y: 0.5 });
+  const entity1 = world.spawn().with(PositionId, { x: 0, y: 0 }).with(VelocityId, { x: 1, y: 0.5 }).build();
 
   // Create entity 2
-  const entity2 = world.new();
-  world.set(entity2, PositionId, { x: 10, y: 10 });
-  world.set(entity2, VelocityId, { x: -0.5, y: 1 });
+  const entity2 = world.spawn().with(PositionId, { x: 10, y: 10 }).with(VelocityId, { x: -0.5, y: 1 }).build();
+  void entity2;
 
   // Demonstrate Exclusive Relations
   console.log("\nExclusive Relations Demo:");
-  const parent1 = world.new();
-  const parent2 = world.new();
-  const child = world.new();
+  const parent1 = world.spawn().build();
+  const parent2 = world.spawn().build();
+  const child = world.spawn().build();
 
   // ChildOf is already marked as exclusive in component definition
 
