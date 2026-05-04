@@ -167,20 +167,21 @@ function customDecode(data: CustomSaveFormat): World {
   const world = new World();
 
   for (const entry of data.entities) {
-    const entity = world.new();
-    world.set(entity, PositionId, entry.position);
+    const builder = world.spawn().with(PositionId, entry.position);
 
     if (entry.velocity) {
-      world.set(entity, VelocityId, entry.velocity);
+      builder.with(VelocityId, entry.velocity);
     }
 
     if (entry.health) {
-      world.set(entity, HealthId, entry.health);
+      builder.with(HealthId, entry.health);
     }
 
     if (entry.name !== undefined) {
-      world.set(entity, NameId, { value: entry.name });
+      builder.with(NameId, { value: entry.name });
     }
+
+    builder.build();
   }
 
   world.sync();
@@ -199,23 +200,28 @@ function main() {
   const world = new World();
 
   // Spawn a player entity
-  const player = world.new();
-  world.set(player, PositionId, { x: 0, y: 0 });
-  world.set(player, VelocityId, { x: 1, y: 0.5 });
-  world.set(player, HealthId, { value: 100, maxValue: 100 });
-  world.set(player, NameId, { value: "Player" });
+  const player = world
+    .spawn()
+    .with(PositionId, { x: 0, y: 0 })
+    .with(VelocityId, { x: 1, y: 0.5 })
+    .with(HealthId, { value: 100, maxValue: 100 })
+    .with(NameId, { value: "Player" })
+    .build();
+  void player;
 
   // Spawn an enemy entity
-  const enemy = world.new();
-  world.set(enemy, PositionId, { x: 50, y: 30 });
-  world.set(enemy, VelocityId, { x: -0.5, y: 0.2 });
-  world.set(enemy, HealthId, { value: 50, maxValue: 50 });
-  world.set(enemy, NameId, { value: "Goblin" });
+  const enemy = world
+    .spawn()
+    .with(PositionId, { x: 50, y: 30 })
+    .with(VelocityId, { x: -0.5, y: 0.2 })
+    .with(HealthId, { value: 50, maxValue: 50 })
+    .with(NameId, { value: "Goblin" })
+    .build();
+  void enemy;
 
   // Spawn a static prop (no velocity, no health)
-  const prop = world.new();
-  world.set(prop, PositionId, { x: 100, y: 200 });
-  world.set(prop, NameId, { value: "TreasureChest" });
+  const prop = world.spawn().with(PositionId, { x: 100, y: 200 }).with(NameId, { value: "TreasureChest" }).build();
+  void prop;
 
   // Apply all deferred commands
   world.sync();

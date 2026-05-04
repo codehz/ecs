@@ -58,8 +58,6 @@ function main() {
   console.log("ECS Inventory System Demo - Non-exclusive Relations");
   console.log("===================================================");
 
-  const player = world.spawn().with(Gold, { amount: 125 }).build();
-
   const sword = world.spawn().with(ItemName, { name: "Iron Sword" }).with(EquipmentSlot, { slot: "weapon" }).build();
   const armor = world.spawn().with(ItemName, { name: "Leather Armor" }).with(EquipmentSlot, { slot: "armor" }).build();
   const potion = world
@@ -73,10 +71,14 @@ function main() {
     .with(Stackable, { count: 48, maxCount: 99 })
     .build();
 
-  world.set(player, relation(InInventory, sword));
-  world.set(player, relation(InInventory, armor));
-  world.set(player, relation(InInventory, potion));
-  world.set(player, relation(InInventory, arrows));
+  const player = world
+    .spawn()
+    .with(Gold, { amount: 125 })
+    .with(relation(InInventory, sword))
+    .with(relation(InInventory, armor))
+    .with(relation(InInventory, potion))
+    .with(relation(InInventory, arrows))
+    .build();
   world.sync();
 
   console.log(`\nPlayer ${player} starts with ${world.get(player, Gold).amount} gold.`);

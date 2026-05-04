@@ -187,31 +187,37 @@ function main() {
   // ── Setup Entities ──────────────────────────────────────────────────────
 
   // Entity 1: Starts in "idle", healthy
-  const e1 = world.new();
-  world.set(e1, StateId, { current: "idle", timer: 0.5 });
-  world.set(e1, PositionId, { x: 0, y: 0 });
-  world.set(e1, SpeedId, { value: 3.0 });
-  world.set(e1, TargetId, { x: 0, y: 0 });
-  world.set(e1, HealthId, { value: 100, maxValue: 100 });
-  world.set(e1, AIEnabledId, undefined as void);
+  const e1 = world
+    .spawn()
+    .with(StateId, { current: "idle", timer: 0.5 })
+    .with(PositionId, { x: 0, y: 0 })
+    .with(SpeedId, { value: 3.0 })
+    .with(TargetId, { x: 0, y: 0 })
+    .with(HealthId, { value: 100, maxValue: 100 })
+    .with(AIEnabledId)
+    .build();
 
   // Entity 2: Starts in "patrol", already moving toward a target
-  const e2 = world.new();
-  world.set(e2, StateId, { current: "patrol", timer: 0 });
-  world.set(e2, PositionId, { x: 10, y: 0 });
-  world.set(e2, SpeedId, { value: 5.0 });
-  world.set(e2, TargetId, { x: 10, y: 10 });
-  world.set(e2, HealthId, { value: 40, maxValue: 100 }); // will drop below 30% soon
-  world.set(e2, AIEnabledId, undefined as void);
+  const e2 = world
+    .spawn()
+    .with(StateId, { current: "patrol", timer: 0 })
+    .with(PositionId, { x: 10, y: 0 })
+    .with(SpeedId, { value: 5.0 })
+    .with(TargetId, { x: 10, y: 10 })
+    .with(HealthId, { value: 40, maxValue: 100 }) // will drop below 30% soon
+    .with(AIEnabledId)
+    .build();
 
   // Entity 3: Starts in "idle", somewhat wounded
-  const e3 = world.new();
-  world.set(e3, StateId, { current: "idle", timer: 1.0 });
-  world.set(e3, PositionId, { x: -5, y: 5 });
-  world.set(e3, SpeedId, { value: 2.0 });
-  world.set(e3, TargetId, { x: -5, y: 5 });
-  world.set(e3, HealthId, { value: 25, maxValue: 100 }); // already below 30%
-  world.set(e3, AIEnabledId, undefined as void);
+  const e3 = world
+    .spawn()
+    .with(StateId, { current: "idle", timer: 1.0 })
+    .with(PositionId, { x: -5, y: 5 })
+    .with(SpeedId, { value: 2.0 })
+    .with(TargetId, { x: -5, y: 5 })
+    .with(HealthId, { value: 25, maxValue: 100 }) // already below 30%
+    .with(AIEnabledId)
+    .build();
 
   // Initial sync — applies all buffered commands and fires "init" hooks
   console.log("--- Initial Sync (init hooks fire) ---\n");

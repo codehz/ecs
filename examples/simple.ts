@@ -46,12 +46,10 @@ function main() {
   console.log("\nExclusive Relations Demo:");
   const parent1 = world.spawn().build();
   const parent2 = world.spawn().build();
-  const child = world.spawn().build();
+  const child = world.spawn().with(relation(ChildOf, parent1)).build();
 
   // ChildOf is already marked as exclusive in component definition
 
-  // Add first parent relation
-  world.set(child, relation(ChildOf, parent1));
   world.sync();
   console.log(`Child has ChildOf(parent1): ${world.has(child, relation(ChildOf, parent1))}`);
   console.log(`Child has ChildOf(parent2): ${world.has(child, relation(ChildOf, parent2))}`);

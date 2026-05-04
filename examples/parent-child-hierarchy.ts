@@ -148,33 +148,43 @@ function main() {
   console.log("=======================================================");
 
   // Create a moving root entity
-  const ship = world.new();
-  world.set(ship, NameId, { value: "Ship" });
-  world.set(ship, LocalTransformId, { x: 0, y: 0, rotation: 0, scale: 1 });
-  world.set(ship, WorldTransformId, { x: 0, y: 0, rotation: 0, scale: 1 });
-  world.set(ship, LinearVelocityId, { x: 1, y: 0.25 });
+  const ship = world
+    .spawn()
+    .with(NameId, { value: "Ship" })
+    .with(LocalTransformId, { x: 0, y: 0, rotation: 0, scale: 1 })
+    .with(WorldTransformId, { x: 0, y: 0, rotation: 0, scale: 1 })
+    .with(LinearVelocityId, { x: 1, y: 0.25 })
+    .build();
 
   // Create a rotating child attached to the ship
-  const turret = world.new();
-  world.set(turret, NameId, { value: "Turret" });
-  world.set(turret, LocalTransformId, { x: 2, y: 0, rotation: 0, scale: 1 });
-  world.set(turret, WorldTransformId, { x: 0, y: 0, rotation: 0, scale: 1 });
-  world.set(turret, AngularVelocityId, { degreesPerSecond: 45 });
-  world.set(turret, relation(ChildOf, ship));
+  const turret = world
+    .spawn()
+    .with(NameId, { value: "Turret" })
+    .with(LocalTransformId, { x: 2, y: 0, rotation: 0, scale: 1 })
+    .with(WorldTransformId, { x: 0, y: 0, rotation: 0, scale: 1 })
+    .with(AngularVelocityId, { degreesPerSecond: 45 })
+    .with(relation(ChildOf, ship))
+    .build();
 
   // Create a grandchild so propagation traverses multiple levels
-  const muzzle = world.new();
-  world.set(muzzle, NameId, { value: "Muzzle" });
-  world.set(muzzle, LocalTransformId, { x: 1.5, y: 0.5, rotation: 0, scale: 1 });
-  world.set(muzzle, WorldTransformId, { x: 0, y: 0, rotation: 0, scale: 1 });
-  world.set(muzzle, relation(ChildOf, turret));
+  const muzzle = world
+    .spawn()
+    .with(NameId, { value: "Muzzle" })
+    .with(LocalTransformId, { x: 1.5, y: 0.5, rotation: 0, scale: 1 })
+    .with(WorldTransformId, { x: 0, y: 0, rotation: 0, scale: 1 })
+    .with(relation(ChildOf, turret))
+    .build();
+  void muzzle;
 
   // Create a second root entity to show independent hierarchies
-  const drone = world.new();
-  world.set(drone, NameId, { value: "Drone" });
-  world.set(drone, LocalTransformId, { x: -4, y: 3, rotation: 15, scale: 0.75 });
-  world.set(drone, WorldTransformId, { x: -4, y: 3, rotation: 15, scale: 0.75 });
-  world.set(drone, LinearVelocityId, { x: 0.5, y: -0.25 });
+  const drone = world
+    .spawn()
+    .with(NameId, { value: "Drone" })
+    .with(LocalTransformId, { x: -4, y: 3, rotation: 15, scale: 0.75 })
+    .with(WorldTransformId, { x: -4, y: 3, rotation: 15, scale: 0.75 })
+    .with(LinearVelocityId, { x: 0.5, y: -0.25 })
+    .build();
+  void drone;
 
   // Execute initial sync
   world.sync();
