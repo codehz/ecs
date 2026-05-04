@@ -70,6 +70,7 @@ function main() {
     .with(VelocityId, { x: 2, y: 1 })
     .with(HealthId, { value: 100 })
     .build();
+  void entity1;
 
   const entity2 = world
     .spawn()
@@ -77,6 +78,7 @@ function main() {
     .with(VelocityId, { x: -1, y: 0.5 })
     .with(HealthId, { value: 80 })
     .build();
+  void entity2;
 
   // Execute initial sync
   world.sync();

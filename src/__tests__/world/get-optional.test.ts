@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test";
+import type { EntityId } from "../../entity";
 import { component, relation } from "../../entity";
 import { World } from "../../world/world";
+
+function expectType<T>(_value: T): void {}
 
 describe("World.getOptional", () => {
   it("should return { value: T } when component exists", () => {
@@ -58,7 +61,9 @@ describe("World.getOptional", () => {
     world.sync();
 
     const wildcard = relation(Rel, "*");
-    expect(world.getOptional(entity, wildcard as any)).toEqual({ value: [[target, 100]] });
+    const result = world.getOptional(entity, wildcard);
+    expectType<{ value: [EntityId<unknown>, number][] } | undefined>(result);
+    expect(result).toEqual({ value: [[target, 100]] });
   });
 
   it("should return undefined for wildcard relations with no matching relations", () => {
@@ -68,7 +73,9 @@ describe("World.getOptional", () => {
     world.sync();
 
     const wildcard = relation(Rel, "*");
-    expect(world.getOptional(entity, wildcard as any)).toBeUndefined();
+    const result = world.getOptional(entity, wildcard);
+    expectType<{ value: [number, number][] } | undefined>(result);
+    expect(result).toBeUndefined();
   });
 
   it("should work with dontFragment relations", () => {

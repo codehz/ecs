@@ -502,7 +502,7 @@ export class World {
       }
     }
 
-    return archetype.get(entityId, componentType);
+    return archetype.get(entityId, componentType) as T | [EntityId<unknown>, any][];
   }
 
   /**
@@ -513,6 +513,9 @@ export class World {
    * @template T - The component data type
    * @overload getOptional<T>(entityId: EntityId<T>): { value: T } | undefined
    * Retrieves the entity's primary component safely.
+   *
+   * @overload getOptional<T>(entityId: EntityId, componentType: WildcardRelationId<T>): { value: [EntityId<unknown>, T][] } | undefined
+   * Retrieves all matching relation values safely.
    *
    * @overload getOptional<T>(entityId: EntityId, componentType: EntityId<T>): { value: T } | undefined
    * Retrieves a specific component safely.
@@ -526,13 +529,20 @@ export class World {
    * }
    */
   getOptional<T>(entityId: EntityId<T>): { value: T } | undefined;
+  getOptional<T>(
+    entityId: EntityId,
+    componentType: WildcardRelationId<T>,
+  ): { value: [EntityId<unknown>, T][] } | undefined;
   getOptional<T>(entityId: EntityId, componentType: EntityId<T>): { value: T } | undefined;
-  getOptional<T>(entityId: EntityId, componentType: EntityId<T> = entityId as EntityId<T>): { value: T } | undefined {
+  getOptional<T>(
+    entityId: EntityId,
+    componentType: EntityId<T> | WildcardRelationId<T> = entityId as EntityId<T>,
+  ): { value: T } | { value: [EntityId<unknown>, T][] } | undefined {
     if (this.componentEntities.exists(entityId)) {
       if (isWildcardRelationId(componentType)) {
-        const relations = this.componentEntities.getWildcard(entityId, componentType as WildcardRelationId<any>);
+        const relations = this.componentEntities.getWildcard(entityId, componentType);
         if (relations.length === 0) return undefined;
-        return { value: relations as T };
+        return { value: relations };
       }
       return this.componentEntities.getOptional(entityId, componentType);
     }
@@ -544,9 +554,9 @@ export class World {
 
     if (isWildcardRelationId(componentType)) {
       // For wildcard relations, get the data and wrap in optional if non-empty
-      const wildcardData = archetype.get(entityId, componentType as any);
+      const wildcardData = archetype.get(entityId, componentType) as [EntityId<unknown>, T][];
       if (Array.isArray(wildcardData) && wildcardData.length > 0) {
-        return { value: wildcardData as T };
+        return { value: wildcardData };
       }
       return undefined;
     }
