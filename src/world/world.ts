@@ -214,15 +214,23 @@ export class World {
   }
 
   /**
-   * Checks if an entity exists in the world.
+   * Checks if an **entity** (not a component) exists in the world.
+   *
+   * This is specifically for checking entity liveness — whether the given entity ID
+   * is currently alive in the world. For checking if a component is present on an
+   * entity, use {@link has} instead.
    *
    * @param entityId - The entity identifier to check
    * @returns `true` if the entity exists, `false` otherwise
    *
    * @example
+   * // Check if an entity is alive
    * if (world.exists(entityId)) {
    *   console.log("Entity exists");
    * }
+   *
+   * // To check for a component, use has() instead:
+   * if (world.has(entity, Position)) { ... }
    */
   exists(entityId: EntityId): boolean {
     if (this.componentEntities.exists(entityId)) return true;
@@ -378,27 +386,39 @@ export class World {
   }
 
   /**
-   * Checks if an entity has a specific component.
+   * Checks if a specific **component** is present on an entity.
+   *
+   * This is for component membership checks — does the given entity have this
+   * component type? For checking whether an entity itself is alive, use
+   * {@link exists} instead.
+   *
    * Immediately reflects the current state without waiting for `sync()`.
    *
    * @overload has<T>(entityId: EntityId, componentType: EntityId<T>): boolean
    * Checks if a specific component type is present on the entity.
    *
    * @overload has<T>(componentId: ComponentId<T>): boolean
-   * Checks if a singleton component has data (shorthand for has(componentId, componentId)).
+   * Shorthand for checking a **singleton component** — a component that is its own
+   * entity (component-as-entity pattern). Equivalent to `has(componentId, componentId)`.
    *
    * @template T - The component data type
-   * @param entityId - The entity identifier
+   * @param entityId - The entity identifier, or a singleton component ID
    * @param componentType - The component type to check
    * @returns `true` if the entity has the component, `false` otherwise
    *
    * @example
+   * // Check if an entity has a component
    * if (world.has(entity, Position)) {
    *   const pos = world.get(entity, Position);
    * }
+   *
+   * // Check a singleton component (component-as-entity)
    * if (world.has(GlobalConfig)) {
    *   const config = world.get(GlobalConfig);
    * }
+   *
+   * // Use exists() for entity liveness checks
+   * if (world.exists(entity)) { ... }
    */
   has<T>(componentId: ComponentId<T>): boolean;
   has<T>(entityId: EntityId, componentType: EntityId<T>): boolean;
