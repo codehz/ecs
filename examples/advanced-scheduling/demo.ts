@@ -87,6 +87,4 @@ function main() {
   console.log("\nDemo completed!");
 }
 
-if (import.meta.main) {
-  main();
-}
+main();
