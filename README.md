@@ -204,8 +204,9 @@ world.sync();
 ### 运行示例
 
 ```bash
-bun run examples/simple/demo.ts
-bun run examples/advanced-scheduling/demo.ts
+bun run examples/simple.ts
+bun run examples/advanced-scheduling.ts
+bun run examples/parent-child-hierarchy.ts
 ```
 
 ## API 概述
@@ -410,11 +411,14 @@ src/
 └── __tests__/               # 单元测试 & 性能测试
 
 examples/
-├── simple/
-│   ├── demo.ts              # 基本示例
-│   └── README.md            # 示例说明
-└── advanced-scheduling/
-    └── demo.ts              # Pipeline 调度示例
+├── advanced-scheduling.ts   # Pipeline 调度示例
+├── collision-detection.ts   # 碰撞检测示例
+├── parent-child-hierarchy.ts # 父子层级与 Transform 传播示例
+├── serialization.ts         # 序列化示例
+├── simple.ts                # 基本示例
+├── spatial-grid.ts          # 空间网格示例
+├── state-machine.ts         # 状态机示例
+└── tag-filtering.ts         # 标签过滤示例
 
 scripts/
 ├── build.ts                 # 构建脚本
@@ -427,7 +431,8 @@ scripts/
 bun install
 bun test                    # 运行测试
 bunx tsc --noEmit           # 类型检查
-bun run examples/simple/demo.ts  # 运行示例
+bun run examples/simple.ts       # 运行示例
+bun run examples/parent-child-hierarchy.ts
 bun run scripts/build.ts    # 构建
 ```
 

@@ -20,7 +20,7 @@
   },
   "scripts": {
     "test": "bun test",
-    "demo": "bun run examples/simple/demo.ts",
+    "demo": "bun run examples/simple.ts",
     "release": "bun run scripts/release.ts",
     "prepare": "husky",
     "lint": "eslint --ext .ts,.tsx,.js --quiet",

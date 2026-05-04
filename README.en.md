@@ -204,8 +204,9 @@ world.sync();
 ### Running Examples
 
 ```bash
-bun run examples/simple/demo.ts
-bun run examples/advanced-scheduling/demo.ts
+bun run examples/simple.ts
+bun run examples/advanced-scheduling.ts
+bun run examples/parent-child-hierarchy.ts
 ```
 
 ## API Overview
@@ -410,11 +411,14 @@ src/
 └── __tests__/               # Unit tests & performance tests
 
 examples/
-├── simple/
-│   ├── demo.ts              # Basic example
-│   └── README.md            # Example documentation
-└── advanced-scheduling/
-    └── demo.ts              # Pipeline scheduling example
+├── advanced-scheduling.ts    # Pipeline scheduling example
+├── collision-detection.ts    # Collision detection example
+├── parent-child-hierarchy.ts # Parent-child hierarchy and transform propagation example
+├── serialization.ts          # Serialization example
+├── simple.ts                 # Basic example
+├── spatial-grid.ts           # Spatial grid example
+├── state-machine.ts          # State machine example
+└── tag-filtering.ts          # Tag filtering example
 
 scripts/
 ├── build.ts                 # Build script
@@ -427,7 +431,8 @@ scripts/
 bun install
 bun test                    # Run tests
 bunx tsc --noEmit           # Type check
-bun run examples/simple/demo.ts  # Run example
+bun run examples/simple.ts       # Run example
+bun run examples/parent-child-hierarchy.ts
 bun run scripts/build.ts    # Build
 ```
 
