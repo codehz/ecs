@@ -1,5 +1,5 @@
-import type { EntityId, SerializedWorld } from "../../src";
-import { World, component } from "../../src";
+import type { EntityId, SerializedWorld } from "../src";
+import { World, component } from "../src";
 
 // Define component types
 type Position = { x: number; y: number };

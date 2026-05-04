@@ -1,5 +1,5 @@
 import { pipeline } from "@codehz/pipeline";
-import { World, component, type EntityId, type Query } from "../../src";
+import { World, component, type EntityId, type Query } from "../src";
 
 // =============================================================================
 // Component Type Definitions
