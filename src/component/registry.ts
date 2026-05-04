@@ -105,10 +105,63 @@ export interface ComponentOptions<T = any> {
   cascadeDelete?: boolean;
   /**
    * If true, relations with this component will not cause archetype fragmentation.
-   * Entities with different target entities for this relation component will be stored
-   * in the same archetype, preventing fragmentation when there are many different targets.
-   * Only applicable to relation components.
-   * Inspired by Flecs' DontFragment trait.
+   *
+   * **Problem it solves**: By default, each unique relation pair `(component, target)`
+   * creates a **separate archetype**. If 100 entities each have a `ChildOf` relation
+   * to a different parent, you get 100 archetypes — this is **archetype fragmentation**.
+   * Queries that iterate over all entities with a `ChildOf` relation must check all
+   * 100 archetypes, which degrades iteration performance and increases memory overhead.
+   *
+   * **How it works**: When `dontFragment` is enabled, the relation's target does **not**
+   * contribute to the archetype signature. Entities with different targets for the same
+   * relation component share a **single archetype**, and the per-entity target data is
+   * stored in a separate `DontFragmentStore` (a `Map<EntityId, Map<EntityId, any>>`).
+   * A wildcard relation marker (`relation(Comp, "*")`) is placed in the archetype
+   * component list so queries can still discover matching archetypes.
+   *
+   * **Use cases**:
+   * - **Hierarchy/ownership**: `ChildOf` relations where thousands of entities each
+   *   point to different parent entities.
+   * - **Dynamic targeting**: Relations where targets change frequently (e.g., AI
+   *   targeting, inventory slots) — without `dontFragment`, each target change would
+   *   cause an archetype migration, which is expensive.
+   * - **High-cardinality relations**: Any relation where the number of unique targets
+   *   is large compared to the number of entities.
+   *
+   * **Performance implications**:
+   * - **Without `dontFragment`**: Archetype count grows linearly with unique targets.
+   *   Each archetype migration (changing a relation target) requires moving the entity's
+   *   data between component arrays.
+   * - **With `dontFragment`**: Archetype count stays constant regardless of target
+   *   diversity. Changing a relation target is an O(1) update in the `DontFragmentStore`.
+   *   The trade-off is an extra map lookup when accessing the relation data.
+   *
+   * **Constraints**:
+   * - Only applicable to **relation components** (components used with `relation()`).
+   * - Wildcard queries (e.g., `relation(Comp, "*")`) still work correctly — the
+   *   archetype carries a wildcard marker so queries can discover it.
+   * - Works with `exclusive` and `cascadeDelete` simultaneously.
+   *
+   * @example
+   * ```ts
+   * // Without dontFragment: 100 entities with different parents = 100 archetypes
+   * const ChildOf = component(); // default: fragmentation happens
+   *
+   * // With dontFragment: 100 entities with different parents = 1 archetype
+   * const ChildOf = component({ dontFragment: true });
+   *
+   * for (let i = 0; i < 100; i++) {
+   *   const parent = world.new();
+   *   const child = world.new();
+   *   world.set(child, Position);
+   *   world.set(child, relation(ChildOf, parent));
+   * }
+   * world.sync();
+   * // dontFragment: 1 archetype for all 100 entities
+   * // without: 100 archetypes, one per unique parent
+   * ```
+   *
+   * Inspired by Flecs' `DontFragment` trait.
    */
   dontFragment?: boolean;
   /**
@@ -325,20 +378,40 @@ export function isCascadeDeleteComponent(id: ComponentId<any>): boolean {
 }
 
 /**
- * Check if a component is marked as dontFragment
- * @param id The component ID
- * @returns true if the component is dontFragment, false otherwise
+ * Check if a component is marked as `dontFragment`.
+ *
+ * When a component has `dontFragment: true`, relations using it do not cause
+ * archetype fragmentation — entities with different relation targets can share
+ * the same archetype. This is a fast O(1) bitset lookup.
+ *
+ * @param id - The component ID to check.
+ * @returns `true` if the component was created with `dontFragment: true`.
+ *
+ * @see {@link ComponentOptions.dontFragment} for the full explanation of how
+ *   `dontFragment` prevents archetype fragmentation.
  */
 export function isDontFragmentComponent(id: ComponentId<any>): boolean {
   return dontFragmentFlags.has(id);
 }
 
 /**
- * Generic function to check relation flags with specific target conditions
- * @param id The entity/relation ID to check
- * @param flagBitSet The bitset for the flag
- * @param targetCondition Function to check target ID condition
- * @returns true if the condition is met, false otherwise
+ * Generic optimized function to check whether a relation ID's base component
+ * has a specific flag in a bitset.
+ *
+ * Avoids the overhead of `getDetailedIdType` by directly decoding the relation
+ * ID and checking: (1) the ID is a valid relation, (2) the component ID is in the
+ * valid range, (3) the target satisfies the condition, and (4) the flag bit is set.
+ *
+ * Used as the fast-path implementation for `isDontFragmentRelation`,
+ * `isDontFragmentWildcard`, `isExclusiveRelation`, `isExclusiveWildcard`,
+ * and `isCascadeDeleteRelation`.
+ *
+ * @param id - The entity/relation ID to check.
+ * @param flagBitSet - The bitset tracking which component IDs have the flag.
+ * @param targetCondition - Predicate on the target ID (e.g., check for wildcard
+ *   vs. specific entity target).
+ * @returns `true` if the relation's base component has the flag and the target
+ *   condition is met.
  */
 function checkRelationFlag(
   id: EntityId<any>,
@@ -352,20 +425,50 @@ function checkRelationFlag(
 }
 
 /**
- * Check if a relation ID is a dontFragment relation (entity-relation or component-relation with dontFragment component)
- * This is an optimized function that avoids the overhead of getDetailedIdType
- * @param id The entity/relation ID to check
- * @returns true if this is a dontFragment relation, false otherwise
+ * Check if an ID is a specific (non-wildcard) relation backed by a `dontFragment`
+ * component.
+ *
+ * This is used in hot paths (archetype resolution, command processing) to determine
+ * whether a relation should be excluded from the archetype signature. Relations with
+ * `dontFragment` components are stored in the shared {@link DontFragmentStore} instead
+ * of being part of the archetype's component type list.
+ *
+ * This is an optimized function that avoids the overhead of `getDetailedIdType`
+ * by directly decoding and checking the relation's component ID against the
+ * `dontFragment` bitset.
+ *
+ * @param id - The entity/relation ID to check (must be a relation ID, not a plain
+ *   component ID).
+ * @returns `true` if this is a specific-target relation (not wildcard) whose base
+ *   component was created with `dontFragment: true`.
+ *
+ * @see {@link isDontFragmentWildcard} for the wildcard variant.
+ * @see {@link ComponentOptions.dontFragment} for the full explanation.
  */
 export function isDontFragmentRelation(id: EntityId<any>): boolean {
   return checkRelationFlag(id, dontFragmentFlags, (targetId) => targetId !== WILDCARD_TARGET_ID);
 }
 
 /**
- * Check if an ID is a wildcard relation with dontFragment component
- * This is an optimized function for filtering archetype component types
- * @param id The entity/relation ID to check
- * @returns true if this is a wildcard relation with dontFragment component, false otherwise
+ * Check if an ID is a wildcard relation (`relation(Comp, "*")`) backed by a
+ * `dontFragment` component.
+ *
+ * Wildcard markers for `dontFragment` components are placed in the archetype
+ * component list so that queries can discover archetypes containing entities
+ * with that relation type. This function is used in `filterRegularComponentTypes`
+ * to **keep** these wildcard markers in the archetype signature while stripping
+ * out specific-target `dontFragment` relations.
+ *
+ * This is an optimized function that avoids the overhead of `getDetailedIdType`
+ * by directly decoding and checking the relation's component ID against the
+ * `dontFragment` bitset.
+ *
+ * @param id - The entity/relation ID to check.
+ * @returns `true` if this is a wildcard relation (`"*"` target) whose base
+ *   component was created with `dontFragment: true`.
+ *
+ * @see {@link isDontFragmentRelation} for the specific-target variant.
+ * @see {@link ComponentOptions.dontFragment} for the full explanation.
  */
 export function isDontFragmentWildcard(id: EntityId<any>): boolean {
   return checkRelationFlag(id, dontFragmentFlags, (targetId) => targetId === WILDCARD_TARGET_ID);
