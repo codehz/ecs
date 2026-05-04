@@ -64,10 +64,69 @@ export interface ComponentOptions<T = any> {
    */
   name?: string;
   /**
-   * If true, an entity can have at most one relation per base component.
-   * When adding a new relation with the same base component, any existing relations
-   * with that base component are automatically removed.
-   * Only applicable to relation components.
+   * If `true`, an entity can have **at most one** relation per base component type.
+   * When a new relation with the same base component is added, any existing relations
+   * with that base component are **automatically removed** before the new one is applied.
+   *
+   * **Only applicable to relation components** — components used via
+   * `relation(componentId, target)`. Regular (non-relation) components ignore this flag.
+   *
+   * ## Behavior
+   *
+   * Exclusive relations enforce a **one-to-one** constraint at the entity level:
+   * each entity can hold at most one relation of a given exclusive component type.
+   *
+   * - **Same base component, different targets**: `set(entity, relation(Comp, A))`
+   *   followed by `set(entity, relation(Comp, B))` results in only `(Comp, B)` —
+   *   the `(Comp, A)` relation is automatically removed.
+   * - **Same base component, same target**: Re-setting the same relation target
+   *   simply updates the component value (no extra removal overhead).
+   * - **Different exclusive components**: Independent — `exclusive` on `CompA` does
+   *   not affect relations using `CompB`.
+   *
+   * The removal happens **during `world.sync()`**, as part of the command buffer
+   * processing, so it respects the same deferred execution model as other structural
+   * changes.
+   *
+   * ## Use cases
+   *
+   * - **Ownership**: An entity can only be owned by one parent at a time
+   *   (`ChildOf` with `exclusive: true`).
+   * - **Equipment slots**: An item can only be in one slot at a time
+   *   (`EquippedBy` with `exclusive: true`).
+   * - **Targeting**: An AI agent can only track one target at a time
+   *   (`Targeting` with `exclusive: true`).
+   * - **State machines**: An entity can only have one active state from a set
+   *   (`ActiveState` with `exclusive: true`).
+   *
+   * ## Interaction with other options
+   *
+   * - **`cascadeDelete`**: Compatible. When an exclusive relation uses
+   *   `cascadeDelete`, deleting the target entity will both (a) delete the
+   *   referencing entity, and (b) the exclusivity constraint prevents the
+   *   entity from having multiple cascade-delete relations of the same type.
+   * - **`dontFragment`**: Compatible. Exclusivity is enforced at the data level
+   *   regardless of whether the archetype is fragmented.
+   *
+   * @example
+   * ```ts
+   * // Without exclusive: entity can have multiple ChildOf relations
+   * const ChildOf = component();
+   * world.set(child, relation(ChildOf, parentA));
+   * world.set(child, relation(ChildOf, parentB));
+   * world.sync();
+   * // child now has TWO ChildOf relations (parentA and parentB)
+   * ```
+   *
+   * @example
+   * ```ts
+   * // With exclusive: only the last relation survives
+   * const ChildOf = component({ exclusive: true });
+   * world.set(child, relation(ChildOf, parentA));
+   * world.set(child, relation(ChildOf, parentB));
+   * world.sync();
+   * // child has only (ChildOf, parentB); (ChildOf, parentA) was auto-removed
+   * ```
    */
   exclusive?: boolean;
   /**
@@ -353,9 +412,26 @@ export function getComponentMerge<T = any>(componentType: EntityId<any>): Compon
 }
 
 /**
- * Check if a component is marked as exclusive
- * @param id The component ID
- * @returns true if the component is exclusive, false otherwise
+ * Check if a component was created with `exclusive: true`.
+ *
+ * This is a fast O(1) bitset lookup that determines whether the component enforces
+ * the one-to-one relation constraint — an entity can have at most one relation of
+ * this component type, and setting a new relation target automatically removes the
+ * previous one.
+ *
+ * **Note**: This only checks the component's intrinsic property, not whether a
+ * specific entity/relation ID is actually an exclusive relation. For checking
+ * runtime relation IDs (including wildcards), use {@link isExclusiveRelation}
+ * or {@link isExclusiveWildcard}.
+ *
+ * @param id - The component ID to check. Must be a plain component ID (1–1023),
+ *   not a relation-wrapped ID.
+ * @returns `true` if the component was created with `exclusive: true`.
+ *
+ * @see {@link ComponentOptions.exclusive} for the full explanation of exclusive
+ *   relation behavior.
+ * @see {@link isExclusiveRelation} for checking specific-target exclusive relations.
+ * @see {@link isExclusiveWildcard} for checking wildcard exclusive relations.
  */
 export function isExclusiveComponent(id: ComponentId<any>): boolean {
   return exclusiveFlags.has(id);
@@ -475,17 +551,49 @@ export function isDontFragmentWildcard(id: EntityId<any>): boolean {
 }
 
 /**
- * Check if a relation ID is an exclusive relation (entity-relation or component-relation with exclusive component)
- * This avoids the full getDetailedIdType overhead for hot paths
- * @param id The entity/relation ID to check
- * @returns true if this is an exclusive relation, false otherwise
+ * Check if an ID is a specific (non-wildcard) relation backed by an `exclusive`
+ * component.
+ *
+ * This is used in hot paths (command buffer processing, relation management) to
+ * determine whether setting this relation should trigger automatic removal of
+ * other relations with the same base component on the same entity.
+ *
+ * This is an optimized function that avoids the overhead of `getDetailedIdType`
+ * by directly decoding and checking the relation's component ID against the
+ * `exclusive` bitset.
+ *
+ * @param id - The entity/relation ID to check (must be a relation ID, not a plain
+ *   component ID).
+ * @returns `true` if this is a specific-target relation (not wildcard) whose base
+ *   component was created with `exclusive: true`.
+ *
+ * @see {@link isExclusiveWildcard} for the wildcard variant.
+ * @see {@link ComponentOptions.exclusive} for the full explanation of exclusive
+ *   relation behavior.
  */
 export function isExclusiveRelation(id: EntityId<any>): boolean {
   return checkRelationFlag(id, exclusiveFlags, (targetId) => targetId !== WILDCARD_TARGET_ID);
 }
 
 /**
- * Check if a relation ID is a wildcard relation with exclusive component
+ * Check if an ID is a wildcard relation (`relation(Comp, "*")`) backed by an
+ * `exclusive` component.
+ *
+ * Wildcard markers for exclusive components are used to detect that an archetype
+ * may contain exclusive relations, so the runtime can apply exclusivity enforcement
+ * when processing relation commands.
+ *
+ * This is an optimized function that avoids the overhead of `getDetailedIdType`
+ * by directly decoding and checking the relation's component ID against the
+ * `exclusive` bitset.
+ *
+ * @param id - The entity/relation ID to check.
+ * @returns `true` if this is a wildcard relation (`"*"` target) whose base
+ *   component was created with `exclusive: true`.
+ *
+ * @see {@link isExclusiveRelation} for the specific-target variant.
+ * @see {@link ComponentOptions.exclusive} for the full explanation of exclusive
+ *   relation behavior.
  */
 export function isExclusiveWildcard(id: EntityId<any>): boolean {
   return checkRelationFlag(id, exclusiveFlags, (targetId) => targetId === WILDCARD_TARGET_ID);
