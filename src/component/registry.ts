@@ -13,6 +13,46 @@ import { BitSet } from "../utils/bit-set";
 const globalComponentIdAllocator = new ComponentIdAllocator();
 
 const ComponentIdForNames: Map<string, ComponentId<any>> = new Map();
+
+/**
+ * Merge function type for combining repeated `set()` values within a single sync batch.
+ *
+ * When `world.set(entity, componentType, value)` is called **multiple times** for the
+ * same entity and same component type **before** the next `world.sync()`, the merge
+ * callback is invoked to combine the values instead of simply overwriting. This allows
+ * additive or custom composition of component data in a single frame.
+ *
+ * @typeParam T - The component's value type.
+ *
+ * @param prev - The value from the **previous** `set()` call (or the merged result of
+ *   earlier calls) for this entity/componentType pair within the current sync batch.
+ * @param next - The value from the **current** `set()` call being processed.
+ *
+ * @returns The merged value to be stored. This becomes `prev` if another `set()` for
+ *   the same entity and componentType is encountered later in the same batch.
+ *
+ * @remarks
+ * **Idempotency**: Merge functions **must be idempotent**. The ECS does not guarantee
+ * that `world.sync()` won't be called multiple times in edge cases (e.g., intermediate
+ * syncs during pipeline execution), so the merge result should not depend on call
+ * count or non-deterministic state.
+ *
+ * **Single-batch scope**: Merging only applies to `set()` calls within the **same sync
+ * batch** (i.e., between two `world.sync()` calls). After `world.sync()`, the component
+ * value is committed to storage, and the next `set()` starts with a fresh `prev` value.
+ *
+ * @example
+ * ```ts
+ * // Accumulate damage events in a single frame
+ * const DamageEvents = component<DamageEvent[]>({
+ *   merge: (prev, next) => [...prev, ...next],
+ * });
+ *
+ * world.set(player, DamageEvents, [{ source: "fire", amount: 10 }]);
+ * world.set(player, DamageEvents, [{ source: "ice", amount: 5 }]);
+ * // After sync: player has [{ source: "fire", amount: 10 }, { source: "ice", amount: 5 }]
+ * ```
+ */
 type ComponentMerge<T = any> = (prev: T, next: T) => T;
 
 /**
@@ -72,7 +112,63 @@ export interface ComponentOptions<T = any> {
    */
   dontFragment?: boolean;
   /**
-   * Custom merge behavior for repeated set() of the same componentType in a single sync batch.
+   * Custom merge behavior for repeated `set()` of the same component type on the
+   * same entity within a single sync batch.
+   *
+   * By default, calling `world.set(entity, comp, value)` multiple times for the same
+   * entity and component before `world.sync()` simply overwrites the previous value —
+   * the last `set()` wins. When `merge` is provided, the values are combined using
+   * your function instead.
+   *
+   * @remarks
+   * **Use cases**:
+   * - **Accumulation**: Collecting events, tags, or modifiers that multiple systems
+   *   contribute to within the same frame.
+   * - **Composition**: Merging partial updates into a single component value (e.g.,
+   *   applying multiple `Vec3` deltas to a position).
+   * - **Conflict resolution**: Choosing the max/min/latest value when multiple
+   *   systems want to set the same component.
+   *
+   * **Scope**: This only affects `set()` calls on the **same entity** with the **same
+   * component type** within **one sync batch** (i.e., between `world.sync()` calls).
+   * It does NOT merge values across different entities or across sync boundaries.
+   *
+   * **Relation support**: If the component is used as a relation (via
+   * `relation(componentId, target)`), the merge function also applies per-target.
+   * `set(entity, relation(Comp, A), v1)` and `set(entity, relation(Comp, A), v2)`
+   * will be merged, but `set(entity, relation(Comp, B), v)` is independent.
+   *
+   * **Idempotency required**: Your merge function should be idempotent — calling it
+   * multiple times with the same inputs must produce the same result. The ECS
+   * runtime does not guarantee exactly-once `sync()` execution in all scenarios.
+   *
+   * **Return value**: The function **must return** the merged value. It should not
+   * mutate `prev` or `next` in place unless you intentionally want shared mutable
+   * state (which is discouraged).
+   *
+   * @example
+   * ```ts
+   * // Collect tags from multiple systems in one frame
+   * const Tags = component<string[]>({
+   *   merge: (prev, next) => [...prev, ...next],
+   * });
+   * ```
+   *
+   * @example
+   * ```ts
+   * // Only keep the highest priority value
+   * const Alert = component<{ level: number; msg: string }>({
+   *   merge: (prev, next) => prev.level >= next.level ? prev : next,
+   * });
+   * ```
+   *
+   * @example
+   * ```ts
+   * // Accumulate numeric deltas (e.g., for movement)
+   * const Velocity = component<{ x: number; y: number }>({
+   *   merge: (prev, next) => ({ x: prev.x + next.x, y: prev.y + next.y }),
+   * });
+   * ```
    */
   merge?: ComponentMerge<T>;
 }
@@ -186,8 +282,16 @@ function getBaseComponentId(componentType: EntityId<any>): ComponentId<any> | un
 }
 
 /**
- * Get merge callback for a componentType (including relation component types).
- * Returns undefined if the base component has no merge callback.
+ * Get the merge callback for a component type (including relation component types).
+ *
+ * Looks up the base component's merge function, resolving through relation wrappers.
+ * For example, if `ChildOf` has a merge function and you pass `relation(ChildOf, parent)`,
+ * the same merge function is returned.
+ *
+ * @param componentType - A raw component ID or a relation-wrapped component type
+ *   (e.g., `relation(MyComp, targetEntity)`).
+ * @returns The merge callback if one was registered via {@link ComponentOptions.merge},
+ *   or `undefined` if no merge was configured for the base component.
  */
 export function getComponentMerge<T = any>(componentType: EntityId<any>): ComponentMerge<T> | undefined {
   const baseComponentId = getBaseComponentId(componentType);
