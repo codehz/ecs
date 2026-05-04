@@ -33,7 +33,34 @@ export interface ComponentOptions<T = any> {
   /**
    * If true, when a relation target entity is deleted, all entities that reference
    * it through this component will also be deleted (cascade delete).
+   *
    * Only applicable to entity-relation components.
+   *
+   * **Important distinction from default cleanup**:
+   * By default, the ECS library **always** cleans up relation components that point
+   * to a deleted entity — the relation component is removed from the referencing
+   * entity, but the referencing entity itself **survives**. When `cascadeDelete` is
+   * enabled, the **entire referencing entity** is deleted, not just the relation
+   * component. This deletion is transitive: if entity C references entity B (which
+   * is cascade-deleted), entity C will also be deleted, and so on.
+   *
+   * @example
+   * // Without cascadeDelete (default behavior):
+   * const ChildOf = component(); // no cascadeDelete
+   * world.set(child, relation(ChildOf, parent));
+   * world.sync();
+   * world.delete(parent);
+   * world.sync();
+   * // child still exists, but the ChildOf relation is cleaned up
+   *
+   * @example
+   * // With cascadeDelete:
+   * const ChildOf = component({ cascadeDelete: true });
+   * world.set(child, relation(ChildOf, parent));
+   * world.sync();
+   * world.delete(parent);
+   * world.sync();
+   * // child is also deleted (entity deleted, not just relation cleaned up)
    */
   cascadeDelete?: boolean;
   /**
@@ -178,9 +205,16 @@ export function isExclusiveComponent(id: ComponentId<any>): boolean {
 }
 
 /**
- * Check if a component is marked as cascade delete
+ * Check if a component is marked as cascade delete.
+ *
+ * When enabled, deleting the target entity of an entity-relation with this
+ * component will cause the **entire referencing entity** to be deleted (not
+ * just cleanup of the relation component, which happens by default for all
+ * relations).
+ *
  * @param id The component ID
  * @returns true if the component is cascade delete, false otherwise
+ * @see {@link ComponentOptions.cascadeDelete}
  */
 export function isCascadeDeleteComponent(id: ComponentId<any>): boolean {
   return cascadeDeleteFlags.has(id);
@@ -251,11 +285,20 @@ export function isExclusiveWildcard(id: EntityId<any>): boolean {
 }
 
 /**
- * Check if a relation ID is a cascade delete entity-relation
- * This is an optimized function that avoids the overhead of getDetailedIdType
- * Note: Cascade delete only applies to entity-relations (not component-relations or wildcards)
+ * Check if a relation ID is a cascade delete entity-relation.
+ *
+ * This is an optimized function that avoids the overhead of getDetailedIdType.
+ *
+ * Cascade delete only applies to entity-relations (not component-relations or
+ * wildcards). When a cascade-delete-marked relation's target entity is deleted,
+ * the **entire source entity** (the one holding the relation) is deleted — not
+ * just the relation component. Without cascade delete, the relation component
+ * is simply removed (which is the default cleanup for all relations when their
+ * target is deleted).
+ *
  * @param id The entity/relation ID to check
  * @returns true if this is an entity-relation with cascade delete, false otherwise
+ * @see {@link ComponentOptions.cascadeDelete}
  */
 export function isCascadeDeleteRelation(id: EntityId<any>): boolean {
   return checkRelationFlag(
