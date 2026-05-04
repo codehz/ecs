@@ -207,6 +207,7 @@ world.sync();
 bun run examples/simple.ts
 bun run examples/advanced-scheduling.ts
 bun run examples/parent-child-hierarchy.ts
+bun run examples/inventory-system-relations.ts
 ```
 
 ## API 概述
