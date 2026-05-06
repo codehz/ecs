@@ -44,9 +44,10 @@ export class EntityBuilder {
    * builder.with(Position, { x: 10, y: 20 });
    * builder.with(Marker); // void component
    */
-  with<T>(componentId: EntityId<T>, ...args: T extends void ? [] | [void] : [T]): this {
-    const value = (args.length > 0 ? args[0] : undefined) as T;
-    this.components.push({ type: "component", id: componentId, value });
+  with<T extends void>(componentId: EntityId<T>): this;
+  with<T>(componentId: EntityId<T>, value: T): this;
+  with<T>(componentId: EntityId<T>, value?: T): this {
+    this.components.push({ type: "component", id: componentId, value: value as T });
     return this;
   }
 
@@ -63,13 +64,10 @@ export class EntityBuilder {
    * builder.withRelation(Parent, parentEntity);
    * builder.withRelation(ChildOf, childEntity, { order: 1 });
    */
-  withRelation<T>(
-    componentId: ComponentId<T>,
-    targetEntity: EntityId<any>,
-    ...args: T extends void ? [] | [void] : [T]
-  ): this {
-    const value = (args.length > 0 ? args[0] : undefined) as T;
-    this.components.push({ type: "relation", componentId, targetId: targetEntity, value });
+  withRelation<T extends void>(componentId: ComponentId<T>, targetEntity: EntityId<any>): this;
+  withRelation<T>(componentId: ComponentId<T>, targetEntity: EntityId<any>, value: T): this;
+  withRelation<T>(componentId: ComponentId<T>, targetEntity: EntityId<any>, value?: T): this {
+    this.components.push({ type: "relation", componentId, targetId: targetEntity, value: value as T });
     return this;
   }
 
