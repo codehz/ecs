@@ -37,7 +37,7 @@
     "lint-staged": "^16.2.6",
     "prettier": "^3.6.2",
     "prettier-plugin-organize-imports": "^4.3.0",
-    "tsdown": "^0.16.6"
+    "tsdown": "^0.22.0"
   },
   "repository": {
     "url": "https://github.com/codehz/ecs"
