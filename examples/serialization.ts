@@ -8,10 +8,10 @@ type Health = { value: number; maxValue: number };
 type Name = { value: string };
 
 // Define component IDs
-const PositionId = component<Position>();
-const VelocityId = component<Velocity>();
-const HealthId = component<Health>();
-const NameId = component<Name>();
+const PositionId = component<Position>("Position");
+const VelocityId = component<Velocity>("Velocity");
+const HealthId = component<Health>("Health");
+const NameId = component<Name>("Name");
 
 // Helper: print world state by iterating entities that have given components
 function printWorldState(world: World, label: string): void {
