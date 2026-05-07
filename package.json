@@ -9,11 +9,13 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.mts",
-      "import": "./dist/index.mjs"
+      "import": "./dist/index.mjs",
+      "perry": "./src/index.ts"
     },
     "./testing": {
       "types": "./dist/testing.d.mts",
-      "import": "./dist/testing.mjs"
+      "import": "./dist/testing.mjs",
+      "perry": "./src/testing/index.ts"
     }
   },
   "files": [
