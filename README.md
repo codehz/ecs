@@ -31,24 +31,24 @@ type Position = { x: number; y: number };
 type Velocity = { x: number; y: number };
 
 // 定义组件 ID（自动分配）
-const PositionId = component<Position>();
-const VelocityId = component<Velocity>();
+const Position = component<Position>();
+const Velocity = component<Velocity>();
 
 // 创建世界
 const world = new World();
 
 // 创建实体并设置组件（所有更改缓冲到 sync() 时应用）
 const entity = world.new();
-world.set(entity, PositionId, { x: 0, y: 0 });
-world.set(entity, VelocityId, { x: 1, y: 0.5 });
+world.set(entity, Position, { x: 0, y: 0 });
+world.set(entity, Velocity, { x: 1, y: 0.5 });
 world.sync();
 
 // 创建可重用的查询
-const query = world.createQuery([PositionId, VelocityId]);
+const query = world.createQuery([Position, Velocity]);
 
 // 更新循环
 const deltaTime = 1.0 / 60.0;
-query.forEach([PositionId, VelocityId], (entity, position, velocity) => {
+query.forEach([Position, Velocity], (entity, position, velocity) => {
   position.x += velocity.x * deltaTime;
   position.y += velocity.y * deltaTime;
 });
@@ -87,7 +87,7 @@ const ChildOf = component({ exclusive: true, name: "ChildOf" });
 
 ```typescript
 // 返回卸载函数
-const unhook = world.hook([PositionId, VelocityId], {
+const unhook = world.hook([Position, Velocity], {
   on_init: (entityId, position, velocity) => {
     // 钩子注册时，为每个已同时满足条件的实体调用
   },
@@ -105,7 +105,7 @@ unhook();
 也支持回调简写形式：
 
 ```typescript
-const unhook = world.hook([PositionId, VelocityId], (type, entityId, position, velocity) => {
+const unhook = world.hook([Position, Velocity], (type, entityId, position, velocity) => {
   if (type === "init") console.log("初始化");
   if (type === "set") console.log("设置");
   if (type === "remove") console.log("移除");
@@ -116,7 +116,7 @@ const unhook = world.hook([PositionId, VelocityId], (type, entityId, position, v
 
 ```typescript
 // 可选组件：即使 Velocity 不存在也会触发钩子
-world.hook([PositionId, { optional: VelocityId }], {
+world.hook([Position, { optional: Velocity }], {
   on_set: (entityId, position, velocity) => {
     if (velocity !== undefined) {
       console.log("拥有速度和位置");
@@ -127,14 +127,14 @@ world.hook([PositionId, { optional: VelocityId }], {
 });
 
 // 过滤器：排除带有指定负面组件的实体
-const DisabledId = component<void>();
+const Disabled = component<void>();
 world.hook(
-  [PositionId, VelocityId],
+  [Position, Velocity],
   {
     on_set: (entityId, position, velocity) => console.log("进入匹配集合"),
     on_remove: (entityId, position, velocity) => console.log("退出匹配集合"),
   },
-  { negativeComponentTypes: [DisabledId] },
+  { negativeComponentTypes: [Disabled] },
 );
 ```
 
@@ -164,10 +164,10 @@ console.log(world.has(child, relation(ChildOf, parent2))); // true
 
 ```typescript
 import { World, component, relation } from "@codehz/ecs";
-const PositionId = component<Position>();
+const Position = component<Position>();
 
 const world = new World();
-const wildcardPos = relation(PositionId, "*");
+const wildcardPos = relation(Position, "*");
 
 // 监听所有该类型关系的变动
 world.hook([wildcardPos], {
@@ -362,11 +362,11 @@ import { pipeline } from "@codehz/pipeline";
 import { World, component } from "@codehz/ecs";
 
 const world = new World();
-const movementQuery = world.createQuery([PositionId, VelocityId]);
+const movementQuery = world.createQuery([Position, Velocity]);
 
 const gameLoop = pipeline<{ deltaTime: number }>()
   .addPass((env) => {
-    movementQuery.forEach([PositionId, VelocityId], (entity, position, velocity) => {
+    movementQuery.forEach([Position, Velocity], (entity, position, velocity) => {
       position.x += velocity.x * env.deltaTime;
       position.y += velocity.y * env.deltaTime;
     });

@@ -30,25 +30,25 @@ import { World, component } from "@codehz/ecs";
 type Position = { x: number; y: number };
 type Velocity = { x: number; y: number };
 
-// Define component IDs (auto-assigned)
-const PositionId = component<Position>();
-const VelocityId = component<Velocity>();
+// Define components (auto-assigned)
+const Position = component<Position>();
+const Velocity = component<Velocity>();
 
 // Create world
 const world = new World();
 
 // Create entity and set components (all changes buffered until sync())
 const entity = world.new();
-world.set(entity, PositionId, { x: 0, y: 0 });
-world.set(entity, VelocityId, { x: 1, y: 0.5 });
+world.set(entity, Position, { x: 0, y: 0 });
+world.set(entity, Velocity, { x: 1, y: 0.5 });
 world.sync();
 
 // Create reusable query
-const query = world.createQuery([PositionId, VelocityId]);
+const query = world.createQuery([Position, Velocity]);
 
 // Update loop
 const deltaTime = 1.0 / 60.0;
-query.forEach([PositionId, VelocityId], (entity, position, velocity) => {
+query.forEach([Position, Velocity], (entity, position, velocity) => {
   position.x += velocity.x * deltaTime;
   position.y += velocity.y * deltaTime;
 });
@@ -87,7 +87,7 @@ const ChildOf = component({ exclusive: true, name: "ChildOf" });
 
 ```typescript
 // Returns an unlisten function
-const unhook = world.hook([PositionId, VelocityId], {
+const unhook = world.hook([Position, Velocity], {
   on_init: (entityId, position, velocity) => {
     // Called for every entity that already matches when the hook is registered
   },
@@ -105,7 +105,7 @@ unhook();
 A shorthand callback form is also supported:
 
 ```typescript
-const unhook = world.hook([PositionId, VelocityId], (type, entityId, position, velocity) => {
+const unhook = world.hook([Position, Velocity], (type, entityId, position, velocity) => {
   if (type === "init") console.log("init");
   if (type === "set") console.log("set");
   if (type === "remove") console.log("remove");
@@ -116,7 +116,7 @@ Optional components and filters:
 
 ```typescript
 // Optional component: the hook fires even if Velocity is absent
-world.hook([PositionId, { optional: VelocityId }], {
+world.hook([Position, { optional: Velocity }], {
   on_set: (entityId, position, velocity) => {
     if (velocity !== undefined) {
       console.log("has velocity and position");
@@ -127,14 +127,14 @@ world.hook([PositionId, { optional: VelocityId }], {
 });
 
 // Filter: exclude entities with specified negative components
-const DisabledId = component<void>();
+const Disabled = component<void>();
 world.hook(
-  [PositionId, VelocityId],
+  [Position, Velocity],
   {
     on_set: (entityId, position, velocity) => console.log("entered matching set"),
     on_remove: (entityId, position, velocity) => console.log("exited matching set"),
   },
-  { negativeComponentTypes: [DisabledId] },
+  { negativeComponentTypes: [Disabled] },
 );
 ```
 
@@ -164,10 +164,10 @@ console.log(world.has(child, relation(ChildOf, parent2))); // true
 
 ```typescript
 import { World, component, relation } from "@codehz/ecs";
-const PositionId = component<Position>();
+const Position = component<Position>();
 
 const world = new World();
-const wildcardPos = relation(PositionId, "*");
+const wildcardPos = relation(Position, "*");
 
 // Listen for changes to all relations of this type
 world.hook([wildcardPos], {
@@ -362,11 +362,11 @@ import { pipeline } from "@codehz/pipeline";
 import { World, component } from "@codehz/ecs";
 
 const world = new World();
-const movementQuery = world.createQuery([PositionId, VelocityId]);
+const movementQuery = world.createQuery([Position, Velocity]);
 
 const gameLoop = pipeline<{ deltaTime: number }>()
   .addPass((env) => {
-    movementQuery.forEach([PositionId, VelocityId], (entity, position, velocity) => {
+    movementQuery.forEach([Position, Velocity], (entity, position, velocity) => {
       position.x += velocity.x * env.deltaTime;
       position.y += velocity.y * env.deltaTime;
     });
