@@ -230,6 +230,11 @@ export function collectMultiHookComponents(
 /**
  * Reconstructs wildcard relation data by merging current data with removed components.
  * Returns an array of [targetId, value] tuples for the wildcard relation.
+ *
+ * This is used during "on_remove" hook invocation: the removed components have already
+ * been taken out of the entity's archetype, but the hook callback expects to see the
+ * full data as it existed *before* removal. We reconstruct that snapshot by taking the
+ * current wildcard data (post-removal) and adding back the entries that were just removed.
  */
 function reconstructWildcardWithRemoved(
   ctx: HooksContext,
@@ -237,10 +242,26 @@ function reconstructWildcardWithRemoved(
   wildcardId: EntityId<any>,
   removedComponents: Map<EntityId<any>, any>,
 ): [EntityId, any][] {
+  // ctx.get() for a wildcard relation ID always returns [EntityId, any][] at runtime
+  // (see Archetype.getWildcardRelations / ComponentEntityStore.getWildcard).
+  // The HooksContext interface erases the WildcardRelationId overload for simplicity,
+  // so we assert the expected shape here rather than silently falling back to [].
   const currentData = ctx.get(entityId, wildcardId);
-  const result = Array.isArray(currentData) ? [...currentData] : [];
+  if (!Array.isArray(currentData)) {
+    throw new Error(
+      `Expected wildcard relation data to be an array, but got ${typeof currentData} ` +
+        `for entity ${entityId} and wildcard ${wildcardId}. ` +
+        `This indicates a HooksContext implementation that does not conform to the expected contract.`,
+    );
+  }
 
-  // Add removed matching relations
+  // Spread-copy the array so that pushing removed entries below does not mutate
+  // the archetype's internal storage. Without the copy, we would leak removed
+  // component data back into the live entity data.
+  const result = [...currentData];
+
+  // Re-inject matching relations that were just removed, so the hook callback
+  // sees the complete snapshot as it existed before the removal.
   for (const [removedCompId, removedValue] of removedComponents.entries()) {
     if (componentMatchesHookType(removedCompId, wildcardId)) {
       const targetId = getTargetIdFromRelationId(removedCompId);
