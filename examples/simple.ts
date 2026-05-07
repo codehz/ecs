@@ -6,21 +6,21 @@ type Position = { x: number; y: number };
 type Velocity = { x: number; y: number };
 
 // Define component IDs
-const PositionId = component<Position>();
-const VelocityId = component<Velocity>();
+const Position = component<Position>();
+const Velocity = component<Velocity>();
 const ChildOf = component({ exclusive: true }); // Exclusive relation component
 
 // Create the world
 const world = new World();
 
 // Pre-cache queries
-const movementQuery: Query = world.createQuery([PositionId, VelocityId]);
+const movementQuery: Query = world.createQuery([Position, Velocity]);
 
 // Build game loop using pipeline
 const gameLoop = pipeline<{ deltaTime: number }>()
   // Movement pass
   .addPass((env) => {
-    movementQuery.forEach([PositionId, VelocityId], (entity, position, velocity) => {
+    movementQuery.forEach([Position, Velocity], (entity, position, velocity) => {
       position.x += velocity.x * env.deltaTime;
       position.y += velocity.y * env.deltaTime;
       console.log(`Entity ${entity}: Position (${position.x.toFixed(2)}, ${position.y.toFixed(2)})`);
@@ -36,10 +36,10 @@ function main() {
   console.log("ECS Simple Demo");
 
   // Create entity 1
-  const entity1 = world.spawn().with(PositionId, { x: 0, y: 0 }).with(VelocityId, { x: 1, y: 0.5 }).build();
+  const entity1 = world.spawn().with(Position, { x: 0, y: 0 }).with(Velocity, { x: 1, y: 0.5 }).build();
 
   // Create entity 2
-  const entity2 = world.spawn().with(PositionId, { x: 10, y: 10 }).with(VelocityId, { x: -0.5, y: 1 }).build();
+  const entity2 = world.spawn().with(Position, { x: 10, y: 10 }).with(Velocity, { x: -0.5, y: 1 }).build();
   void entity2;
 
   // Demonstrate Exclusive Relations
@@ -62,13 +62,13 @@ function main() {
   console.log(`Child has ChildOf(parent2): ${world.has(child, relation(ChildOf, parent2))}`);
 
   // Register component hooks
-  world.hook([PositionId], {
+  world.hook([Position], {
     on_set: (entityId, component) => {
       console.log(`Component set hook triggered: Entity ${entityId} Position is (${component.x}, ${component.y})`);
     },
   });
 
-  world.hook([VelocityId], {
+  world.hook([Velocity], {
     on_remove: (entityId) => {
       console.log(`Component remove hook triggered: Entity ${entityId} removed Velocity component`);
     },
@@ -86,7 +86,7 @@ function main() {
 
   // Demonstrate component removal hooks
   console.log("\nComponent Removal Demo:");
-  world.remove(entity1, VelocityId);
+  world.remove(entity1, Velocity);
   world.sync();
 
   console.log("\nDemo completed!");

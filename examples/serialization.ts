@@ -8,17 +8,17 @@ type Health = { value: number; maxValue: number };
 type Name = { value: string };
 
 // Define component IDs
-const PositionId = component<Position>("Position");
-const VelocityId = component<Velocity>("Velocity");
-const HealthId = component<Health>("Health");
-const NameId = component<Name>("Name");
+const Position = component<Position>("Position");
+const Velocity = component<Velocity>("Velocity");
+const Health = component<Health>("Health");
+const Name = component<Name>("Name");
 
 // Helper: print world state by iterating entities that have given components
 function printWorldState(world: World, label: string): void {
   console.log(`\n=== ${label} ===`);
 
   // Query all entities that have Position (our "base" component)
-  const results = world.query([PositionId], true);
+  const results = world.query([Position], true);
 
   if (results.length === 0) {
     console.log("  (no entities found)");
@@ -31,18 +31,18 @@ function printWorldState(world: World, label: string): void {
   } of results) {
     const parts: string[] = [`Entity ${entity}:`, `  Position: (${pos.x}, ${pos.y})`];
 
-    if (world.has(entity, VelocityId)) {
-      const vel = world.get(entity, VelocityId);
+    if (world.has(entity, Velocity)) {
+      const vel = world.get(entity, Velocity);
       parts.push(`  Velocity: (${vel.x}, ${vel.y})`);
     }
 
-    if (world.has(entity, HealthId)) {
-      const hp = world.get(entity, HealthId);
+    if (world.has(entity, Health)) {
+      const hp = world.get(entity, Health);
       parts.push(`  Health: ${hp.value}/${hp.maxValue}`);
     }
 
-    if (world.has(entity, NameId)) {
-      const name = world.get(entity, NameId);
+    if (world.has(entity, Name)) {
+      const name = world.get(entity, Name);
       parts.push(`  Name: "${name.value}"`);
     }
 
@@ -52,8 +52,8 @@ function printWorldState(world: World, label: string): void {
 
 // Helper: verify two worlds have equivalent state
 function verifyWorldsMatch(original: World, restored: World): boolean {
-  const origResults = original.query([PositionId], true);
-  const restResults = restored.query([PositionId], true);
+  const origResults = original.query([Position], true);
+  const restResults = restored.query([Position], true);
 
   if (origResults.length !== restResults.length) {
     console.error(`  Entity count mismatch: ${origResults.length} vs ${restResults.length}`);
@@ -93,7 +93,7 @@ function verifyWorldsMatch(original: World, restored: World): boolean {
       }
       return true;
     };
-    if (!checkComp(VelocityId) || !checkComp(HealthId) || !checkComp(NameId)) {
+    if (!checkComp(Velocity) || !checkComp(Health) || !checkComp(Name)) {
       return false;
     }
   }
@@ -123,7 +123,7 @@ interface CustomSaveFormat {
 }
 
 function customEncode(world: World): CustomSaveFormat {
-  const results = world.query([PositionId], true);
+  const results = world.query([Position], true);
   const entities: CustomSaveFormat["entities"] = [];
 
   for (const {
@@ -135,18 +135,18 @@ function customEncode(world: World): CustomSaveFormat {
       position: { x: pos.x, y: pos.y },
     };
 
-    if (world.has(entity, VelocityId)) {
-      const vel = world.get(entity, VelocityId);
+    if (world.has(entity, Velocity)) {
+      const vel = world.get(entity, Velocity);
       entry.velocity = { x: vel.x, y: vel.y };
     }
 
-    if (world.has(entity, HealthId)) {
-      const hp = world.get(entity, HealthId);
+    if (world.has(entity, Health)) {
+      const hp = world.get(entity, Health);
       entry.health = { value: hp.value, maxValue: hp.maxValue };
     }
 
-    if (world.has(entity, NameId)) {
-      const name = world.get(entity, NameId);
+    if (world.has(entity, Name)) {
+      const name = world.get(entity, Name);
       entry.name = name.value;
     }
 
@@ -167,18 +167,18 @@ function customDecode(data: CustomSaveFormat): World {
   const world = new World();
 
   for (const entry of data.entities) {
-    const builder = world.spawn().with(PositionId, entry.position);
+    const builder = world.spawn().with(Position, entry.position);
 
     if (entry.velocity) {
-      builder.with(VelocityId, entry.velocity);
+      builder.with(Velocity, entry.velocity);
     }
 
     if (entry.health) {
-      builder.with(HealthId, entry.health);
+      builder.with(Health, entry.health);
     }
 
     if (entry.name !== undefined) {
-      builder.with(NameId, { value: entry.name });
+      builder.with(Name, { value: entry.name });
     }
 
     builder.build();
@@ -202,25 +202,25 @@ function main() {
   // Spawn a player entity
   const player = world
     .spawn()
-    .with(PositionId, { x: 0, y: 0 })
-    .with(VelocityId, { x: 1, y: 0.5 })
-    .with(HealthId, { value: 100, maxValue: 100 })
-    .with(NameId, { value: "Player" })
+    .with(Position, { x: 0, y: 0 })
+    .with(Velocity, { x: 1, y: 0.5 })
+    .with(Health, { value: 100, maxValue: 100 })
+    .with(Name, { value: "Player" })
     .build();
   void player;
 
   // Spawn an enemy entity
   const enemy = world
     .spawn()
-    .with(PositionId, { x: 50, y: 30 })
-    .with(VelocityId, { x: -0.5, y: 0.2 })
-    .with(HealthId, { value: 50, maxValue: 50 })
-    .with(NameId, { value: "Goblin" })
+    .with(Position, { x: 50, y: 30 })
+    .with(Velocity, { x: -0.5, y: 0.2 })
+    .with(Health, { value: 50, maxValue: 50 })
+    .with(Name, { value: "Goblin" })
     .build();
   void enemy;
 
   // Spawn a static prop (no velocity, no health)
-  const prop = world.spawn().with(PositionId, { x: 100, y: 200 }).with(NameId, { value: "TreasureChest" }).build();
+  const prop = world.spawn().with(Position, { x: 100, y: 200 }).with(Name, { value: "TreasureChest" }).build();
   void prop;
 
   // Apply all deferred commands

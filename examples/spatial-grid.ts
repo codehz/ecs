@@ -14,14 +14,14 @@ type SpatialGrid = { cells: Map<string, EntityId[]>; cellSize: number };
 // Component ID Definitions
 // =============================================================================
 
-const PositionId = component<Position>();
-const VelocityId = component<Velocity>();
-const GridCellId = component<GridCell>();
-const EnemyId = component(); // void tag
-const PlayerId = component(); // void tag
-const ProjectileId = component(); // void tag
-const DeadId = component(); // void tag (negative filter to exclude dead entities)
-const SpatialGridId = component<SpatialGrid>(); // singleton component
+const Position = component<Position>();
+const Velocity = component<Velocity>();
+const GridCell = component<GridCell>();
+const Enemy = component(); // void tag
+const Player = component(); // void tag
+const Projectile = component(); // void tag
+const Dead = component(); // void tag (negative filter to exclude dead entities)
+const SpatialGrid = component<SpatialGrid>(); // singleton component
 
 // =============================================================================
 // World & Queries
@@ -30,20 +30,20 @@ const SpatialGridId = component<SpatialGrid>(); // singleton component
 const world = new World();
 
 // Pre-cache all queries (long-term reuse)
-const movementQuery: Query = world.createQuery([PositionId, VelocityId], {
-  negativeComponentTypes: [DeadId],
+const movementQuery: Query = world.createQuery([Position, Velocity], {
+  negativeComponentTypes: [Dead],
 });
-const enemyQuery: Query = world.createQuery([PositionId, EnemyId], {
-  negativeComponentTypes: [DeadId],
+const enemyQuery: Query = world.createQuery([Position, Enemy], {
+  negativeComponentTypes: [Dead],
 });
-const playerQuery: Query = world.createQuery([PositionId, PlayerId], {
-  negativeComponentTypes: [DeadId],
+const playerQuery: Query = world.createQuery([Position, Player], {
+  negativeComponentTypes: [Dead],
 });
-const projectileQuery: Query = world.createQuery([PositionId, ProjectileId, VelocityId], {
-  negativeComponentTypes: [DeadId],
+const projectileQuery: Query = world.createQuery([Position, Projectile, Velocity], {
+  negativeComponentTypes: [Dead],
 });
-const gridCellQuery: Query = world.createQuery([PositionId, GridCellId], {
-  negativeComponentTypes: [DeadId],
+const gridCellQuery: Query = world.createQuery([Position, GridCell], {
+  negativeComponentTypes: [Dead],
 });
 
 // =============================================================================
@@ -64,7 +64,7 @@ const gameLoop = pipeline<{ deltaTime: number }>()
   .addPass((env) => {
     console.log("[MovementPass] Updating positions...");
     let count = 0;
-    movementQuery.forEach([PositionId, VelocityId], (_entity, position, velocity) => {
+    movementQuery.forEach([Position, Velocity], (_entity, position, velocity) => {
       position.x += velocity.x * env.deltaTime;
       position.y += velocity.y * env.deltaTime;
       count++;
@@ -77,12 +77,12 @@ const gameLoop = pipeline<{ deltaTime: number }>()
   // ---------------------------------------------------------------------------
   .addPass(() => {
     console.log("[GridUpdatePass] Rebuilding spatial grid...");
-    const grid = world.get(SpatialGridId);
+    const grid = world.get(SpatialGrid);
     const { cellSize } = grid;
     grid.cells.clear();
 
     let count = 0;
-    gridCellQuery.forEach([PositionId, GridCellId], (_entity, position, gridCell) => {
+    gridCellQuery.forEach([Position, GridCell], (_entity, position, gridCell) => {
       const cx = Math.floor(position.x / cellSize);
       const cy = Math.floor(position.y / cellSize);
       gridCell.cellX = cx;
@@ -112,14 +112,14 @@ const gameLoop = pipeline<{ deltaTime: number }>()
     }
 
     const playerEntity = playerEntities[0]!;
-    const playerPos = world.get(playerEntity, PositionId);
-    const grid = world.get(SpatialGridId);
+    const playerPos = world.get(playerEntity, Position);
+    const grid = world.get(SpatialGrid);
     const { cellSize } = grid;
     const pcx = Math.floor(playerPos.x / cellSize);
     const pcy = Math.floor(playerPos.y / cellSize);
 
     let alerts = 0;
-    enemyQuery.forEach([PositionId, EnemyId], (enemyEntity, enemyPos, _enemy) => {
+    enemyQuery.forEach([Position, Enemy], (enemyEntity, enemyPos, _enemy) => {
       const ecx = Math.floor(enemyPos.x / cellSize);
       const ecy = Math.floor(enemyPos.y / cellSize);
 
@@ -140,10 +140,10 @@ const gameLoop = pipeline<{ deltaTime: number }>()
   // ---------------------------------------------------------------------------
   .addPass(() => {
     console.log("[ProjectileCheckPass] Checking projectile-enemy collisions...");
-    const grid = world.get(SpatialGridId);
+    const grid = world.get(SpatialGrid);
     let hits = 0;
 
-    projectileQuery.forEach([PositionId, ProjectileId, VelocityId], (projectileEntity, _pos, _proj, _vel) => {
+    projectileQuery.forEach([Position, Projectile, Velocity], (projectileEntity, _pos, _proj, _vel) => {
       const cx = Math.floor(_pos.x / grid.cellSize);
       const cy = Math.floor(_pos.y / grid.cellSize);
       const key = `${cx},${cy}`;
@@ -153,12 +153,12 @@ const gameLoop = pipeline<{ deltaTime: number }>()
 
       // Find an enemy in the same cell
       for (const otherEntity of bucket) {
-        if (!world.has(otherEntity, EnemyId)) continue;
+        if (!world.has(otherEntity, Enemy)) continue;
         if (newlyDead.has(otherEntity as EntityId)) continue; // already dead this frame
 
         // Hit! Mark both projectile and enemy as Dead
-        world.set(projectileEntity, DeadId);
-        world.set(otherEntity, DeadId);
+        world.set(projectileEntity, Dead);
+        world.set(otherEntity, Dead);
         newlyDead.add(projectileEntity as EntityId);
         newlyDead.add(otherEntity as EntityId);
         console.log(
@@ -216,11 +216,11 @@ function main() {
   console.log("=========================================================\n");
 
   // Create singleton SpatialGrid
-  world.set(SpatialGridId, { cells: new Map(), cellSize: 64 });
+  world.set(SpatialGrid, { cells: new Map(), cellSize: 64 });
   console.log("SpatialGrid singleton created (cellSize=64)");
 
   // Create 1 player near the center
-  world.spawn().with(PositionId, { x: 128, y: 128 }).with(GridCellId, { cellX: 0, cellY: 0 }).with(PlayerId).build();
+  world.spawn().with(Position, { x: 128, y: 128 }).with(GridCell, { cellX: 0, cellY: 0 }).with(Player).build();
   console.log("Player spawned at (128, 128)");
 
   // Create ~5 enemies scattered across grid cells
@@ -234,10 +234,10 @@ function main() {
   for (const [x, y] of enemyPositions) {
     world
       .spawn()
-      .with(PositionId, { x, y })
-      .with(GridCellId, { cellX: 0, cellY: 0 })
-      .with(VelocityId, { x: Math.random() * 20 - 10, y: Math.random() * 20 - 10 })
-      .with(EnemyId)
+      .with(Position, { x, y })
+      .with(GridCell, { cellX: 0, cellY: 0 })
+      .with(Velocity, { x: Math.random() * 20 - 10, y: Math.random() * 20 - 10 })
+      .with(Enemy)
       .build();
     console.log(`Enemy spawned at (${x}, ${y})`);
   }
@@ -251,10 +251,10 @@ function main() {
   for (const [x, y, vx, vy] of projectileData) {
     world
       .spawn()
-      .with(PositionId, { x, y })
-      .with(GridCellId, { cellX: 0, cellY: 0 })
-      .with(VelocityId, { x: vx, y: vy })
-      .with(ProjectileId)
+      .with(Position, { x, y })
+      .with(GridCell, { cellX: 0, cellY: 0 })
+      .with(Velocity, { x: vx, y: vy })
+      .with(Projectile)
       .build();
     console.log(`Projectile spawned at (${x}, ${y}) with velocity (${vx}, ${vy})`);
   }

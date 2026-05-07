@@ -14,12 +14,12 @@ type AIEnabled = void;
 
 // ── Component ID Registration ────────────────────────────────────────────────
 
-const StateId = component<State>({ name: "State" });
-const HealthId = component<Health>({ name: "Health" });
-const SpeedId = component<Speed>({ name: "Speed" });
-const TargetId = component<Target>({ name: "Target" });
-const PositionId = component<Position>({ name: "Position" });
-const AIEnabledId = component<AIEnabled>({ name: "AIEnabled" });
+const State = component<State>({ name: "State" });
+const Health = component<Health>({ name: "Health" });
+const Speed = component<Speed>({ name: "Speed" });
+const Target = component<Target>({ name: "Target" });
+const Position = component<Position>({ name: "Position" });
+const AIEnabled = component<AIEnabled>({ name: "AIEnabled" });
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -46,19 +46,19 @@ function main() {
 
   // ── Queries (pre-cached for performance) ─────────────────────────────────
 
-  const aiQuery: Query = world.createQuery([StateId, PositionId, SpeedId, TargetId, AIEnabledId]);
-  const healthQuery: Query = world.createQuery([HealthId]);
+  const aiQuery: Query = world.createQuery([State, Position, Speed, Target, AIEnabled]);
+  const healthQuery: Query = world.createQuery([Health]);
 
   // ── Lifecycle Hooks ──────────────────────────────────────────────────────
 
   // Log health changes
-  const unsubHealth = world.hook([HealthId], (type, entityId, health) => {
+  const unsubHealth = world.hook([Health], (type, entityId, health) => {
     const marker = type === "init" ? "[INIT]" : type === "set" ? "[SET]" : "[REMOVE]";
     console.log(`  ${marker} Health | entity=${entityId} | value=${health.value.toFixed(1)}/${health.maxValue}`);
   });
 
   // Log state transitions
-  const unsubState = world.hook([StateId], (type, entityId, state) => {
+  const unsubState = world.hook([State], (type, entityId, state) => {
     const marker = type === "init" ? "[INIT]" : type === "set" ? "[SET]" : "[REMOVE]";
     console.log(`  ${marker} State  | entity=${entityId} | current=${state.current} | timer=${state.timer.toFixed(2)}`);
   });
@@ -68,7 +68,7 @@ function main() {
   const aiStatePass = (env: { deltaTime: number }) => {
     const dt = env.deltaTime;
 
-    aiQuery.forEach([StateId, PositionId, SpeedId, TargetId], (entity, state, position, speed, target) => {
+    aiQuery.forEach([State, Position, Speed, Target], (entity, state, position, speed, target) => {
       switch (state.current) {
         case "idle": {
           state.timer -= dt;
@@ -77,7 +77,7 @@ function main() {
             state.current = "patrol";
             state.timer = 0;
             const newTarget = randomTarget();
-            world.set(entity, TargetId, newTarget);
+            world.set(entity, Target, newTarget);
             console.log(`  [AI] Entity ${entity}: idle → patrol | new target (${newTarget.x}, ${newTarget.y})`);
           }
           break;
@@ -91,7 +91,7 @@ function main() {
             // Arrived at target → switch back to idle
             position.x = target.x;
             position.y = target.y;
-            world.set(entity, PositionId, { x: position.x, y: position.y });
+            world.set(entity, Position, { x: position.x, y: position.y });
             state.current = "idle";
             state.timer = 1.0 + Math.random() * 2.0; // idle for 1–3 seconds
             console.log(
@@ -103,7 +103,7 @@ function main() {
             const dy = (target.y - position.y) / dist;
             position.x += dx * moveSpeed;
             position.y += dy * moveSpeed;
-            world.set(entity, PositionId, { x: position.x, y: position.y });
+            world.set(entity, Position, { x: position.x, y: position.y });
           }
           break;
         }
@@ -122,7 +122,7 @@ function main() {
             // Exactly on target — pick arbitrary direction
             position.x += fleeSpeed;
           }
-          world.set(entity, PositionId, { x: position.x, y: position.y });
+          world.set(entity, Position, { x: position.x, y: position.y });
 
           state.timer += dt;
           // Flee for at least 3 seconds, then try going back to idle
@@ -136,20 +136,20 @@ function main() {
       }
 
       // Commit state changes (timer always updates)
-      world.set(entity, StateId, { current: state.current, timer: state.timer });
+      world.set(entity, State, { current: state.current, timer: state.timer });
     });
   };
 
   // ── Pass 2: Health Check → Trigger Flee ─────────────────────────────────
 
   const healthCheckPass = () => {
-    healthQuery.forEach([HealthId], (entity, health) => {
+    healthQuery.forEach([Health], (entity, health) => {
       if (health.value < health.maxValue * 0.3) {
         // Entity is low-health; switch to flee
-        const state = world.get(entity, StateId);
+        const state = world.get(entity, State);
         if (state && state.current !== "flee") {
           console.log(`  [HealthCheck] Entity ${entity}: health ${health.value.toFixed(1)} < 30% → switching to flee`);
-          world.set(entity, StateId, { current: "flee", timer: 0 });
+          world.set(entity, State, { current: "flee", timer: 0 });
         }
       }
     });
@@ -159,7 +159,7 @@ function main() {
 
   const statusLogPass = () => {
     console.log("  --- Status ---");
-    aiQuery.forEach([StateId, PositionId, HealthId], (entity, state, position, health) => {
+    aiQuery.forEach([State, Position, Health], (entity, state, position, health) => {
       // Health is optional for AI entities (some may not have it)
       const hp = health ? `${health.value.toFixed(1)}/${health.maxValue}` : "N/A";
       console.log(
@@ -189,34 +189,34 @@ function main() {
   // Entity 1: Starts in "idle", healthy
   const e1 = world
     .spawn()
-    .with(StateId, { current: "idle", timer: 0.5 })
-    .with(PositionId, { x: 0, y: 0 })
-    .with(SpeedId, { value: 3.0 })
-    .with(TargetId, { x: 0, y: 0 })
-    .with(HealthId, { value: 100, maxValue: 100 })
-    .with(AIEnabledId)
+    .with(State, { current: "idle", timer: 0.5 })
+    .with(Position, { x: 0, y: 0 })
+    .with(Speed, { value: 3.0 })
+    .with(Target, { x: 0, y: 0 })
+    .with(Health, { value: 100, maxValue: 100 })
+    .with(AIEnabled)
     .build();
 
   // Entity 2: Starts in "patrol", already moving toward a target
   const e2 = world
     .spawn()
-    .with(StateId, { current: "patrol", timer: 0 })
-    .with(PositionId, { x: 10, y: 0 })
-    .with(SpeedId, { value: 5.0 })
-    .with(TargetId, { x: 10, y: 10 })
-    .with(HealthId, { value: 40, maxValue: 100 }) // will drop below 30% soon
-    .with(AIEnabledId)
+    .with(State, { current: "patrol", timer: 0 })
+    .with(Position, { x: 10, y: 0 })
+    .with(Speed, { value: 5.0 })
+    .with(Target, { x: 10, y: 10 })
+    .with(Health, { value: 40, maxValue: 100 }) // will drop below 30% soon
+    .with(AIEnabled)
     .build();
 
   // Entity 3: Starts in "idle", somewhat wounded
   const e3 = world
     .spawn()
-    .with(StateId, { current: "idle", timer: 1.0 })
-    .with(PositionId, { x: -5, y: 5 })
-    .with(SpeedId, { value: 2.0 })
-    .with(TargetId, { x: -5, y: 5 })
-    .with(HealthId, { value: 25, maxValue: 100 }) // already below 30%
-    .with(AIEnabledId)
+    .with(State, { current: "idle", timer: 1.0 })
+    .with(Position, { x: -5, y: 5 })
+    .with(Speed, { value: 2.0 })
+    .with(Target, { x: -5, y: 5 })
+    .with(Health, { value: 25, maxValue: 100 }) // already below 30%
+    .with(AIEnabled)
     .build();
 
   // Initial sync — applies all buffered commands and fires "init" hooks
@@ -234,26 +234,26 @@ function main() {
   console.log("=== Frame 3 (dt=1.0) ===");
   // Deplete entity 2's health to trigger flee
   {
-    const h2 = world.get(e2, HealthId);
-    world.set(e2, HealthId, { value: h2.value - 20, maxValue: h2.maxValue });
-    const h3 = world.get(e3, HealthId);
-    world.set(e3, HealthId, { value: h3.value - 5, maxValue: h3.maxValue });
+    const h2 = world.get(e2, Health);
+    world.set(e2, Health, { value: h2.value - 20, maxValue: h2.maxValue });
+    const h3 = world.get(e3, Health);
+    world.set(e3, Health, { value: h3.value - 5, maxValue: h3.maxValue });
   }
   gameLoop({ deltaTime: 1.0 });
 
   console.log("=== Frame 4 (dt=1.0) ===");
   // Further deplete entity 1 to get it low too
   {
-    const h1 = world.get(e1, HealthId);
-    world.set(e1, HealthId, { value: h1.value - 40, maxValue: h1.maxValue });
+    const h1 = world.get(e1, Health);
+    world.set(e1, Health, { value: h1.value - 40, maxValue: h1.maxValue });
   }
   gameLoop({ deltaTime: 1.0 });
 
   console.log("=== Frame 5 (dt=1.0) ===");
   // Entity 1 now gets very low
   {
-    const h1 = world.get(e1, HealthId);
-    world.set(e1, HealthId, { value: h1.value - 40, maxValue: h1.maxValue });
+    const h1 = world.get(e1, Health);
+    world.set(e1, Health, { value: h1.value - 40, maxValue: h1.maxValue });
   }
   gameLoop({ deltaTime: 1.0 });
 

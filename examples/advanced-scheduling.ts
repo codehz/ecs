@@ -7,17 +7,17 @@ type Velocity = { x: number; y: number };
 type Health = { value: number };
 
 // Define component IDs
-const PositionId = component<Position>();
-const VelocityId = component<Velocity>();
-const HealthId = component<Health>();
+const Position = component<Position>();
+const Velocity = component<Velocity>();
+const Health = component<Health>();
 
 // Create the world
 const world = new World();
 
 // Cache queries
-const movementQuery: Query = world.createQuery([PositionId, VelocityId]);
-const damageQuery: Query = world.createQuery([PositionId, HealthId]);
-const renderQuery: Query = world.createQuery([PositionId]);
+const movementQuery: Query = world.createQuery([Position, Velocity]);
+const damageQuery: Query = world.createQuery([Position, Health]);
+const renderQuery: Query = world.createQuery([Position]);
 
 // Build game loop using pipeline
 // Pass execution order is determined by addition order; no need to manually manage dependencies
@@ -30,7 +30,7 @@ const gameLoop = pipeline<{ deltaTime: number }>()
   // Movement pass - update positions
   .addPass((env) => {
     console.log(`[MovementPass] Updating positions`);
-    movementQuery.forEach([PositionId, VelocityId], (entity, position, velocity) => {
+    movementQuery.forEach([Position, Velocity], (entity, position, velocity) => {
       position.x += velocity.x * env.deltaTime;
       position.y += velocity.y * env.deltaTime;
       console.log(`  Entity ${entity}: Position (${position.x.toFixed(2)}, ${position.y.toFixed(2)})`);
@@ -39,7 +39,7 @@ const gameLoop = pipeline<{ deltaTime: number }>()
   // Damage pass - calculate damage based on position
   .addPass(() => {
     console.log(`[DamagePass] Applying damage based on position`);
-    damageQuery.forEach([PositionId, HealthId], (entity, position, health) => {
+    damageQuery.forEach([Position, Health], (entity, position, health) => {
       // Calculate damage based on position (example logic)
       const damage = Math.abs(position.x) * 0.1;
       health.value -= damage;
@@ -49,7 +49,7 @@ const gameLoop = pipeline<{ deltaTime: number }>()
   // Render pass - render entities
   .addPass(() => {
     console.log(`[RenderPass] Rendering entities`);
-    renderQuery.forEach([PositionId], (entity, position) => {
+    renderQuery.forEach([Position], (entity, position) => {
       console.log(`  Rendering Entity ${entity} at (${position.x.toFixed(2)}, ${position.y.toFixed(2)})`);
     });
   })
@@ -66,17 +66,17 @@ function main() {
   // Create some entities
   const entity1 = world
     .spawn()
-    .with(PositionId, { x: 0, y: 0 })
-    .with(VelocityId, { x: 2, y: 1 })
-    .with(HealthId, { value: 100 })
+    .with(Position, { x: 0, y: 0 })
+    .with(Velocity, { x: 2, y: 1 })
+    .with(Health, { value: 100 })
     .build();
   void entity1;
 
   const entity2 = world
     .spawn()
-    .with(PositionId, { x: 5, y: 3 })
-    .with(VelocityId, { x: -1, y: 0.5 })
-    .with(HealthId, { value: 80 })
+    .with(Position, { x: 5, y: 3 })
+    .with(Velocity, { x: -1, y: 0.5 })
+    .with(Health, { value: 80 })
     .build();
   void entity2;
 

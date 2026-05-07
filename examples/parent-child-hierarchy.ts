@@ -8,22 +8,22 @@ type AngularVelocity = { degreesPerSecond: number };
 type Name = { value: string };
 
 // Define component IDs
-const NameId = component<Name>({ name: "Name" });
-const LocalTransformId = component<Transform>({ name: "LocalTransform" });
-const WorldTransformId = component<Transform>({ name: "WorldTransform" });
-const LinearVelocityId = component<LinearVelocity>({ name: "LinearVelocity" });
-const AngularVelocityId = component<AngularVelocity>({ name: "AngularVelocity" });
+const Name = component<Name>({ name: "Name" });
+const LocalTransform = component<Transform>({ name: "LocalTransform" });
+const WorldTransform = component<Transform>({ name: "WorldTransform" });
+const LinearVelocity = component<LinearVelocity>({ name: "LinearVelocity" });
+const AngularVelocity = component<AngularVelocity>({ name: "AngularVelocity" });
 const ChildOf = component<void>({ exclusive: true, dontFragment: true, name: "ChildOf" });
 
 // Create the world
 const world = new World();
 
 // Cache queries
-const movementQuery: Query = world.createQuery([LocalTransformId, LinearVelocityId]);
-const rotationQuery: Query = world.createQuery([LocalTransformId, AngularVelocityId]);
-const transformQuery: Query = world.createQuery([NameId, LocalTransformId, WorldTransformId]);
+const movementQuery: Query = world.createQuery([LocalTransform, LinearVelocity]);
+const rotationQuery: Query = world.createQuery([LocalTransform, AngularVelocity]);
+const transformQuery: Query = world.createQuery([Name, LocalTransform, WorldTransform]);
 const childQuery: Query = world.createQuery([relation(ChildOf, "*")]);
-const renderQuery: Query = world.createQuery([NameId, WorldTransformId]);
+const renderQuery: Query = world.createQuery([Name, WorldTransform]);
 
 function toRadians(degrees: number): number {
   return (degrees * Math.PI) / 180;
@@ -83,9 +83,9 @@ function propagateChildren(
   if (!children) return;
 
   for (const child of children) {
-    const name = world.get(child, NameId);
-    const local = world.get(child, LocalTransformId);
-    const worldTransform = world.get(child, WorldTransformId);
+    const name = world.get(child, Name);
+    const local = world.get(child, LocalTransform);
+    const worldTransform = world.get(child, WorldTransform);
     copyTransform(worldTransform, composeTransform(local, parentWorld));
     console.log(`  Child ${name.value}: ${formatTransform(worldTransform)}`);
     propagateChildren(child, worldTransform, childrenByParent);
@@ -98,19 +98,19 @@ const gameLoop = pipeline<{ deltaTime: number }>()
   // Local movement pass - update local positions
   .addPass((env) => {
     console.log(`[LocalMovementPass] Updating local positions`);
-    movementQuery.forEach([LocalTransformId, LinearVelocityId], (entity, localTransform, velocity) => {
+    movementQuery.forEach([LocalTransform, LinearVelocity], (entity, localTransform, velocity) => {
       localTransform.x += velocity.x * env.deltaTime;
       localTransform.y += velocity.y * env.deltaTime;
-      const name = world.get(entity, NameId);
+      const name = world.get(entity, Name);
       console.log(`  ${name.value}: local pos=(${localTransform.x.toFixed(2)}, ${localTransform.y.toFixed(2)})`);
     });
   })
   // Local rotation pass - update local rotation
   .addPass((env) => {
     console.log(`[LocalRotationPass] Updating local rotations`);
-    rotationQuery.forEach([LocalTransformId, AngularVelocityId], (entity, localTransform, angularVelocity) => {
+    rotationQuery.forEach([LocalTransform, AngularVelocity], (entity, localTransform, angularVelocity) => {
       localTransform.rotation += angularVelocity.degreesPerSecond * env.deltaTime;
-      const name = world.get(entity, NameId);
+      const name = world.get(entity, Name);
       console.log(`  ${name.value}: local rot=${localTransform.rotation.toFixed(1)}deg`);
     });
   })
@@ -119,21 +119,18 @@ const gameLoop = pipeline<{ deltaTime: number }>()
     console.log(`[HierarchyPass] Propagating world transforms`);
     const childrenByParent = buildChildrenByParent();
 
-    transformQuery.forEach(
-      [NameId, LocalTransformId, WorldTransformId],
-      (entity, name, localTransform, worldTransform) => {
-        if (world.has(entity, relation(ChildOf, "*"))) return;
+    transformQuery.forEach([Name, LocalTransform, WorldTransform], (entity, name, localTransform, worldTransform) => {
+      if (world.has(entity, relation(ChildOf, "*"))) return;
 
-        copyTransform(worldTransform, composeTransform(localTransform));
-        console.log(`  Root ${name.value}: ${formatTransform(worldTransform)}`);
-        propagateChildren(entity, worldTransform, childrenByParent);
-      },
-    );
+      copyTransform(worldTransform, composeTransform(localTransform));
+      console.log(`  Root ${name.value}: ${formatTransform(worldTransform)}`);
+      propagateChildren(entity, worldTransform, childrenByParent);
+    });
   })
   // Render pass - render propagated world transforms
   .addPass(() => {
     console.log(`[RenderPass] Rendering world transforms`);
-    renderQuery.forEach([NameId, WorldTransformId], (_entity, name, worldTransform) => {
+    renderQuery.forEach([Name, WorldTransform], (_entity, name, worldTransform) => {
       console.log(`  ${name.value}: ${formatTransform(worldTransform)}`);
     });
   })
@@ -150,28 +147,28 @@ function main() {
   // Create a moving root entity
   const ship = world
     .spawn()
-    .with(NameId, { value: "Ship" })
-    .with(LocalTransformId, { x: 0, y: 0, rotation: 0, scale: 1 })
-    .with(WorldTransformId, { x: 0, y: 0, rotation: 0, scale: 1 })
-    .with(LinearVelocityId, { x: 1, y: 0.25 })
+    .with(Name, { value: "Ship" })
+    .with(LocalTransform, { x: 0, y: 0, rotation: 0, scale: 1 })
+    .with(WorldTransform, { x: 0, y: 0, rotation: 0, scale: 1 })
+    .with(LinearVelocity, { x: 1, y: 0.25 })
     .build();
 
   // Create a rotating child attached to the ship
   const turret = world
     .spawn()
-    .with(NameId, { value: "Turret" })
-    .with(LocalTransformId, { x: 2, y: 0, rotation: 0, scale: 1 })
-    .with(WorldTransformId, { x: 0, y: 0, rotation: 0, scale: 1 })
-    .with(AngularVelocityId, { degreesPerSecond: 45 })
+    .with(Name, { value: "Turret" })
+    .with(LocalTransform, { x: 2, y: 0, rotation: 0, scale: 1 })
+    .with(WorldTransform, { x: 0, y: 0, rotation: 0, scale: 1 })
+    .with(AngularVelocity, { degreesPerSecond: 45 })
     .with(relation(ChildOf, ship))
     .build();
 
   // Create a grandchild so propagation traverses multiple levels
   const muzzle = world
     .spawn()
-    .with(NameId, { value: "Muzzle" })
-    .with(LocalTransformId, { x: 1.5, y: 0.5, rotation: 0, scale: 1 })
-    .with(WorldTransformId, { x: 0, y: 0, rotation: 0, scale: 1 })
+    .with(Name, { value: "Muzzle" })
+    .with(LocalTransform, { x: 1.5, y: 0.5, rotation: 0, scale: 1 })
+    .with(WorldTransform, { x: 0, y: 0, rotation: 0, scale: 1 })
     .with(relation(ChildOf, turret))
     .build();
   void muzzle;
@@ -179,10 +176,10 @@ function main() {
   // Create a second root entity to show independent hierarchies
   const drone = world
     .spawn()
-    .with(NameId, { value: "Drone" })
-    .with(LocalTransformId, { x: -4, y: 3, rotation: 15, scale: 0.75 })
-    .with(WorldTransformId, { x: -4, y: 3, rotation: 15, scale: 0.75 })
-    .with(LinearVelocityId, { x: 0.5, y: -0.25 })
+    .with(Name, { value: "Drone" })
+    .with(LocalTransform, { x: -4, y: 3, rotation: 15, scale: 0.75 })
+    .with(WorldTransform, { x: -4, y: 3, rotation: 15, scale: 0.75 })
+    .with(LinearVelocity, { x: 0.5, y: -0.25 })
     .build();
   void drone;
 

@@ -15,11 +15,11 @@ type CollisionEvent = { other: EntityId; overlap: number };
 // Component IDs
 // =============================================================================
 
-const PositionId = component<Position>();
-const VelocityId = component<Velocity>();
-const RadiusId = component<Radius>();
-const HealthId = component<Health>();
-const CollisionEventId = component<CollisionEvent>();
+const Position = component<Position>();
+const Velocity = component<Velocity>();
+const Radius = component<Radius>();
+const Health = component<Health>();
+const CollisionEvent = component<CollisionEvent>();
 
 // =============================================================================
 // World & Pre-cached Queries
@@ -27,10 +27,10 @@ const CollisionEventId = component<CollisionEvent>();
 
 const world = new World();
 
-const movementQuery: Query = world.createQuery([PositionId, VelocityId]);
-const collidableQuery: Query = world.createQuery([PositionId, RadiusId]);
-const damagedQuery: Query = world.createQuery([HealthId]);
-const collisionEventQuery: Query = world.createQuery([CollisionEventId]);
+const movementQuery: Query = world.createQuery([Position, Velocity]);
+const collidableQuery: Query = world.createQuery([Position, Radius]);
+const damagedQuery: Query = world.createQuery([Health]);
+const collisionEventQuery: Query = world.createQuery([CollisionEvent]);
 
 // =============================================================================
 // Game Loop (Pipeline Passes)
@@ -42,7 +42,7 @@ const gameLoop = pipeline<{ deltaTime: number }>()
   // ---------------------------------------------------------------------------
   .addPass((env) => {
     console.log(`[MovementPass] deltaTime=${env.deltaTime}`);
-    movementQuery.forEach([PositionId, VelocityId], (_entity, pos, vel) => {
+    movementQuery.forEach([Position, Velocity], (_entity, pos, vel) => {
       pos.x += vel.x * env.deltaTime;
       pos.y += vel.y * env.deltaTime;
     });
@@ -53,7 +53,7 @@ const gameLoop = pipeline<{ deltaTime: number }>()
   // ---------------------------------------------------------------------------
   .addPass(() => {
     console.log(`[CollisionDetectionPass]`);
-    const collidables = collidableQuery.getEntitiesWithComponents([PositionId, RadiusId]);
+    const collidables = collidableQuery.getEntitiesWithComponents([Position, Radius]);
     let collisionCount = 0;
 
     for (let i = 0; i < collidables.length; i++) {
@@ -67,8 +67,8 @@ const gameLoop = pipeline<{ deltaTime: number }>()
 
         if (overlap > 0) {
           console.log(`  Collision: Entity ${a.entity} <-> Entity ${b.entity} ` + `(overlap: ${overlap.toFixed(2)})`);
-          world.set(a.entity, CollisionEventId, { other: b.entity, overlap });
-          world.set(b.entity, CollisionEventId, { other: a.entity, overlap });
+          world.set(a.entity, CollisionEvent, { other: b.entity, overlap });
+          world.set(b.entity, CollisionEvent, { other: a.entity, overlap });
           collisionCount++;
         }
       }
@@ -87,9 +87,9 @@ const gameLoop = pipeline<{ deltaTime: number }>()
   // ---------------------------------------------------------------------------
   .addPass(() => {
     console.log(`[CollisionResponsePass]`);
-    collisionEventQuery.forEach([CollisionEventId], (entity, event) => {
-      if (world.has(entity, HealthId)) {
-        const health = world.get(entity, HealthId);
+    collisionEventQuery.forEach([CollisionEvent], (entity, event) => {
+      if (world.has(entity, Health)) {
+        const health = world.get(entity, Health);
         health.value -= event.overlap;
         console.log(
           `  Entity ${entity}: took ${event.overlap.toFixed(2)} damage ` +
@@ -100,7 +100,7 @@ const gameLoop = pipeline<{ deltaTime: number }>()
           `  Entity ${entity}: collision with Entity ${event.other} ` + `(no Health component, skipping damage)`,
         );
       }
-      world.remove(entity, CollisionEventId);
+      world.remove(entity, CollisionEvent);
     });
   })
 
@@ -111,7 +111,7 @@ const gameLoop = pipeline<{ deltaTime: number }>()
     console.log(`[CleanupPass]`);
     const toDelete: EntityId[] = [];
 
-    damagedQuery.forEach([HealthId], (entity, health) => {
+    damagedQuery.forEach([Health], (entity, health) => {
       if (health.value <= 0) {
         console.log(`  Entity ${entity}: destroyed (health: ${health.value.toFixed(2)})`);
         toDelete.push(entity);
@@ -132,8 +132,8 @@ const gameLoop = pipeline<{ deltaTime: number }>()
   // ---------------------------------------------------------------------------
   .addPass(() => {
     console.log(`[RenderPass]`);
-    movementQuery.forEach([PositionId, VelocityId], (entity, pos) => {
-      const healthOpt = world.getOptional(entity, HealthId);
+    movementQuery.forEach([Position, Velocity], (entity, pos) => {
+      const healthOpt = world.getOptional(entity, Health);
       const healthStr = healthOpt ? healthOpt.value.value.toFixed(2) : "N/A";
       console.log(`  Entity ${entity}: pos=(${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}) ` + `health=${healthStr}`);
     });
@@ -161,55 +161,55 @@ function main() {
   // Entity 1: Fast mover, small radius, moderate health
   world
     .spawn()
-    .with(PositionId, { x: 0, y: 0 })
-    .with(VelocityId, { x: 3, y: 1 })
-    .with(RadiusId, 10)
-    .with(HealthId, { value: 50 })
+    .with(Position, { x: 0, y: 0 })
+    .with(Velocity, { x: 3, y: 1 })
+    .with(Radius, 10)
+    .with(Health, { value: 50 })
     .build();
 
   // Entity 2: Slow mover, large radius, high health
   world
     .spawn()
-    .with(PositionId, { x: 30, y: 10 })
-    .with(VelocityId, { x: -1.5, y: 2 })
-    .with(RadiusId, 18)
-    .with(HealthId, { value: 120 })
+    .with(Position, { x: 30, y: 10 })
+    .with(Velocity, { x: -1.5, y: 2 })
+    .with(Radius, 18)
+    .with(Health, { value: 120 })
     .build();
 
   // Entity 3: Stationary, medium radius, low health
   world
     .spawn()
-    .with(PositionId, { x: 15, y: 20 })
-    .with(VelocityId, { x: 0, y: 0 })
-    .with(RadiusId, 14)
-    .with(HealthId, { value: 25 })
+    .with(Position, { x: 15, y: 20 })
+    .with(Velocity, { x: 0, y: 0 })
+    .with(Radius, 14)
+    .with(Health, { value: 25 })
     .build();
 
   // Entity 4: Diagonal mover, small radius, moderate health
   world
     .spawn()
-    .with(PositionId, { x: 40, y: 5 })
-    .with(VelocityId, { x: -3, y: -2 })
-    .with(RadiusId, 8)
-    .with(HealthId, { value: 60 })
+    .with(Position, { x: 40, y: 5 })
+    .with(Velocity, { x: -3, y: -2 })
+    .with(Radius, 8)
+    .with(Health, { value: 60 })
     .build();
 
   // Entity 5: Opposite diagonal, medium radius, high health
   world
     .spawn()
-    .with(PositionId, { x: 10, y: 35 })
-    .with(VelocityId, { x: 2.5, y: -1.5 })
-    .with(RadiusId, 16)
-    .with(HealthId, { value: 100 })
+    .with(Position, { x: 10, y: 35 })
+    .with(Velocity, { x: 2.5, y: -1.5 })
+    .with(Radius, 16)
+    .with(Health, { value: 100 })
     .build();
 
   // Entity 6: Slow vertical mover, large radius, moderate health
   world
     .spawn()
-    .with(PositionId, { x: 50, y: 25 })
-    .with(VelocityId, { x: -0.5, y: 3 })
-    .with(RadiusId, 20)
-    .with(HealthId, { value: 80 })
+    .with(Position, { x: 50, y: 25 })
+    .with(Velocity, { x: -0.5, y: 3 })
+    .with(Radius, 20)
+    .with(Health, { value: 80 })
     .build();
 
   // Apply initial spawns
