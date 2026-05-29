@@ -698,25 +698,28 @@ export class World {
    * **Important:** Store the query reference and reuse it across frames for optimal performance.
    * Creating a new query each frame defeats the caching mechanism.
    *
-   * @param componentTypes - Array of component types to match
-   * @param filter - Optional filter for additional constraints (e.g., without specific components)
+   * **Note on optional components:** Only **required** (non-optional) component types should be
+   * passed to `createQuery`. Optional components (wrapped with `{ optional: ... }`) must be
+   * specified at **iteration time** via {@link Query.forEach}, {@link Query.getEntitiesWithComponents},
+   * or {@link Query.iterate} — NOT here. Including optional wrappers in `createQuery` will cause
+   * undefined behavior because the internal normalization relies on numeric sorting of component IDs.
+   *
+   * @param componentTypes - Array of **required** component types to match (do not include optional wrappers)
+   * @param filter - Optional filter for additional constraints (e.g., exclude entities with certain components)
    * @returns A Query instance that can be used to iterate matching entities
    *
    * @example
-   * // Create once, reuse many times
+   * // Create once, reuse many times (required components only)
    * const movementQuery = world.createQuery([Position, Velocity]);
    *
-   * // In game loop
-   * movementQuery.forEach((entity) => {
-   *   const pos = world.get(entity, Position);
-   *   const vel = world.get(entity, Velocity);
-   *   pos.x += vel.x;
-   *   pos.y += vel.y;
+   * // Optional components are passed at iteration time, not creation time:
+   * movementQuery.forEach([Position, { optional: Velocity }], (entity, pos, vel) => {
+   *   pos.x += vel?.value?.x ?? 0;
    * });
    *
    * // With filter
    * const activeQuery = world.createQuery([Position], {
-   *   without: [Disabled]
+   *   negativeComponentTypes: [Disabled]
    * });
    */
   createQuery(componentTypes: EntityId<any>[], filter: QueryFilter = {}): Query {
