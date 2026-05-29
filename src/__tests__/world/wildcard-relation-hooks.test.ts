@@ -329,4 +329,45 @@ describe("Wildcard-Relation Hooks", () => {
     expect(world.exists(entity1)).toBe(true);
     expect(world.exists(entity2)).toBe(true);
   });
+
+  // Regression: wildcard remove (relation(Comp, "*")) should NOT produce target=0
+  // in on_remove. The wildcard marker (WILDCARD_TARGET_ID=0) leaks into
+  // removedComponents and gets decoded as target=0 by reconstructWildcardWithRemoved.
+  it("should NOT report target=0 in on_remove when using wildcard remove (relation(Comp, '*'))", () => {
+    const world = new World();
+
+    // Use dontFragment:true so that removeWildcardRelations adds the wildcard
+    // marker to removedComponents, triggering the bug path.
+    const RelData = component<{ value: string }>({ dontFragment: true });
+    const target = world.new();
+    const wildcardRel = relation(RelData, "*");
+    const concreteRel = relation(RelData, target);
+
+    const removeCalls: { relations: [EntityId, { value: string }][] }[] = [];
+
+    world.hook([wildcardRel], {
+      on_remove: (_entityId, relations) => {
+        removeCalls.push({ relations });
+      },
+    });
+
+    const entity = world.spawn().with(concreteRel, { value: "hello" }).build();
+    world.sync();
+
+    // Remove ALL relations via wildcard — this triggers the bug
+    world.remove(entity, wildcardRel);
+    world.sync();
+
+    expect(removeCalls.length).toBe(1);
+    const reportedRelations = removeCalls[0]!.relations;
+
+    // The hook should report the removed relation(s) WITHOUT the wildcard
+    // marker leaking in as target=0.
+    for (const [reportedTarget] of reportedRelations) {
+      expect(reportedTarget).not.toBe(0);
+    }
+
+    // It should still correctly report the actual removed relation
+    expect(reportedRelations).toContainEqual([target, { value: "hello" }]);
+  });
 });

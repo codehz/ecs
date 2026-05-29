@@ -263,6 +263,9 @@ function reconstructWildcardWithRemoved(
   // Re-inject matching relations that were just removed, so the hook callback
   // sees the complete snapshot as it existed before the removal.
   for (const [removedCompId, removedValue] of removedComponents.entries()) {
+    // Skip wildcard markers themselves — they encode WILDCARD_TARGET_ID=0 and
+    // would produce spurious [0, undefined] entries in the hook callback.
+    if (isWildcardRelationId(removedCompId)) continue;
     if (componentMatchesHookType(removedCompId, wildcardId)) {
       const targetId = getTargetIdFromRelationId(removedCompId);
       if (targetId !== undefined) {
@@ -346,6 +349,8 @@ function collectWildcardFromRemoved(
   const result: [EntityId, any][] = [];
 
   for (const [removedCompId, removedValue] of removedComponents.entries()) {
+    // Skip wildcard markers themselves — they encode WILDCARD_TARGET_ID=0.
+    if (isWildcardRelationId(removedCompId)) continue;
     if (componentMatchesHookType(removedCompId, wildcardId)) {
       const targetId = getTargetIdFromRelationId(removedCompId);
       if (targetId !== undefined) {
