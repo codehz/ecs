@@ -370,4 +370,131 @@ describe("Wildcard-Relation Hooks", () => {
     // It should still correctly report the actual removed relation
     expect(reportedRelations).toContainEqual([target, { value: "hello" }]);
   });
+
+  it("should correctly evaluate 'had before' for wildcard required component when removing a different required component", () => {
+    const world = new World();
+    const A = component<number>();
+    const RelData = component<{ value: string }>();
+    const target = world.new();
+    const wildcardRel = relation(RelData, "*");
+
+    const removeCalls: { entityId: EntityId; components: any }[] = [];
+
+    // Hook requires both A (regular) and wildcard relation
+    world.hook([A, wildcardRel], {
+      on_remove: (entityId, ...components) => {
+        removeCalls.push({ entityId, components });
+      },
+    });
+
+    const entity = world.spawn().with(A, 42).with(relation(RelData, target), { value: "hello" }).build();
+    world.sync();
+
+    // Remove the non-wildcard required component A.
+    // This exercises the path in entityHadAllComponentsBefore where for the wildcard
+    // required component, anyComponentMatches(removed, wildcard) is false (only A was removed),
+    // so we fall through to the isWildcard getOptional branch.
+    world.remove(entity, A);
+    world.sync();
+
+    expect(removeCalls.length).toBe(1);
+    expect(removeCalls[0]!.entityId).toBe(entity);
+    expect(removeCalls[0]!.components[0]).toBe(42);
+    expect(Array.isArray(removeCalls[0]!.components[1])).toBe(true);
+  });
+
+  it("should reconstruct optional wildcard relation data during on_remove of required component", () => {
+    const world = new World();
+    const A = component<number>();
+    const RelData = component<{ value: string }>();
+    const target = world.new();
+    const wildcardRel = relation(RelData, "*");
+
+    const removeCalls: { entityId: EntityId; components: any }[] = [];
+
+    // Required A + optional wildcard relation
+    world.hook([A, { optional: wildcardRel }], {
+      on_remove: (entityId, ...components) => {
+        removeCalls.push({ entityId, components });
+      },
+    });
+
+    const entity = world.spawn().with(A, 99).with(relation(RelData, target), { value: "secret" }).build();
+    world.sync();
+
+    // Removing A triggers on_remove for the hook (required lost).
+    // The collection for the optional wildcard must go through reconstructWildcardWithRemoved
+    // (the if isWildcardRelationId(optionalId) branch in collectMultiHookComponentsWithRemoved).
+    world.remove(entity, A);
+    world.sync();
+
+    expect(removeCalls.length).toBe(1);
+    expect(removeCalls[0]!.entityId).toBe(entity);
+    expect(removeCalls[0]!.components[0]).toBe(99);
+    // optional wildcard should have been reconstructed from the (now removed) data
+    const opt = removeCalls[0]!.components[1];
+    expect(opt).toBeDefined();
+    expect(Array.isArray(opt.value)).toBe(true);
+    expect(opt.value).toContainEqual([target, { value: "secret" }]);
+  });
+
+  it("should trigger on_remove via deletion fast-path for required wildcard relation hook", () => {
+    const world = new World();
+    const RelData = component<{ value: string }>();
+    const target = world.new();
+    const wildcardRel = relation(RelData, "*");
+
+    const removeCalls: { entityId: EntityId; relations: [EntityId, { value: string }][] }[] = [];
+
+    world.hook([wildcardRel], {
+      on_remove: (entityId, relations) => {
+        removeCalls.push({ entityId, relations });
+      },
+    });
+
+    const entity = world.spawn().with(relation(RelData, target), { value: "to-be-deleted" }).build();
+    world.sync();
+
+    // Directly delete the entity that owns the wildcard relation data.
+    // This exercises triggerRemoveHooksForEntityDeletion + collectComponentsFromRemoved
+    // + collectWildcardFromRemoved (required wildcard case).
+    world.delete(entity);
+    world.sync();
+
+    expect(removeCalls.length).toBe(1);
+    expect(removeCalls[0]!.entityId).toBe(entity);
+    expect(removeCalls[0]!.relations).toContainEqual([target, { value: "to-be-deleted" }]);
+  });
+
+  it("should trigger on_remove via deletion fast-path for optional wildcard in multi-hook", () => {
+    const world = new World();
+    const A = component<number>();
+    const RelData = component<{ value: string }>();
+    const target = world.new();
+    const wildcardRel = relation(RelData, "*");
+
+    const removeCalls: { entityId: EntityId; components: any }[] = [];
+
+    world.hook([A, { optional: wildcardRel }], {
+      on_remove: (entityId, ...components) => {
+        removeCalls.push({ entityId, components });
+      },
+    });
+
+    const entity = world.spawn().with(A, 123).with(relation(RelData, target), { value: "gone-soon" }).build();
+    world.sync();
+
+    // Delete the entity: fast path should use collectComponentsFromRemoved which handles
+    // optional wildcard via collectWildcardFromRemoved and returns { value: [...] } or undefined.
+    world.delete(entity);
+    world.sync();
+
+    expect(removeCalls.length).toBe(1);
+    expect(removeCalls[0]!.entityId).toBe(entity);
+    expect(removeCalls[0]!.components[0]).toBe(123);
+    const opt = removeCalls[0]!.components[1];
+    expect(opt).toBeDefined();
+    expect(Array.isArray(opt.value)).toBe(true);
+    expect(opt.value).toContainEqual([target, { value: "gone-soon" }]);
+  });
 });

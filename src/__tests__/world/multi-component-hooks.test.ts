@@ -499,4 +499,35 @@ describe("World - Multi-Component Hooks", () => {
     expect(world.has(entity1, A)).toBe(true);
     expect(world.has(entity2, A)).toBe(true);
   });
+
+  it("should support callback-style registration for multi-component hooks (set/remove)", () => {
+    const world = new World();
+    const A = component<number>();
+    const B = component<string>();
+
+    const calls: { event: string; entityId: EntityId; components: any[] }[] = [];
+
+    // Register callback-style hook *before* any entities to ensure runtime set/remove
+    // go through invokeHook's callback branch (init replay for existing bypasses invokeHook).
+    const unhook = world.hook([A, B], (event, entityId, a, b) => {
+      calls.push({ event, entityId, components: [a, b] });
+    });
+
+    // New entity after registration → "set" via normal trigger path + invokeHook(callback)
+    const e = world.spawn().with(A, 42).with(B, "hi").build();
+    world.sync();
+    expect(calls.some((c) => c.event === "set" && c.entityId === e)).toBe(true);
+
+    // Update also triggers set
+    world.set(e, A, 100);
+    world.sync();
+    expect(calls.some((c) => c.event === "set" && c.components[0] === 100)).toBe(true);
+
+    // Remove required component → "remove" via invokeHook(callback)
+    world.remove(e, A);
+    world.sync();
+    expect(calls.some((c) => c.event === "remove" && c.entityId === e)).toBe(true);
+
+    unhook();
+  });
 });
