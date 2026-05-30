@@ -50,9 +50,9 @@ export class Archetype {
   private entityToIndex: Map<EntityId, number> = new Map();
 
   /**
-   * DontFragmentStore (now keyed primarily by relation ComponentId).
-   * See store.ts for design rationale and TODOs around future exclusive-relation
-   * and batch-iteration optimizations.
+   * DontFragmentStore (keyed primarily by relation ComponentId).
+   * Uses optimized RelationEntry (single/multi) for the common exclusive case.
+   * See store.ts for implementation details.
    */
   private dontFragmentRelations: DontFragmentStore;
 
