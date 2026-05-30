@@ -318,4 +318,53 @@ describe("Serialization edge cases", () => {
       expect(() => decodeSerializedId({ foo: "bar" } as any)).toThrow(/Invalid ID in snapshot/);
     });
   });
+
+  describe("Entity-ID-as-componentType references (ad-hoc entity refs)", () => {
+    it("should round-trip worlds using raw EntityIds as component types (covers 'entity' branch in deserialize reference tracking)", () => {
+      const world = new World();
+
+      const eTarget = world.new();
+      const eHolder = world.new();
+
+      // Use a raw entity ID (>= ENTITY_ID_START) directly as a component "type".
+      // This models an untyped/ad-hoc reference to another entity.
+      // The value is omitted (void presence-only component).
+      world.set(eHolder, eTarget as unknown as EntityId<any>);
+      world.sync();
+
+      const snapshot = world.serialize();
+      const restored = new World(snapshot);
+
+      expect(restored.exists(eTarget)).toBe(true);
+      expect(restored.exists(eHolder)).toBe(true);
+
+      // The ad-hoc component must survive the roundtrip.
+      expect(restored.has(eHolder, eTarget as unknown as EntityId<any>)).toBe(true);
+    });
+  });
+
+  describe("ComponentEntities deserialization guards", () => {
+    it("should ignore componentEntities snapshot entries whose id is not a real component entity (covers continue guard)", () => {
+      const world = new World();
+      const Config = component<{ debug: boolean }>();
+      world.set(Config, { debug: true });
+      world.sync();
+
+      const snap: any = world.serialize();
+
+      // Inject a bogus entry: a high ordinary entity id (never a component entity)
+      const bogus = 123456 as EntityId;
+      snap.componentEntities = snap.componentEntities || [];
+      snap.componentEntities.push({
+        id: bogus,
+        components: [{ type: 99, value: "should-be-ignored" }],
+      });
+
+      const restored = new World(snap);
+
+      // Real singleton still works; bogus entry was skipped without error
+      expect(restored.has(Config)).toBe(true);
+      expect(restored.get(Config)).toEqual({ debug: true });
+    });
+  });
 });
