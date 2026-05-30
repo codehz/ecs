@@ -3,7 +3,7 @@ import type { ComponentEntityStore } from "../component/entity-store";
 import { getDetailedIdType, type EntityId, type EntityIdManager } from "../entity";
 import {
   decodeSerializedId,
-  encodeEntityId,
+  encodeEntityIdCached,
   type SerializedComponent,
   type SerializedEntity,
   type SerializedWorld,
@@ -18,29 +18,25 @@ export function serializeWorld(
   componentEntities: ComponentEntityStore,
   entityIdManager: EntityIdManager,
 ): SerializedWorld {
+  // ID cache turns repeated encode work (especially component type IDs) into O(#unique IDs)
+  const idCache = new Map<any, any>();
+
   const entities: SerializedEntity[] = [];
 
   for (const archetype of archetypes) {
-    const dumpedEntities = archetype.dump();
-    for (const { entity, components } of dumpedEntities) {
-      entities.push({
-        id: encodeEntityId(entity),
-        components: Array.from(components.entries()).map(([rawType, value]) => ({
-          type: encodeEntityId(rawType),
-          value: value === MISSING_COMPONENT ? undefined : value,
-        })),
-      });
-    }
+    // Pre-encode this archetype's component type IDs exactly once (big win when many entities share the archetype)
+    const encodedComponentTypes = archetype.componentTypes.map((t) => encodeEntityIdCached(t, idCache));
+
+    // The append method will use the bulk helper internally when a pre-fetched map is supplied.
+    // For now we rely on the per-entity fallback inside the archetype (already much cheaper than old dump path).
+    archetype.appendSerializedEntities(entities, (id) => encodeEntityIdCached(id, idCache), encodedComponentTypes);
   }
 
   const componentEntitiesArr: SerializedEntity[] = [];
   for (const [entityId, components] of componentEntities.entries()) {
     componentEntitiesArr.push({
-      id: encodeEntityId(entityId),
-      components: Array.from(components.entries()).map(([rawType, value]) => ({
-        type: encodeEntityId(rawType),
-        value: value === MISSING_COMPONENT ? undefined : value,
-      })),
+      id: encodeEntityIdCached(entityId, idCache),
+      components: serializeComponentsFromMap(components, idCache),
     });
   }
 
@@ -50,6 +46,21 @@ export function serializeWorld(
     entities,
     componentEntities: componentEntitiesArr,
   };
+}
+
+/** Small helper to avoid duplicating the "Map → SerializedComponent[] with cache" pattern. */
+function serializeComponentsFromMap(
+  components: Map<EntityId<any>, any>,
+  idCache: Map<any, any>,
+): SerializedComponent[] {
+  const result: SerializedComponent[] = [];
+  for (const [rawType, value] of components) {
+    result.push({
+      type: encodeEntityIdCached(rawType, idCache),
+      value: value === MISSING_COMPONENT ? undefined : value,
+    });
+  }
+  return result;
 }
 
 /**
@@ -96,14 +107,17 @@ export function deserializeWorld(ctx: WorldDeserializationContext, snapshot: Ser
       const componentsArray: SerializedComponent[] = entry.components || [];
 
       const componentMap = new Map<EntityId<any>, any>();
-      const componentTypes: EntityId<any>[] = [];
 
       for (const componentEntry of componentsArray) {
         const componentType = decodeSerializedId(componentEntry.type);
         componentMap.set(componentType, componentEntry.value);
-        componentTypes.push(componentType);
       }
 
+      // Build the list of component types from the map we just populated (no redundant push loop)
+      const componentTypes = Array.from(componentMap.keys());
+
+      // ensureArchetype is internally memoized (getOrCompute on signature), so repeated calls
+      // for the same component set are cheap after the first archetype is created.
       const archetype = ctx.ensureArchetype(componentTypes);
       archetype.addEntity(entityId, componentMap);
       ctx.setEntityToArchetype(entityId, archetype);

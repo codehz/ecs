@@ -33,9 +33,9 @@ export type SerializedComponent = {
 };
 
 /**
- * Encode an internal EntityId into a SerializedEntityId for snapshots
+ * Core encoding logic (no cache). Extracted so cached wrapper can reuse it without duplication.
  */
-export function encodeEntityId(id: EntityId<any>): SerializedEntityId {
+function encodeEntityIdCore(id: EntityId<any>): SerializedEntityId {
   const detailed = getDetailedIdType(id);
   switch (detailed.type) {
     case "component": {
@@ -79,6 +79,33 @@ export function encodeEntityId(id: EntityId<any>): SerializedEntityId {
     default:
       return id as number;
   }
+}
+
+/**
+ * Encode an internal EntityId into a SerializedEntityId for snapshots.
+ * Use encodeEntityIdCached when serializing many entities to benefit from memoization
+ * of repeated component/relation type IDs.
+ */
+export function encodeEntityId(id: EntityId<any>): SerializedEntityId {
+  return encodeEntityIdCore(id);
+}
+
+/**
+ * Encode an EntityId, using an optional cache Map to avoid repeated getDetailedIdType
+ * + name lookup work for IDs that appear many times (typical during full world snapshot).
+ */
+export function encodeEntityIdCached(
+  id: EntityId<any>,
+  cache?: Map<EntityId<any>, SerializedEntityId>,
+): SerializedEntityId {
+  if (cache) {
+    const cached = cache.get(id);
+    if (cached !== undefined) return cached;
+    const result = encodeEntityIdCore(id);
+    cache.set(id, result);
+    return result;
+  }
+  return encodeEntityIdCore(id);
 }
 
 /**

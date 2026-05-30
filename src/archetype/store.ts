@@ -37,6 +37,13 @@ export interface DontFragmentStore {
   // Low-frequency "get everything for entity" paths (Y-class, acceptable cost)
   getAllForEntity(entityId: EntityId): Array<[relationType: EntityId<any>, data: any]>;
   deleteEntity(entityId: EntityId): void;
+
+  /**
+   * @internal Bulk helper for serialization of many entities.
+   * Default implementation simply loops getAllForEntity; subclasses / future
+   * implementations can provide a more efficient fused walk.
+   */
+  getAllForEntities(entityIds: readonly EntityId[]): Map<EntityId, Array<[EntityId<any>, any]>>;
 }
 
 /**
@@ -236,5 +243,16 @@ export class DontFragmentStoreImpl implements DontFragmentStore {
     }
 
     this.entityIndex.delete(entityId);
+  }
+
+  getAllForEntities(entityIds: readonly EntityId[]): Map<EntityId, Array<[EntityId<any>, any]>> {
+    const result = new Map<EntityId, Array<[EntityId<any>, any]>>();
+    for (const eid of entityIds) {
+      const data = this.getAllForEntity(eid);
+      if (data.length > 0) {
+        result.set(eid, data);
+      }
+    }
+    return result;
   }
 }

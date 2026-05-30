@@ -7,6 +7,7 @@ import {
   isDontFragmentComponent,
   isWildcardRelationId,
 } from "../entity";
+import type { SerializedComponent, SerializedEntity, SerializedEntityId } from "../storage/serialization";
 import { isOptionalEntityId, type ComponentTuple, type ComponentType, type LifecycleHookEntry } from "../types";
 import { getOrCompute } from "../utils/utils";
 import { buildCacheKey, buildSingleComponent, getWildcardRelationDataSource, isRelationType } from "./helpers";
@@ -176,6 +177,62 @@ export class Archetype {
 
       return { entity, components };
     });
+  }
+
+  /**
+   * @internal Serialization fast-path.
+   *
+   * Appends SerializedEntity records directly from the archetype's column storage
+   * (componentData arrays) plus dontFragment relations, avoiding per-entity Map
+   * allocation and repeated Array.from(entries()).
+   *
+   * Component type IDs should be pre-encoded by the caller (once per archetype)
+   * and passed in `encodedComponentTypes` (same order and length as this.componentTypes).
+   *
+   * The provided `encode` function should be the cached variant for best performance
+   * on entity IDs and any dontFragment relation type IDs.
+   *
+   * `dontFragmentByEntity` is an optional pre-fetched map from a bulk
+   * `DontFragmentStore.getAllForEntities` call (further reduces per-entity calls).
+   */
+  appendSerializedEntities(
+    out: SerializedEntity[],
+    encode: (id: EntityId<any>) => SerializedEntityId,
+    encodedComponentTypes: SerializedEntityId[],
+    dontFragmentByEntity?: Map<EntityId, Array<[EntityId<any>, any]>>,
+  ): void {
+    if (encodedComponentTypes.length !== this.componentTypes.length) {
+      throw new Error("encodedComponentTypes length must match archetype componentTypes");
+    }
+
+    for (let i = 0; i < this.entities.length; i++) {
+      const entity = this.entities[i]!;
+
+      const components: SerializedComponent[] = [];
+      // Regular (non-dontFragment) components from column arrays
+      for (let c = 0; c < this.componentTypes.length; c++) {
+        const data = this.getComponentData(this.componentTypes[c]!)[i];
+        components.push({
+          type: encodedComponentTypes[c]!,
+          value: data === MISSING_COMPONENT ? undefined : data,
+        });
+      }
+
+      // Append any dontFragment relations for this entity (usually small or zero)
+      const dontFragmentTuples =
+        dontFragmentByEntity?.get(entity) ?? this.dontFragmentRelations.getAllForEntity(entity);
+      for (const [componentType, data] of dontFragmentTuples) {
+        components.push({
+          type: encode(componentType),
+          value: data,
+        });
+      }
+
+      out.push({
+        id: encode(entity),
+        components,
+      });
+    }
   }
 
   removeEntity(entityId: EntityId): Map<EntityId<any>, any> | undefined {
