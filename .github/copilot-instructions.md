@@ -38,9 +38,13 @@
 - Unified `world.sync()` at the end of a Pipeline: see `examples/simple/demo.ts`.
 - Multi-component/optional component hooks: see README.md "Multi-Component Lifecycle Hooks".
 - EntityBuilder: `world.spawn().with(...).build(); world.sync();`.
+- **New relation/hierarchy helpers on World** (recommended, avoids hand-written child maps + recursion):
+  `world.getChildren(parent, ChildOf)`, `world.traverseDescendants(...)`, `world.getRelationSources(...)` etc.
+  See updated `examples/parent-child-hierarchy.ts`. Standalone function forms have been removed to simplify the API surface.
 
 ## Notes for Modifications
 
 - Keep the public API: `World`, `component`, `relation`, etc. exports should not be renamed or removed.
 - Entry is ESM; `.ts` extension imports are allowed.
 - Prioritize adding core logic in `src/core`, and expose new APIs in `src/index.ts`.
+- New relation/hierarchy tools are available only as methods on `World` (e.g. `world.getChildren`, `world.getParent`, `world.iterateDescendants`). The previous standalone function forms (`getChildren(world, ...)`) have been removed to keep the public API surface small and consistent.

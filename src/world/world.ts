@@ -18,6 +18,7 @@ import {
   isEntityRelation,
   isExclusiveComponent,
   isWildcardRelationId,
+  relation,
 } from "../entity";
 import { matchesFilter, serializeQueryFilter, type QueryFilter } from "../query/filter";
 import type { Query } from "../query/query";
@@ -569,6 +570,213 @@ export class World {
     }
 
     return archetype.getOptional(entityId, componentType);
+  }
+
+  // ==========================================================================
+  // Relation & Hierarchy Companion Tools (public API)
+  // ==========================================================================
+
+  /**
+   * Retrieves all targets (and their associated data) for relations of a given
+   * base component on an entity.
+   *
+   * This is the ergonomic replacement for the common pattern:
+   *   world.get(entity, relation(Comp, "*"))
+   *
+   * @example
+   * const ChildOf = component({ exclusive: true, dontFragment: true });
+   * const children = world.getRelationTargets(parent, ChildOf); // usually []
+   * const items = world.getRelationTargets(player, InInventory);
+   *
+   * // For common hierarchy use cases, prefer the higher-level helpers:
+   * // world.getChildren(parent, ChildOf), world.getParent(child, ChildOf)
+   */
+  getRelationTargets<T = void>(
+    entityId: EntityId,
+    relationComp: ComponentId<T>,
+  ): [target: EntityId<unknown>, data: T | undefined][] {
+    this.assertEntityExists(entityId, "Entity");
+
+    const wildcard = relation(relationComp, "*") as WildcardRelationId<T>;
+
+    // For component entities (singletons) the path is different; they rarely host relations
+    if (this.componentEntities.exists(entityId)) {
+      return this.componentEntities.getWildcard(entityId, wildcard);
+    }
+
+    // Regular entity path — archetype.get for wildcard always materializes the array
+    // (even if empty for a dontFragment relation that only has the marker)
+    const data = this.get(entityId, wildcard);
+    return data as [EntityId<unknown>, T | undefined][];
+  }
+
+  /**
+   * Returns every entity that currently holds a relation of the given base
+   * component pointing at `targetId`.
+   *
+   * This is the efficient **reverse** lookup. For common hierarchy cases,
+   * prefer the higher-level `world.getChildren(parent, ChildOf)` instead.
+   *
+   * @example
+   * const ChildOf = component({ exclusive: true, dontFragment: true });
+   * const directChildren = world.getRelationSources(ship, ChildOf);
+   */
+  getRelationSources(targetId: EntityId, relationComp: ComponentId<any>): EntityId[] {
+    const refs = getEntityReferences(this.entityReferences, targetId);
+    const result: EntityId[] = [];
+
+    for (const [source, relType] of refs) {
+      // Only consider still-living sources
+      if (!this.entityToArchetype.has(source) && !this.componentEntities.exists(source)) continue;
+
+      const decodedComp = getComponentIdFromRelationId(relType);
+      if (decodedComp === relationComp) {
+        result.push(source);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Returns true if the entity has any (or a specific-target) relation of the
+   * given base component.
+   */
+  hasRelation(entityId: EntityId, relationComp: ComponentId<any>, targetId?: EntityId): boolean {
+    this.assertEntityExists(entityId, "Entity");
+
+    if (targetId !== undefined) {
+      const specific = relation(relationComp, targetId);
+      return this.has(entityId, specific);
+    }
+
+    // Any target of this relation kind?
+    const targets = this.getRelationTargets(entityId, relationComp);
+    return targets.length > 0;
+  }
+
+  /**
+   * Returns the number of relations of the given base component held by the entity.
+   */
+  countRelations(entityId: EntityId, relationComp: ComponentId<any>): number {
+    this.assertEntityExists(entityId, "Entity");
+    const targets = this.getRelationTargets(entityId, relationComp);
+    return targets.length;
+  }
+
+  /**
+   * For an *exclusive* relation (e.g. ChildOf, Owner), returns the single
+   * target entity (or undefined if none).
+   *
+   * When the component was declared `exclusive: true`, this is the preferred
+   * accessor (clearer intent than array destructuring).
+   */
+  getSingleRelationTarget<T = void>(entityId: EntityId, relationComp: ComponentId<T>): EntityId | undefined {
+    const targets = this.getRelationTargets(entityId, relationComp);
+    return targets.length > 0 ? (targets[0]![0] as EntityId) : undefined;
+  }
+
+  // --------------------------------------------------------------------------
+  // High-level hierarchy helpers (convenience methods on World)
+  // --------------------------------------------------------------------------
+
+  /**
+   * Returns the direct children of `parent` for the given relationship component
+   * (typically a `ChildOf` or similar exclusive `dontFragment` relation).
+   *
+   * This is the recommended high-level API for hierarchy traversal.
+   * It uses the internal reverse reference index for efficiency.
+   *
+   * @example
+   * const ChildOf = component({ exclusive: true, dontFragment: true });
+   * const kids = world.getChildren(ship, ChildOf);
+   */
+  getChildren(parent: EntityId, childOf: ComponentId<any>): EntityId[] {
+    return this.getRelationSources(parent, childOf);
+  }
+
+  /**
+   * Returns the parent of `child` for the given relationship component
+   * (typically an exclusive `ChildOf` relation).
+   *
+   * @example
+   * const ChildOf = component({ exclusive: true, dontFragment: true });
+   * const parent = world.getParent(turret, ChildOf);
+   */
+  getParent(child: EntityId, childOf: ComponentId<any>): EntityId | undefined {
+    return this.getSingleRelationTarget(child, childOf);
+  }
+
+  /**
+   * Returns the ancestor chain from the immediate parent up to (but not
+   * including) the root for the given relationship component.
+   *
+   * @example
+   * const ChildOf = component({ exclusive: true, dontFragment: true });
+   * const ancestors = world.getAncestors(muzzle, ChildOf); // [turret, ship]
+   */
+  getAncestors(entity: EntityId, childOf: ComponentId<any>): EntityId[] {
+    const ancestors: EntityId[] = [];
+    let cur = this.getParent(entity, childOf);
+    while (cur !== undefined) {
+      ancestors.push(cur);
+      cur = this.getParent(cur, childOf);
+    }
+    return ancestors;
+  }
+
+  /**
+   * Iteratively traverses all descendants of `root` in DFS pre-order.
+   * This is a generator and is safe for very deep hierarchies.
+   *
+   * @example
+   * for (const { entity, depth, parent } of world.iterateDescendants(root, ChildOf)) {
+   *   console.log(depth, entity);
+   * }
+   */
+  *iterateDescendants(
+    root: EntityId,
+    childOf: ComponentId<any>,
+    opts: { includeSelf?: boolean; maxDepth?: number } = {},
+  ): IterableIterator<{ entity: EntityId; depth: number; parent: EntityId | null }> {
+    const { includeSelf = false, maxDepth } = opts;
+    const stack: Array<{ entity: EntityId; depth: number; parent: EntityId | null }> = [];
+
+    if (includeSelf) {
+      stack.push({ entity: root, depth: 0, parent: null });
+    } else {
+      for (const child of this.getChildren(root, childOf)) {
+        stack.push({ entity: child, depth: 1, parent: root });
+      }
+    }
+
+    while (stack.length > 0) {
+      const current = stack.pop()!;
+      if (maxDepth !== undefined && current.depth > maxDepth) continue;
+
+      yield current;
+
+      const kids = this.getChildren(current.entity, childOf);
+      for (let i = kids.length - 1; i >= 0; i--) {
+        const k = kids[i]!;
+        stack.push({ entity: k, depth: current.depth + 1, parent: current.entity });
+      }
+    }
+  }
+
+  /**
+   * Callback-based descendant traversal (hot path friendly).
+   * Return `false` from the visitor to stop early.
+   */
+  traverseDescendants(
+    root: EntityId,
+    childOf: ComponentId<any>,
+    visitor: (entity: EntityId, depth: number, parent: EntityId | null) => void | boolean,
+    opts: { includeSelf?: boolean; maxDepth?: number } = {},
+  ): void {
+    for (const { entity, depth, parent } of this.iterateDescendants(root, childOf, opts)) {
+      const res = visitor(entity, depth, parent);
+      if (res === false) return;
+    }
   }
 
   /**

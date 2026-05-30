@@ -1,5 +1,5 @@
 import { pipeline } from "@codehz/pipeline";
-import { World, component, relation, type EntityId, type Query } from "../src";
+import { World, component, relation, type Query } from "../src";
 
 // Define component types
 type Transform = { x: number; y: number; rotation: number; scale: number };
@@ -22,7 +22,6 @@ const world = new World();
 const movementQuery: Query = world.createQuery([LocalTransform, LinearVelocity]);
 const rotationQuery: Query = world.createQuery([LocalTransform, AngularVelocity]);
 const transformQuery: Query = world.createQuery([Name, LocalTransform, WorldTransform]);
-const childQuery: Query = world.createQuery([relation(ChildOf, "*")]);
 const renderQuery: Query = world.createQuery([Name, WorldTransform]);
 
 function toRadians(degrees: number): number {
@@ -59,38 +58,9 @@ function formatTransform(transform: Transform): string {
   return `pos=(${transform.x.toFixed(2)}, ${transform.y.toFixed(2)}) rot=${transform.rotation.toFixed(1)}deg scale=${transform.scale.toFixed(2)}`;
 }
 
-function buildChildrenByParent(): Map<EntityId, EntityId[]> {
-  const childrenByParent = new Map<EntityId, EntityId[]>();
-
-  childQuery.forEach([relation(ChildOf, "*")], (child, parents) => {
-    const parent = parents[0]?.[0];
-    if (parent === undefined) return;
-
-    const children = childrenByParent.get(parent) ?? [];
-    children.push(child);
-    childrenByParent.set(parent, children);
-  });
-
-  return childrenByParent;
-}
-
-function propagateChildren(
-  parent: EntityId,
-  parentWorld: Transform,
-  childrenByParent: Map<EntityId, EntityId[]>,
-): void {
-  const children = childrenByParent.get(parent);
-  if (!children) return;
-
-  for (const child of children) {
-    const name = world.get(child, Name);
-    const local = world.get(child, LocalTransform);
-    const worldTransform = world.get(child, WorldTransform);
-    copyTransform(worldTransform, composeTransform(local, parentWorld));
-    console.log(`  Child ${name.value}: ${formatTransform(worldTransform)}`);
-    propagateChildren(child, worldTransform, childrenByParent);
-  }
-}
+// NOTE: Before the relation/hierarchy companion tools, this required manually
+// building a children map every frame + writing recursive propagation.
+// Now we can use the built-in efficient helpers (getChildren + traverseDescendants).
 
 // Build game loop using pipeline
 // Pass execution order is determined by addition order; no need to manually manage dependencies
@@ -115,16 +85,26 @@ const gameLoop = pipeline<{ deltaTime: number }>()
     });
   })
   // Hierarchy pass - propagate parent transforms into world transforms
+  // (modernized with the new relation/hierarchy companion tools)
   .addPass(() => {
     console.log(`[HierarchyPass] Propagating world transforms`);
-    const childrenByParent = buildChildrenByParent();
 
     transformQuery.forEach([Name, LocalTransform, WorldTransform], (entity, name, localTransform, worldTransform) => {
-      if (world.has(entity, relation(ChildOf, "*"))) return;
+      if (world.has(entity, relation(ChildOf, "*"))) return; // skip non-roots
 
       copyTransform(worldTransform, composeTransform(localTransform));
       console.log(`  Root ${name.value}: ${formatTransform(worldTransform)}`);
-      propagateChildren(entity, worldTransform, childrenByParent);
+
+      // Use the efficient built-in traverser (replaces manual Map + recursion)
+      world.traverseDescendants(entity, ChildOf, (child, _depth, parent) => {
+        if (!parent) return;
+        const childName = world.get(child, Name);
+        const local = world.get(child, LocalTransform);
+        const childWorld = world.get(child, WorldTransform);
+        const parentWorldT = world.get(parent, WorldTransform);
+        copyTransform(childWorld, composeTransform(local, parentWorldT));
+        console.log(`  Child ${childName.value}: ${formatTransform(childWorld)}`);
+      });
     });
   })
   // Render pass - render propagated world transforms

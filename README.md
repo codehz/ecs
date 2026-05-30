@@ -288,6 +288,31 @@ relation(componentId, "*");
 relation(componentId, otherComponentId);
 ```
 
+### 关系/层级配套工具（新）
+
+为避免用户在父子层级（`ChildOf`）和库存系统（`InInventory`）中反复手写 `buildChildrenByParent` + 递归遍历逻辑，我们提供了配套工具：
+
+```typescript
+const ChildOf = component<void>({ exclusive: true, dontFragment: true });
+const world = new World();
+// ... 创建层级 ...
+
+// 推荐直接在 World 实例上使用（API 表面已简化）
+const kids = world.getChildren(parent, ChildOf);
+const p = world.getParent(child, ChildOf);
+
+for (const { entity, depth, parent } of world.iterateDescendants(root, ChildOf)) {
+  // ...
+}
+
+const items = world.getRelationTargets(player, InInventory);
+const owners = world.getRelationSources(sword, InInventory);
+```
+
+这些工具全部在 `world` 实例方法上也有对应（`world.getChildren(...)` 等），并完整支持数据负载关系、独占/非独占、删除后一致性。
+
+详见 `src/relations/hierarchy.ts` 和新增的测试。
+
 ### 组件 / 实体 ID 规则
 
 - 组件 ID：`1` ~ `1023`

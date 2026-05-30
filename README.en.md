@@ -288,6 +288,29 @@ relation(componentId, "*");
 relation(componentId, otherComponentId);
 ```
 
+### Relation & Hierarchy Companion Tools (New)
+
+To stop users from repeatedly hand-writing `buildChildrenByParent` + recursive descent for parent-child hierarchies and inventory systems, we now ship first-class helpers:
+
+```typescript
+const ChildOf = component<void>({ exclusive: true, dontFragment: true });
+const world = new World();
+// ... build hierarchy ...
+
+// Recommended usage (standalone functions removed to simplify API surface)
+const kids = world.getChildren(parent, ChildOf);
+const p = world.getParent(child, ChildOf);
+
+for (const { entity, depth } of world.iterateDescendants(root, ChildOf)) { ... }
+
+const items = world.getRelationTargets(player, InInventory);
+const owners = world.getRelationSources(sword, InInventory);
+```
+
+The same functionality is also available as methods on `World` instances. All helpers are fully compatible with data-bearing relations, exclusive/non-exclusive, and post-`sync()` semantics.
+
+See `src/relations/hierarchy.ts` and the new test suite for details.
+
 ### Component / Entity ID Rules
 
 - Component ID: `1` – `1023`
