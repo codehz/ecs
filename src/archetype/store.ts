@@ -2,6 +2,14 @@ import type { EntityId } from "../entity";
 import { getComponentIdFromRelationId, getTargetIdFromRelationId } from "../entity";
 
 /**
+ * Internal representation for the relations an entity has under one component kind.
+ * 'single' is the optimized form for exclusive relations (vast majority of cases).
+ */
+type RelationEntry =
+  | { type: "single"; relationType: EntityId<any>; target: EntityId; data: any }
+  | { type: "multi"; targets: Map<EntityId, { relationType: EntityId<any>; data: any }> };
+
+/**
  * Interface for storing dontFragment relation data.
  *
  * Storage is now primarily keyed by relation ComponentId (the "kind" of relation)
@@ -34,35 +42,20 @@ export interface DontFragmentStore {
 /**
  * Production implementation of DontFragmentStore.
  *
- * Internal layout:
- * - byComponent: baseComponentId → (entityId → Map<fullRelationType, data>)
- *   This makes "all relations of kind X" extremely cheap.
+ * Internal layout (optimized):
+ * - byComponent: baseComponentId → (entityId → RelationEntry)
+ *   RelationEntry uses a single-value form for the common exclusive case (1 target),
+ *   avoiding Map allocation entirely for the vast majority of dontFragment usage.
  * - entityIndex: entityId → Set<baseComponentId>
- *   Lightweight reverse index (usually 0 or 1 entries per entity for exclusive relations).
- *
- * TODO (performance, post-MVP):
- *   For exclusive dontFragment relations (the common case, e.g. ChildOf with exclusive: true),
- *   replace the innermost `Map<fullRelationType, data>` (or Map<target, data>) with a
- *   zero-allocation single-value representation:
- *     { type: 'single', target: EntityId, data: any }
- *   This eliminates the per-entity Map allocation for 99% of dontFragment usage and
- *   further reduces GC pressure on structural changes.
- *
- * TODO (performance, post-MVP):
- *   Add a batch-oriented method for archetype iteration hot paths, e.g.:
- *     getRelationsForEntities(componentId, entities: EntityId[]):
- *       Map<EntityId, [target, data][]>
- *   This can avoid repeated Map lookups + decoding when forEachWithComponents
- *   processes hundreds or thousands of entities with the same wildcard component.
+ *   Lightweight reverse index.
  */
 export class DontFragmentStoreImpl implements DontFragmentStore {
   /**
    * Primary storage, keyed by the base relation component ID.
-   * Inner map: entity → (full encoded relation ID → user data)
    */
   private byComponent = new Map<
     EntityId<any>, // base componentId
-    Map<EntityId, Map<EntityId<any>, any>> // entity → fullRelType → data
+    Map<EntityId, RelationEntry>
   >();
 
   /**
@@ -78,10 +71,17 @@ export class DontFragmentStoreImpl implements DontFragmentStore {
     const entities = this.byComponent.get(componentId);
     if (!entities) return undefined;
 
-    const relsForEntity = entities.get(entityId);
-    if (!relsForEntity) return undefined;
+    const entry = entities.get(entityId);
+    if (!entry) return undefined;
 
-    return relsForEntity.get(relationType);
+    const targetId = getTargetIdFromRelationId(relationType)!;
+
+    if (entry.type === "single") {
+      return entry.target === targetId ? entry.data : undefined;
+    } else {
+      const item = entry.targets.get(targetId);
+      return item ? item.data : undefined;
+    }
   }
 
   setValue(entityId: EntityId, relationType: EntityId<any>, data: any): void {
@@ -96,13 +96,27 @@ export class DontFragmentStoreImpl implements DontFragmentStore {
       this.byComponent.set(componentId, entities);
     }
 
-    let relsForEntity = entities.get(entityId);
-    if (!relsForEntity) {
-      relsForEntity = new Map();
-      entities.set(entityId, relsForEntity);
-    }
+    const targetId = getTargetIdFromRelationId(relationType)!;
+    let entry = entities.get(entityId);
 
-    relsForEntity.set(relationType, data);
+    if (!entry) {
+      // First relation for this (entity, component) — use single form (big win for exclusive)
+      entry = { type: "single", relationType, target: targetId, data };
+      entities.set(entityId, entry);
+    } else if (entry.type === "single") {
+      if (entry.target === targetId) {
+        entry.data = data;
+        entry.relationType = relationType; // update in case it changed
+      } else {
+        // Promote to multi
+        const targets = new Map();
+        targets.set(entry.target, { relationType: entry.relationType, data: entry.data });
+        targets.set(targetId, { relationType, data });
+        entities.set(entityId, { type: "multi", targets });
+      }
+    } else {
+      entry.targets.set(targetId, { relationType, data });
+    }
 
     // Maintain reverse index
     let components = this.entityIndex.get(entityId);
@@ -120,38 +134,39 @@ export class DontFragmentStoreImpl implements DontFragmentStore {
     const entities = this.byComponent.get(componentId);
     if (!entities) return false;
 
-    const relsForEntity = entities.get(entityId);
-    if (!relsForEntity) return false;
+    const entry = entities.get(entityId);
+    if (!entry) return false;
 
-    const existed = relsForEntity.delete(relationType);
+    const targetId = getTargetIdFromRelationId(relationType)!;
+    let existed = false;
 
-    // Clean up empty inner structures
-    if (relsForEntity.size === 0) {
-      entities.delete(entityId);
+    if (entry.type === "single") {
+      if (entry.target === targetId) {
+        existed = true;
+        entities.delete(entityId);
+      }
+    } else {
+      existed = entry.targets.delete(targetId);
+      if (entry.targets.size === 0) {
+        entities.delete(entityId);
+      } else if (entry.targets.size === 1) {
+        // Demote to single
+        const [first] = entry.targets.entries();
+        const [t, item] = first!;
+        entities.set(entityId, { type: "single", relationType: item.relationType, target: t, data: item.data });
+      }
     }
-    if (entities.size === 0) {
+
+    if (!entities.has(entityId) && entities.size === 0) {
       this.byComponent.delete(componentId);
     }
 
     // Update reverse index
     const components = this.entityIndex.get(entityId);
-    if (components) {
-      // Only remove the componentId if this entity no longer has ANY relations under it
-      let stillHasThisComponent = false;
-      const remaining = entities.get(entityId);
-      if (remaining) {
-        for (const rel of remaining.keys()) {
-          if (getComponentIdFromRelationId(rel) === componentId) {
-            stillHasThisComponent = true;
-            break;
-          }
-        }
-      }
-      if (!stillHasThisComponent) {
-        components.delete(componentId);
-        if (components.size === 0) {
-          this.entityIndex.delete(entityId);
-        }
+    if (components && !entities.has(entityId)) {
+      components.delete(componentId);
+      if (components.size === 0) {
+        this.entityIndex.delete(entityId);
       }
     }
 
@@ -169,13 +184,14 @@ export class DontFragmentStoreImpl implements DontFragmentStore {
     const entities = this.byComponent.get(componentId);
     if (!entities) return result;
 
-    const relsForEntity = entities.get(entityId);
-    if (!relsForEntity) return result;
+    const entry = entities.get(entityId);
+    if (!entry) return result;
 
-    for (const [relType, data] of relsForEntity) {
-      const targetId = getTargetIdFromRelationId(relType);
-      if (targetId !== undefined) {
-        result.push([targetId, data]);
+    if (entry.type === "single") {
+      result.push([entry.target, entry.data]);
+    } else {
+      for (const [target, item] of entry.targets) {
+        result.push([target, item.data]);
       }
     }
 
@@ -190,10 +206,14 @@ export class DontFragmentStoreImpl implements DontFragmentStore {
 
     for (const componentId of components) {
       const entities = this.byComponent.get(componentId);
-      const relsForEntity = entities?.get(entityId);
-      if (relsForEntity) {
-        for (const [relType, data] of relsForEntity) {
-          result.push([relType, data]);
+      const entry = entities?.get(entityId);
+      if (entry) {
+        if (entry.type === "single") {
+          result.push([entry.relationType, entry.data]);
+        } else {
+          for (const item of entry.targets.values()) {
+            result.push([item.relationType, item.data]);
+          }
         }
       }
     }
