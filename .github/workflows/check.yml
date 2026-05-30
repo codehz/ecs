@@ -1,6 +1,6 @@
 name: Check
 
-on: push
+on: [push, pull_request]
 
 jobs:
   check:
@@ -10,13 +10,28 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
+        uses: oven-sh/setup-bun@v2
 
       - name: Install dependencies
-        run: bun install
+        run: bun install --frozen-lockfile
 
       - name: Run tests
-        run: bun test
+        run: |
+          mkdir -p test-results coverage
+          bun test \
+            --reporter=junit --reporter-outfile=test-results/junit.xml \
+            --coverage --coverage-reporter=lcov
+
+      - name: Test Results Summary
+        uses: test-summary/action@v2
+        if: always()
+        with:
+          paths: "test-results/junit.xml"
+
+      - name: Coverage Summary
+        uses: livewing/lcov-job-summary@v1.3.0
+        if: always()
+        with:
+          lcov: coverage/lcov.info
