@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { component, type EntityId } from "../../entity";
+import { component, relation, type EntityId } from "../../entity";
+import { decodeSerializedId, encodeEntityId, encodeEntityIdCached } from "../../storage/serialization";
 import { World } from "../../world/world";
 
 describe("Serialization edge cases", () => {
@@ -233,5 +234,88 @@ describe("Serialization edge cases", () => {
 
     expect(newWorld.has(e3, Position)).toBe(false);
     expect(newWorld.get(e3, Velocity)).toEqual({ vx: 15 });
+  });
+
+  it("should serialize and deserialize singleton components (covers componentEntities paths)", () => {
+    const world = new World();
+    const Config = component<{ debug: boolean }>();
+    // Singleton shorthand populates internal component entity
+    world.set(Config, { debug: true });
+    world.sync();
+
+    const snapshot = world.serialize();
+    const restored = new World(snapshot);
+
+    expect(restored.has(Config)).toBe(true);
+    expect(restored.get(Config)).toEqual({ debug: true });
+  });
+
+  it("should round-trip anonymous (no-name) components in entity-relations and component-relations", () => {
+    const world = new World();
+    const A = component<{ v: number }>(); // anonymous -> triggers numeric fallback + warn paths
+    const B = component<string>(); // also anonymous for target in comp-rel
+    const e1 = world.new();
+    const e2 = world.new();
+    const relE = relation(A, e1);
+    const relC = relation(A, B);
+    world.set(e2, relE, { v: 42 });
+    world.set(e2, relC, { v: 99 });
+    world.sync();
+
+    const snap = world.serialize();
+    const r = new World(snap);
+
+    expect(r.has(e2, relE)).toBe(true);
+    expect(r.get(e2, relE)).toEqual({ v: 42 });
+    expect(r.has(e2, relC)).toBe(true);
+    expect(r.get(e2, relC)).toEqual({ v: 99 });
+  });
+
+  describe("Serialization ID codec (low-level, covers all decode/encode branches)", () => {
+    it("should exercise cache hit/miss and no-cache path in encodeEntityIdCached", () => {
+      const C = component<number>();
+      const cache = new Map();
+      const c1 = encodeEntityIdCached(C, cache);
+      const c2 = encodeEntityIdCached(C, cache);
+      expect(c2).toBe(c1); // hit
+      const noCache = encodeEntityIdCached(C); // else branch (no cache provided)
+      expect(noCache).toBeDefined();
+      // also wrapper
+      expect(encodeEntityId(C)).toBeDefined();
+    });
+
+    it("should round-trip all relation kinds including wildcard via encode/decode", () => {
+      const C = component<boolean>();
+      const E = 9999 as EntityId<any>;
+      const relE = relation(C, E);
+      const C2 = component<string>();
+      const relC = relation(C, C2);
+      const wild = relation(C, "*");
+
+      expect(decodeSerializedId(encodeEntityId(relE))).toBe(relE);
+      expect(decodeSerializedId(encodeEntityId(relC))).toBe(relC);
+      expect(decodeSerializedId(encodeEntityId(wild))).toBe(wild);
+    });
+
+    it("should hit numeric string fallbacks and all error throws in decode", () => {
+      const C1 = component<number>();
+      const C2 = component<string>();
+      const id1 = C1 as unknown as number;
+      const id2 = C2 as unknown as number;
+
+      // numeric fallback paths (when name lookup fails; use real allocated IDs as strings)
+      expect(decodeSerializedId(String(id1) as any)).toBe(id1 as any);
+      expect(decodeSerializedId({ component: String(id2), target: 99999 } as any)).toBeDefined(); // component-relation numeric fallback; creates valid relation(C2, fakeTarget)
+
+      // error paths (unknown names hit throws before relation() ctor)
+      expect(() => decodeSerializedId("TotallyUnknownName!!" as any)).toThrow(/Unknown component name in snapshot/);
+      expect(() => decodeSerializedId({ component: "BadName", target: 1 } as any)).toThrow(
+        /Unknown component name in snapshot/,
+      );
+      expect(() => decodeSerializedId({ component: "123", target: "BadTargetName" } as any)).toThrow(
+        /Unknown target component name in snapshot/,
+      );
+      expect(() => decodeSerializedId({ foo: "bar" } as any)).toThrow(/Invalid ID in snapshot/);
+    });
   });
 });
