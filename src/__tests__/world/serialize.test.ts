@@ -80,4 +80,21 @@ describe("World serialization", () => {
     const c = restored.new();
     expect(c).toBeGreaterThanOrEqual(b + 1);
   });
+
+  it("should serialize and deserialize component-relations", () => {
+    const world = new World();
+    const A = component<string>("A");
+    const B = component<number>("B");
+    const relAB = relation(A, B); // component-relation
+
+    const e = world.new();
+    world.set(e, relAB, "linked-via-comp");
+    world.sync();
+
+    const snapshot = world.serialize();
+    const restored = new World(snapshot);
+
+    expect(restored.has(e, relAB)).toBe(true);
+    expect(restored.get(e, relAB)).toBe("linked-via-comp");
+  });
 });
