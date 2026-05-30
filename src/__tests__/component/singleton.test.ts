@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { component } from "../../entity";
+import { ComponentEntityStore } from "../../component/entity-store";
+import { component, createEntityId, relation, type EntityId } from "../../entity";
 import { World } from "../../world/world";
 
 describe("World - Singleton Component", () => {
@@ -144,5 +145,43 @@ describe("World - Singleton Component", () => {
     // Both should have the same result
     expect(world1.has(GlobalConfigId)).toBe(world2.has(GlobalConfigId, GlobalConfigId));
     expect(world1.has(GlobalConfigId)).toBe(false);
+  });
+
+  it("should cover ComponentEntityStore hasWildcard, getWildcard, wildcard delete paths", () => {
+    const store = new ComponentEntityStore();
+    const compE = GlobalConfigId as EntityId; // reuse as component entity id (valid in range)
+    const target1 = createEntityId(1024);
+    const target2 = createEntityId(1025);
+    const relComp = relation(GlobalConfigId, target1); // entity-relation on the comp entity
+    const relComp2 = relation(GlobalConfigId, target2);
+    const wildcard = relation(GlobalConfigId, "*");
+
+    // Setup via internal? Use executeCommands to populate (simulates)
+    store.executeCommands(compE, [
+      { type: "set", componentType: relComp, component: { dist: 1 } } as any,
+      { type: "set", componentType: relComp2, component: { dist: 2 } } as any,
+    ]);
+
+    // hasWildcard
+    expect(store.hasWildcard(compE, GlobalConfigId as any)).toBe(true);
+    expect(store.hasWildcard(compE, GameStateId as any)).toBe(false);
+    expect(store.hasWildcard(createEntityId(9999), GlobalConfigId as any)).toBe(false); // no data
+
+    // getWildcard
+    const w1 = store.getWildcard(compE, wildcard as any);
+    expect(w1.length).toBe(2);
+
+    // wildcard delete via executeCommands
+    store.executeCommands(compE, [{ type: "delete", componentType: wildcard } as any]);
+    const afterDel = store.getWildcard(compE, wildcard as any);
+    expect(afterDel.length).toBe(0);
+
+    // also test get on non exist throws
+    expect(() => store.get(compE, createEntityId(5000) as any)).toThrow();
+    expect(store.getOptional(compE, createEntityId(5000) as any)).toBeUndefined();
+
+    // clear
+    store.clear(compE);
+    expect(store.has(compE, relComp)).toBe(false);
   });
 });

@@ -168,4 +168,16 @@ describe("BitSet word boundary tests", () => {
     expect(bitset.has(24)).toBe(false);
     expect(bitset.has(26)).toBe(false);
   });
+
+  it("should expose length and handle edge has/set/clear on bounds", () => {
+    const bitset = new BitSet(10);
+    expect(bitset.length).toBe(10);
+    expect(bitset.has(-1)).toBe(false);
+    expect(bitset.has(10)).toBe(false);
+    bitset.set(-1); // no-op
+    bitset.set(10); // no-op
+    bitset.clear(-1);
+    bitset.clear(10);
+    expect(bitset.has(0)).toBe(false);
+  });
 });

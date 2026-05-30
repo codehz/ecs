@@ -6,12 +6,16 @@ import {
   createEntityId,
   decodeRelationId,
   ENTITY_ID_START,
+  getComponentIdFromRelationId,
   getDetailedIdType,
   getIdType,
+  getTargetIdFromRelationId,
   inspectEntityId,
   INVALID_COMPONENT_ID,
   isComponentId,
+  isComponentRelation,
   isEntityId,
+  isEntityRelation,
   isRelationId,
   isWildcardRelationId,
   relation,
@@ -255,6 +259,42 @@ describe("Entity ID System", () => {
       expect(decoded.componentId).toBe(compId);
       expect(decoded.targetId).toBe(largeEntityId as EntityId);
       expect(decoded.type).toBe("entity");
+    });
+  });
+
+  describe("Error paths and additional relation utils", () => {
+    it("should throw on decodeRelationId for non-relation", () => {
+      expect(() => decodeRelationId(123 as any)).toThrow("ID is not a relation ID");
+    });
+
+    it("should throw on decodeRelationId for invalid component or target in relation", () => {
+      expect(() => decodeRelationId(-123456 as any)).toThrow();
+    });
+
+    it("should cover isEntityRelation and isComponentRelation", () => {
+      const entRel = relation(createComponentId(1), createEntityId(ENTITY_ID_START));
+      const compRel = relation(createComponentId(2), createComponentId(3));
+      const wild = relation(createComponentId(4), "*");
+      const plain = createEntityId(ENTITY_ID_START);
+
+      expect(isEntityRelation(entRel)).toBe(true);
+      expect(isEntityRelation(compRel)).toBe(false);
+      expect(isEntityRelation(wild)).toBe(false);
+      expect(isEntityRelation(plain)).toBe(false);
+
+      expect(isComponentRelation(compRel)).toBe(true);
+      expect(isComponentRelation(entRel)).toBe(false);
+      expect(isComponentRelation(wild)).toBe(false);
+    });
+
+    it("should cover getComponentIdFromRelationId and getTargetIdFromRelationId on valids and invalids", () => {
+      const r = relation(createComponentId(99), createEntityId(1024));
+      expect(getComponentIdFromRelationId(r)).toBe(createComponentId(99));
+      expect(getTargetIdFromRelationId(r)).toBe(createEntityId(1024));
+
+      expect(getComponentIdFromRelationId(123 as any)).toBeUndefined();
+      expect(getTargetIdFromRelationId(123 as any)).toBeUndefined();
+      expect(getComponentIdFromRelationId(-999999 as any)).toBeUndefined();
     });
   });
 });

@@ -1,5 +1,17 @@
 import { describe, expect, it } from "bun:test";
 import { Archetype } from "../../archetype/archetype";
+import {
+  buildCacheKey,
+  buildRegularComponentValue,
+  buildSingleComponent,
+  buildWildcardRelationValue,
+  findMatchingDontFragmentRelations,
+  findWildcardRelations,
+  getWildcardRelationDataSource,
+  hasWildcardRelation,
+  isRelationType,
+  matchesRelationComponentId,
+} from "../../archetype/helpers";
 import { DontFragmentStoreImpl } from "../../archetype/store";
 import { component, createEntityId, relation, type EntityId } from "../../entity";
 
@@ -245,5 +257,141 @@ describe("Archetype", () => {
       [target2, { distance: 20 }],
       [target1, { distance: 100 }], // Updated
     ]);
+  });
+
+  it("should cover getEntity, dump, getEntitiesWithComponents, getEntityToIndexMap", () => {
+    const archetype = new Archetype([positionComponent], createDontFragmentRelations());
+    const entity = createEntityId(1024);
+    archetype.addEntity(entity, new Map([[positionComponent, { x: 1, y: 2 }]]));
+
+    // Cover getEntity
+    const data = archetype.getEntity(entity);
+    expect(data).toBeDefined();
+    expect(data!.get(positionComponent)).toEqual({ x: 1, y: 2 });
+
+    // Cover dump
+    const dumped = archetype.dump();
+    expect(dumped).toHaveLength(1);
+    expect(dumped[0]!.entity).toBe(entity);
+
+    // Cover getEntitiesWithComponents
+    const withComps = archetype.getEntitiesWithComponents([positionComponent]);
+    expect(withComps).toHaveLength(1);
+    expect(withComps[0]!.entity).toBe(entity);
+
+    // Cover getEntityToIndexMap
+    const map = archetype.getEntityToIndexMap();
+    expect(map.get(entity)).toBe(0);
+  });
+
+  it("should cover DontFragmentStoreImpl extra methods (hasAnyForComponent, getAllForEntities, multi)", () => {
+    const store = new DontFragmentStoreImpl();
+    const e1 = createEntityId(2000);
+    const e2 = createEntityId(2001);
+
+    // Actually create proper relations for a component
+    const targetC1 = createEntityId(4001);
+    const targetC2 = createEntityId(4002);
+    const r1 = relation(velocityComponent, targetC1);
+    const r2 = relation(velocityComponent, targetC2);
+    const baseComp = velocityComponent;
+
+    store.setValue(e1, r1, { v: 1 });
+    store.setValue(e1, r2, { v: 2 }); // promote to multi
+
+    // hasAnyForComponent
+    expect(store.hasAnyForComponent(baseComp)).toBe(true);
+    expect(store.hasAnyForComponent(positionComponent)).toBe(false);
+
+    // getAllForEntities bulk
+    const bulk = store.getAllForEntities([e1, e2, createEntityId(5000)]);
+    expect(bulk.has(e1)).toBe(true);
+    expect(bulk.get(e1)).toHaveLength(2);
+
+    // getAllForEntity on one without
+    expect(store.getAllForEntity(e2)).toEqual([]);
+
+    // deleteValue on multi
+    store.deleteValue(e1, r1);
+    expect(store.getValue(e1, r1)).toBeUndefined();
+    // still has the other
+    expect(store.getValue(e1, r2)).toEqual({ v: 2 });
+
+    // delete last demotes? after delete one left in multi, delete last
+    store.deleteValue(e1, r2);
+    expect(store.hasAnyForComponent(baseComp)).toBe(false);
+  });
+
+  it("should cover archetype helpers (find*, has*, build*, matchers, error paths)", () => {
+    const comps = new Map<EntityId, any>();
+    const relC = relation(positionComponent, createEntityId(5001));
+    const relD = relation(positionComponent, createEntityId(5002));
+    comps.set(relC, { d: 10 });
+    comps.set(relD, { d: 20 });
+    comps.set(positionComponent, { x: 1 }); // non-relation
+
+    // findWildcardRelations
+    const found = findWildcardRelations(comps, positionComponent);
+    expect(found).toHaveLength(2);
+
+    // hasWildcardRelation
+    expect(hasWildcardRelation(comps, positionComponent)).toBe(true);
+    expect(hasWildcardRelation(comps, velocityComponent)).toBe(false);
+
+    // matchesRelationComponentId
+    expect(matchesRelationComponentId(relC, positionComponent)).toBe(true);
+    expect(matchesRelationComponentId(positionComponent, positionComponent)).toBe(false);
+
+    // isRelationType
+    expect(
+      isRelationType({
+        type: "entity-relation",
+        componentId: positionComponent,
+        targetId: createEntityId(1024),
+      } as any),
+    ).toBe(true);
+    expect(isRelationType({ type: "component" } as any)).toBe(false);
+
+    // buildCacheKey
+    const key = buildCacheKey([positionComponent, velocityComponent]);
+    expect(typeof key).toBe("string");
+
+    // getWildcardRelationDataSource
+    const ds = getWildcardRelationDataSource([relC, relD], positionComponent, false);
+    expect(ds).toHaveLength(2);
+    const dsOpt = getWildcardRelationDataSource([], positionComponent, true);
+    expect(dsOpt).toBeUndefined();
+
+    // buildRegularComponentValue
+    expect(buildRegularComponentValue([{ x: 9 }], 0, false)).toEqual({ x: 9 });
+    expect(buildRegularComponentValue(undefined, 0, true)).toBeUndefined();
+    expect(() => buildRegularComponentValue(undefined, 0, false)).toThrow();
+
+    // findMatchingDontFragmentRelations (deprecated helper)
+    const dfData = new Map<EntityId, any>([[relC, { df: 1 }]]);
+    const matches = findMatchingDontFragmentRelations(dfData, positionComponent, []);
+    expect(matches).toHaveLength(1);
+
+    // buildWildcardRelationValue - optional empty -> undefined
+    const dfStore = createDontFragmentRelations();
+    const wildcard = relation(positionComponent, "*");
+    const valOpt = buildWildcardRelationValue(wildcard, [], () => null, dfStore, createEntityId(6000), true);
+    expect(valOpt).toBeUndefined();
+
+    // buildWildcardRelationValue - mandatory empty -> throws
+    expect(() => buildWildcardRelationValue(wildcard, [], () => null, dfStore, createEntityId(6001), false)).toThrow(
+      /No matching relations found/,
+    );
+
+    // buildSingleComponent regular path
+    const val = buildSingleComponent(
+      positionComponent,
+      [{ x: 42 }],
+      0,
+      createEntityId(7000),
+      (t) => (t === positionComponent ? [{ x: 42 }] : []),
+      dfStore,
+    );
+    expect(val).toEqual({ x: 42 });
   });
 });
