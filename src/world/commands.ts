@@ -172,6 +172,15 @@ export function maybeRemoveWildcardMarker(
     }
   }
 
+  // Also check if this changeset itself is adding another relation of the same kind
+  // (common in exclusive dontFragment flips: remove old target + add new target in one batch)
+  for (const addedType of changeset.adds.keys()) {
+    if (addedType === removedComponentType) continue;
+    if (getComponentIdFromRelationId(addedType) === componentId) {
+      return; // Replacement is being added in the same changeset, keep the marker
+    }
+  }
+
   changeset.delete(wildcardMarker);
 }
 
@@ -280,6 +289,8 @@ export function applyChangeset(
 
 /**
  * No-hooks variant of applyDontFragmentChanges that skips tracking removed component data.
+ *
+ * Rewritten for the new DontFragmentStore interface (ComponentId-primary storage).
  */
 function applyDontFragmentChanges(
   dontFragmentRelations: DontFragmentStore,
@@ -287,34 +298,24 @@ function applyDontFragmentChanges(
   changeset: ComponentChangeset,
   removedComponents: Map<EntityId<any>, any>,
 ): void {
-  // Get or create the entity's dontFragment relations map
-  let entityRelations = dontFragmentRelations.get(entityId);
-
   for (const componentType of changeset.removes) {
     if (isDontFragmentRelation(componentType)) {
-      if (entityRelations) {
-        const removedValue = entityRelations.get(componentType);
-        if (removedValue !== undefined || entityRelations.has(componentType)) {
-          removedComponents.set(componentType, removedValue);
-          entityRelations.delete(componentType);
-        }
+      const removedValue = dontFragmentRelations.getValue(entityId, componentType);
+      // Record for hooks if we are actually removing something
+      if (
+        removedValue !== undefined ||
+        dontFragmentRelations.getAllForEntity(entityId).some(([t]) => t === componentType)
+      ) {
+        removedComponents.set(componentType, removedValue);
       }
+      dontFragmentRelations.deleteValue(entityId, componentType);
     }
   }
 
   for (const [componentType, component] of changeset.adds) {
     if (isDontFragmentRelation(componentType)) {
-      if (!entityRelations) {
-        entityRelations = new Map();
-        dontFragmentRelations.set(entityId, entityRelations);
-      }
-      entityRelations.set(componentType, component);
+      dontFragmentRelations.setValue(entityId, componentType, component);
     }
-  }
-
-  // Clean up empty map
-  if (entityRelations && entityRelations.size === 0) {
-    dontFragmentRelations.delete(entityId);
   }
 }
 
@@ -323,29 +324,16 @@ function applyDontFragmentChangesNoHooks(
   entityId: EntityId,
   changeset: ComponentChangeset,
 ): void {
-  let entityRelations = dontFragmentRelations.get(entityId);
-
   for (const componentType of changeset.removes) {
     if (isDontFragmentRelation(componentType)) {
-      if (entityRelations) {
-        entityRelations.delete(componentType);
-      }
+      dontFragmentRelations.deleteValue(entityId, componentType);
     }
   }
 
   for (const [componentType, component] of changeset.adds) {
     if (isDontFragmentRelation(componentType)) {
-      if (!entityRelations) {
-        entityRelations = new Map();
-        dontFragmentRelations.set(entityId, entityRelations);
-      }
-      entityRelations.set(componentType, component);
+      dontFragmentRelations.setValue(entityId, componentType, component);
     }
-  }
-
-  // Clean up empty map
-  if (entityRelations && entityRelations.size === 0) {
-    dontFragmentRelations.delete(entityId);
   }
 }
 

@@ -9,13 +9,7 @@ import {
 } from "../entity";
 import { isOptionalEntityId, type ComponentTuple, type ComponentType, type LifecycleHookEntry } from "../types";
 import { getOrCompute } from "../utils/utils";
-import {
-  buildCacheKey,
-  buildSingleComponent,
-  findMatchingDontFragmentRelations,
-  getWildcardRelationDataSource,
-  isRelationType,
-} from "./helpers";
+import { buildCacheKey, buildSingleComponent, getWildcardRelationDataSource, isRelationType } from "./helpers";
 import type { DontFragmentStore } from "./store";
 
 /**
@@ -56,9 +50,9 @@ export class Archetype {
   private entityToIndex: Map<EntityId, number> = new Map();
 
   /**
-   * DontFragmentStore for relation data keyed by entity ID.
-   * This allows entities with different relation targets to share the same archetype
-   * without migration overhead when entities change archetypes.
+   * DontFragmentStore (now keyed primarily by relation ComponentId).
+   * See store.ts for design rationale and TODOs around future exclusive-relation
+   * and batch-iteration optimizations.
    */
   private dontFragmentRelations: DontFragmentStore;
 
@@ -118,19 +112,13 @@ export class Archetype {
   }
 
   private addDontFragmentRelations(entityId: EntityId, componentData: Map<EntityId<any>, any>): void {
-    const dontFragmentData = new Map<EntityId<any>, any>();
-
     for (const [componentType, data] of componentData) {
       if (this.componentTypeSet.has(componentType)) continue;
 
       const detailedType = getDetailedIdType(componentType);
       if (isRelationType(detailedType) && isDontFragmentComponent(detailedType.componentId!)) {
-        dontFragmentData.set(componentType, data);
+        this.dontFragmentRelations.setValue(entityId, componentType, data);
       }
-    }
-
-    if (dontFragmentData.size > 0) {
-      this.dontFragmentRelations.set(entityId, dontFragmentData);
     }
   }
 
@@ -147,18 +135,29 @@ export class Archetype {
     }
 
     // Add dontFragment relations
-    const dontFragmentData = this.dontFragmentRelations.get(entityId);
-    if (dontFragmentData) {
-      for (const [componentType, data] of dontFragmentData) {
-        entityData.set(componentType, data);
-      }
+    const dontFragmentTuples = this.dontFragmentRelations.getAllForEntity(entityId);
+    for (const [componentType, data] of dontFragmentTuples) {
+      entityData.set(componentType, data);
     }
 
     return entityData;
   }
 
+  /**
+   * Returns all dontFragment relations for the given entity as an array of tuples.
+   * This is a compatibility adapter during the store refactor.
+   *
+   * Prefer the new DontFragmentStore methods when possible.
+   */
   getEntityDontFragmentRelations(entityId: EntityId): Map<EntityId<any>, any> | undefined {
-    return this.dontFragmentRelations.get(entityId);
+    const tuples = this.dontFragmentRelations.getAllForEntity(entityId);
+    if (tuples.length === 0) return undefined;
+
+    const map = new Map<EntityId<any>, any>();
+    for (const [relType, data] of tuples) {
+      map.set(relType, data);
+    }
+    return map;
   }
 
   dump(): Array<{ entity: EntityId; components: Map<EntityId<any>, any> }> {
@@ -170,11 +169,9 @@ export class Archetype {
         components.set(componentType, data === MISSING_COMPONENT ? undefined : data);
       }
 
-      const dontFragmentData = this.dontFragmentRelations.get(entity);
-      if (dontFragmentData) {
-        for (const [componentType, data] of dontFragmentData) {
-          components.set(componentType, data);
-        }
+      const dontFragmentTuples = this.dontFragmentRelations.getAllForEntity(entity);
+      for (const [componentType, data] of dontFragmentTuples) {
+        components.set(componentType, data);
       }
 
       return { entity, components };
@@ -192,13 +189,11 @@ export class Archetype {
     }
 
     // Include dontFragment relations
-    const dontFragmentData = this.dontFragmentRelations.get(entityId);
-    if (dontFragmentData) {
-      for (const [componentType, data] of dontFragmentData) {
-        removedData.set(componentType, data);
-      }
-      this.dontFragmentRelations.delete(entityId);
+    const dontFragmentTuples = this.dontFragmentRelations.getAllForEntity(entityId);
+    for (const [componentType, data] of dontFragmentTuples) {
+      removedData.set(componentType, data);
     }
+    this.dontFragmentRelations.deleteEntity(entityId);
 
     this.entityToIndex.delete(entityId);
 
@@ -262,9 +257,10 @@ export class Archetype {
       }
     }
 
-    // Check dontFragment relations
+    // Check dontFragment relations (now uses the efficient per-component path)
     if (componentId !== undefined) {
-      findMatchingDontFragmentRelations(this.dontFragmentRelations.get(entityId), componentId, relations);
+      const matches = this.dontFragmentRelations.getRelationsForComponent(entityId, componentId);
+      for (const m of matches) relations.push(m);
     }
 
     return relations;
@@ -279,9 +275,14 @@ export class Archetype {
       return data as T;
     }
 
-    const dontFragmentData = this.dontFragmentRelations.get(entityId);
-    if (dontFragmentData?.has(componentType)) {
-      return dontFragmentData.get(componentType);
+    const value = this.dontFragmentRelations.getValue(entityId, componentType);
+    if (
+      value !== undefined ||
+      this.dontFragmentRelations.getAllForEntity(entityId).some(([t]) => t === componentType)
+    ) {
+      // Note: the extra check above handles the (rare) case where `undefined` is a legitimate stored value.
+      // For the common case we just return whatever getValue gave us.
+      return this.dontFragmentRelations.getValue(entityId, componentType);
     }
 
     throw new Error(`Component type ${componentType} not found for entity ${entityId}`);
@@ -299,11 +300,15 @@ export class Archetype {
       return { value: data as T };
     }
 
-    const dontFragmentData = this.dontFragmentRelations.get(entityId);
-    if (dontFragmentData?.has(componentType)) {
-      return { value: dontFragmentData.get(componentType) };
+    const value = this.dontFragmentRelations.getValue(entityId, componentType);
+    // We use getAllForEntity only as a presence check when the value itself might be undefined.
+    if (value !== undefined) {
+      return { value };
     }
-
+    const all = this.dontFragmentRelations.getAllForEntity(entityId);
+    if (all.some(([t]) => t === componentType)) {
+      return { value: this.dontFragmentRelations.getValue(entityId, componentType) };
+    }
     return undefined;
   }
 
@@ -320,12 +325,7 @@ export class Archetype {
 
     const detailedType = getDetailedIdType(componentType);
     if (isRelationType(detailedType) && isDontFragmentComponent(detailedType.componentId!)) {
-      let dontFragmentData = this.dontFragmentRelations.get(entityId);
-      if (!dontFragmentData) {
-        dontFragmentData = new Map();
-        this.dontFragmentRelations.set(entityId, dontFragmentData);
-      }
-      dontFragmentData.set(componentType, data);
+      this.dontFragmentRelations.setValue(entityId, componentType, data);
       return;
     }
 
@@ -436,12 +436,20 @@ export class Archetype {
 
   forEach(callback: (entityId: EntityId, components: Map<EntityId<any>, any>) => void): void {
     for (let i = 0; i < this.entities.length; i++) {
+      const entity = this.entities[i]!;
       const components = new Map<EntityId<any>, any>();
       for (const componentType of this.componentTypes) {
         const data = this.getComponentData(componentType)[i];
         components.set(componentType, data === MISSING_COMPONENT ? undefined : data);
       }
-      callback(this.entities[i]!, components);
+
+      // Append dontFragment relations (Y-class path, acceptable cost)
+      const dontFragmentTuples = this.dontFragmentRelations.getAllForEntity(entity);
+      for (const [componentType, data] of dontFragmentTuples) {
+        components.set(componentType, data);
+      }
+
+      callback(entity, components);
     }
   }
 
@@ -454,19 +462,15 @@ export class Archetype {
       }
     }
 
-    // Check dontFragment relations
+    // Check dontFragment relations only for entities that actually belong to *this* archetype.
+    // We must not use the global hasAnyForComponent here, otherwise unrelated archetypes
+    // can be incorrectly pulled into wildcard queries when any entity in the world has the relation.
     for (const entityId of this.entities) {
-      const entityDontFragmentRelations = this.dontFragmentRelations.get(entityId);
-      if (entityDontFragmentRelations) {
-        for (const relationType of entityDontFragmentRelations.keys()) {
-          const detailedType = getDetailedIdType(relationType);
-          if (isRelationType(detailedType) && detailedType.componentId === componentId) {
-            return true;
-          }
-        }
+      const rels = this.dontFragmentRelations.getRelationsForComponent(entityId, componentId);
+      if (rels.length > 0) {
+        return true;
       }
     }
-
     return false;
   }
 }

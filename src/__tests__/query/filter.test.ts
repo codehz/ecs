@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Archetype } from "../../archetype/archetype";
+import { DontFragmentStoreImpl } from "../../archetype/store";
 import type { ComponentId, EntityId } from "../../entity";
 import { relation } from "../../entity";
 import { matchesComponentTypes, matchesFilter, type QueryFilter } from "../../query/filter";
@@ -10,8 +11,8 @@ const velocityComponent = 2 as ComponentId<{ dx: number; dy: number }>;
 const healthComponent = 3 as ComponentId<{ value: number }>;
 const relationComponent = 4 as ComponentId<{ strength: number }>;
 
-// Helper function to create a dontFragmentRelations map for testing
-const createDontFragmentRelations = () => new Map<EntityId, Map<EntityId<any>, any>>();
+// Helper function to create a real DontFragmentStore for testing.
+const createDontFragmentRelations = () => new DontFragmentStoreImpl();
 
 describe("Query Filter Functions", () => {
   describe("matchesComponentTypes", () => {

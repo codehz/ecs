@@ -444,7 +444,10 @@ export class World {
     if (archetype.componentTypeSet.has(componentType)) return true;
 
     if (isDontFragmentRelation(componentType)) {
-      return this.dontFragmentStore.get(entityId)?.has(componentType) ?? false;
+      // Use getValue; presence check via getAllForEntity only if value can legitimately be undefined
+      const val = this.dontFragmentStore.getValue(entityId, componentType);
+      if (val !== undefined) return true;
+      return this.dontFragmentStore.getAllForEntity(entityId).some(([t]) => t === componentType);
     }
 
     return false;
@@ -493,7 +496,11 @@ export class World {
     if (componentType >= 0 || componentType % RELATION_SHIFT !== 0) {
       const inArchetype = archetype.componentTypeSet.has(componentType);
       const hasDontFragment = isDontFragmentRelation(componentType);
-      const hasComponent = inArchetype || (hasDontFragment && this.dontFragmentStore.get(entityId)?.has(componentType));
+      const hasComponent =
+        inArchetype ||
+        (hasDontFragment &&
+          (this.dontFragmentStore.getValue(entityId, componentType) !== undefined ||
+            this.dontFragmentStore.getAllForEntity(entityId).some(([t]) => t === componentType)));
 
       if (!hasComponent) {
         throw new Error(

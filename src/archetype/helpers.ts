@@ -67,7 +67,10 @@ export function matchesRelationComponentId(componentType: EntityId<any>, compone
 }
 
 /**
- * Find all relations in dontFragment data that match a component ID
+ * Find all relations in dontFragment data that match a component ID.
+ *
+ * @deprecated Prefer calling `DontFragmentStore.getRelationsForComponent` directly.
+ * This helper is kept temporarily for any remaining call sites during the refactor.
  */
 export function findMatchingDontFragmentRelations(
   dontFragmentData: Map<EntityId<any>, any> | undefined,
@@ -105,13 +108,14 @@ export function getWildcardRelationDataSource(
 }
 
 /**
- * Build wildcard relation value from matching relations
+ * Build wildcard relation value from matching relations.
+ * Now receives the DontFragmentStore directly for efficient per-component lookups.
  */
 export function buildWildcardRelationValue(
   wildcardRelationType: WildcardRelationId<any>,
   matchingRelations: EntityId<any>[] | undefined,
   getDataAtIndex: (relType: EntityId<any>) => any,
-  dontFragmentData: Map<EntityId<any>, any> | undefined,
+  dontFragmentStore: DontFragmentStore,
   entityId: EntityId,
   optional: boolean,
 ): any {
@@ -125,9 +129,12 @@ export function buildWildcardRelationValue(
     relations.push([targetId, data === MISSING_COMPONENT ? undefined : data]);
   }
 
-  // Add dontFragment relations
+  // Add dontFragment relations using the efficient store API (key win for X-class workload)
   if (targetComponentId !== undefined) {
-    findMatchingDontFragmentRelations(dontFragmentData, targetComponentId, relations);
+    const dfMatches = dontFragmentStore.getRelationsForComponent(entityId, targetComponentId);
+    for (const m of dfMatches) {
+      relations.push(m);
+    }
   }
 
   if (relations.length === 0) {
@@ -176,7 +183,7 @@ export function buildSingleComponent(
       actualType as WildcardRelationId<any>,
       dataSource as EntityId<any>[] | undefined,
       (relType) => getComponentData(relType)[entityIndex],
-      dontFragmentRelations.get(entityId),
+      dontFragmentRelations,
       entityId,
       optional,
     );

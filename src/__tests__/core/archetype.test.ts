@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Archetype } from "../../archetype/archetype";
+import { DontFragmentStoreImpl } from "../../archetype/store";
 import { component, createEntityId, relation, type EntityId } from "../../entity";
 
 describe("Archetype", () => {
@@ -9,8 +10,9 @@ describe("Archetype", () => {
   const positionComponent = component<Position>();
   const velocityComponent = component<Velocity>();
 
-  // Helper function to create a dontFragmentRelations map for testing
-  const createDontFragmentRelations = () => new Map<EntityId, Map<EntityId<any>, any>>();
+  // Helper function to create a real DontFragmentStore for testing.
+  // We use the production implementation because the interface is now fully semantic.
+  const createDontFragmentRelations = () => new DontFragmentStoreImpl();
 
   it("should create an archetype with component types", () => {
     const archetype = new Archetype([positionComponent, velocityComponent], createDontFragmentRelations());
