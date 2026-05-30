@@ -1,3 +1,8 @@
+---
+name: ecs
+description: "Guide for using @codehz/ecs — a high-performance ECS (Entity Component System) library in TypeScript. Use when: writing application code with @codehz/ecs; understanding deferred command buffering, archetype storage, queries, relations, lifecycle hooks, and sync() semantics; avoiding common ECS pitfalls like stale reads, dangling EntityId references, or sync() inside iteration."
+---
+
 # @codehz/ecs — User Guide for AI Coding Assistants
 
 **Purpose**: This document defines the strict usage contract for `@codehz/ecs`. Follow these rules when writing application code. Violating them is the most common source of subtle, hard-to-debug errors.
