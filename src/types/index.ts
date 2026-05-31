@@ -97,3 +97,74 @@ export interface LifecycleHookEntry {
   /** Archetypes that match this hook, used for precise cleanup on unsubscription */
   matchedArchetypes?: Set<any>;
 }
+
+/**
+ * Statistics payload delivered to callbacks registered via `World.createDebugStatsCollector`.
+ *
+ * All structural counts are snapshots taken after the sync that triggered delivery.
+ * `activity` always reflects work performed during that specific sync.
+ *
+ * Timestamps are raw `performance.now()` values suitable for `performance.measure`.
+ */
+export interface SyncDebugStats {
+  readonly timestamps: {
+    readonly syncStart: number;
+    readonly syncEnd: number;
+    readonly commandBufferStart: number;
+    readonly commandBufferEnd: number;
+  };
+
+  /** Number of iterations the internal command buffer loop performed during this sync. */
+  readonly commandIterations: number;
+
+  readonly entities: {
+    readonly total: number;
+    readonly freelistSize: number;
+    readonly nextId: number;
+  };
+
+  readonly archetypes: {
+    readonly total: number;
+    readonly empty: number;
+  };
+
+  readonly queries: {
+    readonly cached: number;
+    readonly registered: number;
+  };
+
+  readonly hooks: {
+    readonly total: number;
+  };
+
+  /** Sizes of stable internal reverse indices (conservative set). */
+  readonly indices: {
+    readonly entityReferences: number;
+    readonly entityToReferencingArchetypes: number;
+    readonly archetypesByComponent: number;
+  };
+
+  /**
+   * Activity that occurred as a direct result of this sync.
+   * All fields are always present (never optional).
+   */
+  readonly activity: {
+    /** Number of entities that performed an archetype migration (hasArchetypeStructuralChange was true). */
+    readonly migrations: number;
+    /** Total number of individual hook callback invocations (invokeHook calls). */
+    readonly hooksExecuted: number;
+    /** Number of new archetypes created during this sync. */
+    readonly archetypesCreated: number;
+    /** Number of archetypes removed during this sync. */
+    readonly archetypesRemoved: number;
+  };
+}
+
+/**
+ * Handle returned by `World.createDebugStatsCollector`.
+ * The object itself carries no data — its only responsibility is lifetime management.
+ * Use with `using` or call `[Symbol.dispose]()` when you no longer need collection.
+ */
+export interface DebugStatsCollector {
+  [Symbol.dispose](): void;
+}

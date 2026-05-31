@@ -39,3 +39,6 @@ export { Query } from "./query/query";
 
 // Type utilities
 export type { ComponentTuple, ComponentType, LifecycleCallback, LifecycleHook } from "./types";
+
+// Debug / observability types
+export type { DebugStatsCollector, SyncDebugStats } from "./types";

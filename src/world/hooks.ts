@@ -8,6 +8,12 @@ import {
 import { isOptionalEntityId, type ComponentType, type LifecycleHookEntry } from "../types";
 
 /**
+ * Debug-only counter incremented on every invokeHook call when armed.
+ * World reads and resets this during armed syncs.
+ */
+export const debugHookExecutionCounter = { value: 0 };
+
+/**
  * Unified hook invocation: prefers entry.callback (callback style) over hook.on_* (object style).
  */
 function invokeHook(
@@ -16,6 +22,8 @@ function invokeHook(
   entityId: EntityId,
   components: any[],
 ): void {
+  debugHookExecutionCounter.value++;
+
   if (entry.callback) {
     entry.callback(event as any, entityId, ...components);
     return;

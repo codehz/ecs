@@ -55,9 +55,10 @@ export class CommandBuffer {
   }
 
   /**
-   * Execute all commands and clear the buffer
+   * Execute all commands and clear the buffer.
+   * Returns the number of iterations performed (for debug stats).
    */
-  execute(): void {
+  execute(): number {
     let iterations = 0;
 
     while (this.commands.length > 0) {
@@ -92,6 +93,8 @@ export class CommandBuffer {
       }
       entityCommands.clear();
     }
+
+    return iterations;
   }
 
   /**

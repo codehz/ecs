@@ -24,7 +24,15 @@ import { matchesFilter, serializeQueryFilter, type QueryFilter } from "../query/
 import type { Query } from "../query/query";
 import { QueryRegistry } from "../query/registry";
 import type { SerializedWorld } from "../storage/serialization";
-import type { ComponentTuple, ComponentType, LifecycleCallback, LifecycleHook, LifecycleHookEntry } from "../types";
+import type {
+  ComponentTuple,
+  ComponentType,
+  DebugStatsCollector,
+  LifecycleCallback,
+  LifecycleHook,
+  LifecycleHookEntry,
+  SyncDebugStats,
+} from "../types";
 import { isOptionalEntityId } from "../types";
 import { getOrCompute } from "../utils/utils";
 import { EntityBuilder } from "./builder";
@@ -38,6 +46,7 @@ import {
 } from "./commands";
 import {
   collectMultiHookComponents,
+  debugHookExecutionCounter,
   triggerLifecycleHooks,
   triggerRemoveHooksForEntityDeletion,
   type HooksContext,
@@ -74,6 +83,14 @@ export class World {
 
   // Lifecycle hooks (declared before cached contexts that reference them)
   private hooks: Set<LifecycleHookEntry> = new Set();
+
+  // Debug observability collectors (armed only when non-empty)
+  private readonly _debugCollectors = new Set<(stats: SyncDebugStats) => void>();
+
+  // Transient counters for the current armed sync (reset each time)
+  private _debugMigrations = 0;
+  private _debugArchetypesCreated = 0;
+  private _debugArchetypesRemoved = 0;
 
   // Command execution
   private commandBuffer = new CommandBuffer((entityId, commands) => this.executeEntityCommands(entityId, commands));
@@ -893,6 +910,103 @@ export class World {
   }
 
   /**
+   * Creates a debug stats collector that will receive a `SyncDebugStats` payload
+   * after every subsequent `sync()`.
+   *
+   * The returned object is a pure lifecycle handle. It does not store data.
+   * Collection stops when you call `[Symbol.dispose]()` (or use a `using` declaration).
+   *
+   * All active collectors receive the exact same stats object for a given sync.
+   * Exceptions thrown by callbacks are ignored.
+   *
+   * This is intended for development/debugging and leak detection.
+   */
+  createDebugStatsCollector(callback: (stats: SyncDebugStats) => void): DebugStatsCollector {
+    this._debugCollectors.add(callback);
+
+    return {
+      [Symbol.dispose]: () => {
+        this._debugCollectors.delete(callback);
+      },
+    };
+  }
+
+  private _resetDebugActivityCounters(): void {
+    this._debugMigrations = 0;
+    this._debugArchetypesCreated = 0;
+    this._debugArchetypesRemoved = 0;
+    debugHookExecutionCounter.value = 0;
+  }
+
+  private _deliverDebugStats(timings: {
+    syncStart: number;
+    syncEnd: number;
+    commandBufferStart: number;
+    commandBufferEnd: number;
+    commandIterations: number;
+  }): void {
+    // Build structural counts (post-sync)
+    // Note: singletons (component-as-entity) are not included in the main archetype map.
+    // For debug purposes the dominant number is regular entities; we keep it simple here.
+    const entityCount = this.entityToArchetype.size;
+    let emptyArchetypes = 0;
+    for (const arch of this.archetypes) {
+      if (arch.size === 0) emptyArchetypes++;
+    }
+
+    let archetypesByComponentSize = 0;
+    for (const set of this.archetypesByComponent.values()) {
+      archetypesByComponentSize += set.size;
+    }
+
+    const stats: SyncDebugStats = {
+      timestamps: {
+        syncStart: timings.syncStart,
+        syncEnd: timings.syncEnd,
+        commandBufferStart: timings.commandBufferStart,
+        commandBufferEnd: timings.commandBufferEnd,
+      },
+      commandIterations: timings.commandIterations,
+
+      entities: {
+        total: entityCount,
+        freelistSize: this.entityIdManager.getFreelistSize(),
+        nextId: this.entityIdManager.getNextId(),
+      },
+      archetypes: {
+        total: this.archetypes.length,
+        empty: emptyArchetypes,
+      },
+      queries: {
+        cached: (this.queryRegistry as any).cache?.size ?? 0,
+        registered: (this.queryRegistry as any).queries?.size ?? 0,
+      },
+      hooks: {
+        total: this.hooks.size,
+      },
+      indices: {
+        entityReferences: this.entityReferences.size,
+        entityToReferencingArchetypes: this.entityToReferencingArchetypes.size,
+        archetypesByComponent: archetypesByComponentSize,
+      },
+      activity: {
+        migrations: this._debugMigrations,
+        hooksExecuted: debugHookExecutionCounter.value,
+        archetypesCreated: this._debugArchetypesCreated,
+        archetypesRemoved: this._debugArchetypesRemoved,
+      },
+    };
+
+    for (const cb of this._debugCollectors) {
+      try {
+        cb(stats);
+      } catch {
+        // Intentionally ignore user callback errors
+      }
+    }
+  }
+
+  /**
    * Synchronizes all buffered commands (set/remove/delete) to the world.
    * This method must be called after making changes via `set()`, `remove()`, or `delete()` for them to take effect.
    * Typically called once per frame at the end of your game loop.
@@ -903,7 +1017,29 @@ export class World {
    * world.sync(); // Apply all buffered changes
    */
   sync(): void {
-    this.commandBuffer.execute();
+    const hasCollectors = this._debugCollectors.size > 0;
+
+    const syncStart = hasCollectors ? performance.now() : 0;
+
+    if (hasCollectors) {
+      this._resetDebugActivityCounters();
+    }
+
+    const commandBufferStart = hasCollectors ? performance.now() : 0;
+    const commandIterations = this.commandBuffer.execute();
+    const commandBufferEnd = hasCollectors ? performance.now() : 0;
+
+    const syncEnd = hasCollectors ? performance.now() : 0;
+
+    if (hasCollectors) {
+      this._deliverDebugStats({
+        syncStart,
+        syncEnd,
+        commandBufferStart,
+        commandBufferEnd,
+        commandIterations,
+      });
+    }
   }
 
   /**
@@ -1166,9 +1302,19 @@ export class World {
 
     if (this.hooks.size === 0) {
       // Fast path: no hooks, skip removedComponents map allocation and hook triggering
-      applyChangeset(this._commandCtx, entityId, currentArchetype, changeset, this.entityToArchetype, null);
+      const newArchetype = applyChangeset(
+        this._commandCtx,
+        entityId,
+        currentArchetype,
+        changeset,
+        this.entityToArchetype,
+        null,
+      );
       if (hasStructuralChange) {
         this.updateEntityReferences(entityId, changeset);
+      }
+      if (this._debugCollectors.size > 0 && newArchetype !== currentArchetype) {
+        this._debugMigrations++;
       }
       return;
     }
@@ -1186,6 +1332,11 @@ export class World {
     if (hasStructuralChange) {
       this.updateEntityReferences(entityId, changeset);
     }
+
+    if (this._debugCollectors.size > 0 && newArchetype !== currentArchetype) {
+      this._debugMigrations++;
+    }
+
     triggerLifecycleHooks(
       this.createHooksContext(),
       entityId,
@@ -1310,6 +1461,10 @@ export class World {
     const newArchetype = new Archetype(componentTypes, this.dontFragmentStore);
     this.archetypes.push(newArchetype);
 
+    if (this._debugCollectors.size > 0) {
+      this._debugArchetypesCreated++;
+    }
+
     for (const componentType of componentTypes) {
       let archetypes = this.archetypesByComponent.get(componentType);
       if (!archetypes) {
@@ -1372,6 +1527,10 @@ export class World {
       const last = this.archetypes[this.archetypes.length - 1]!;
       this.archetypes[index] = last;
       this.archetypes.pop();
+    }
+
+    if (this._debugCollectors.size > 0) {
+      this._debugArchetypesRemoved++;
     }
 
     this.archetypeBySignature.delete(this.createArchetypeSignature(archetype.componentTypes));
