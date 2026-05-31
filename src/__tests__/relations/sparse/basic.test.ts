@@ -3,8 +3,8 @@ import { component, relation, type EntityId } from "../../../entity";
 import type { SyncDebugStats } from "../../../types";
 import { World } from "../../../world/world";
 
-describe("DontFragment Relations", () => {
-  it("should prevent archetype fragmentation for dontFragment relations", () => {
+describe("Sparse Relations", () => {
+  it("should prevent archetype fragmentation for sparse relations", () => {
     const world = new World();
 
     // Create component types
@@ -12,8 +12,8 @@ describe("DontFragment Relations", () => {
     const PositionId = component<Position>();
     const VelocityId = component();
 
-    // Create ChildOf with dontFragment option
-    const ChildOf = component({ dontFragment: true });
+    // Create ChildOf with sparse option
+    const ChildOf = component({ sparse: true });
 
     const collected: SyncDebugStats[] = [];
     using _collector = world.createDebugStatsCollector((s) => collected.push(s));
@@ -43,7 +43,7 @@ describe("DontFragment Relations", () => {
 
     // Use debug stats to confirm low archetype count (no fragmentation)
     const lastStats = collected[collected.length - 1]!;
-    // With dontFragment, 3 children + different parents should not explode archetype count
+    // With sparse, 3 children + different parents should not explode archetype count
     expect(lastStats.archetypes.total).toBeLessThanOrEqual(4);
 
     // Verify we can still access the relations
@@ -56,11 +56,11 @@ describe("DontFragment Relations", () => {
     expect(entities.length).toBe(3);
   });
 
-  it("should handle dontFragment relations with wildcard queries", () => {
+  it("should handle sparse relations with wildcard queries", () => {
     const world = new World();
 
     const PositionId = component();
-    const ChildOf = component({ dontFragment: true });
+    const ChildOf = component({ sparse: true });
 
     const parent1 = world.new();
     const parent2 = world.new();
@@ -75,7 +75,7 @@ describe("DontFragment Relations", () => {
 
     world.sync();
 
-    // Wildcard query should work with dontFragment relations
+    // Wildcard query should work with sparse relations
     const wildcardChildOf = relation(ChildOf, "*");
     const child1Relations = world.get(child1, wildcardChildOf);
     const child2Relations = world.get(child2, wildcardChildOf);
@@ -87,10 +87,10 @@ describe("DontFragment Relations", () => {
     expect(child2Relations[0]![0]).toBe(parent2);
   });
 
-  it("should allow updating dontFragment relations", () => {
+  it("should allow updating sparse relations", () => {
     const world = new World();
 
-    const ChildOf = component({ dontFragment: true, exclusive: true });
+    const ChildOf = component({ sparse: true, exclusive: true });
     const PositionId = component();
 
     const parent1 = world.new();
@@ -111,10 +111,10 @@ describe("DontFragment Relations", () => {
     expect(world.has(child, relation(ChildOf, parent2))).toBe(true);
   });
 
-  it("should handle removing dontFragment relations", () => {
+  it("should handle removing sparse relations", () => {
     const world = new World();
 
-    const ChildOf = component({ dontFragment: true });
+    const ChildOf = component({ sparse: true });
     const PositionId = component();
 
     const parent = world.new();
@@ -134,12 +134,12 @@ describe("DontFragment Relations", () => {
     expect(world.has(child, PositionId)).toBe(true);
   });
 
-  it("should handle queries with dontFragment relations", () => {
+  it("should handle queries with sparse relations", () => {
     const world = new World();
 
     const PositionId = component();
     const VelocityId = component();
-    const ChildOf = component({ dontFragment: true });
+    const ChildOf = component({ sparse: true });
 
     const collected: SyncDebugStats[] = [];
     using _collector = world.createDebugStatsCollector((s) => collected.push(s));
@@ -147,7 +147,7 @@ describe("DontFragment Relations", () => {
     const parent1 = world.new();
     const parent2 = world.new();
 
-    // Create entities with dontFragment relations
+    // Create entities with sparse relations
     for (let i = 0; i < 10; i++) {
       const entity = world.new();
       world.set(entity, PositionId);
@@ -167,11 +167,11 @@ describe("DontFragment Relations", () => {
     expect(stats.archetypes.total).toBeLessThanOrEqual(3);
   });
 
-  it("should compare fragmentation: with and without dontFragment", () => {
-    // Test WITHOUT dontFragment (causes fragmentation)
+  it("should compare fragmentation: with and without sparse", () => {
+    // Test WITHOUT sparse (causes fragmentation)
     const world1 = new World();
     const PositionId1 = component();
-    const ChildOf1 = component(); // No dontFragment
+    const ChildOf1 = component(); // No sparse
 
     const stats1: SyncDebugStats[] = [];
     using _collector1 = world1.createDebugStatsCollector((s) => stats1.push(s));
@@ -184,10 +184,10 @@ describe("DontFragment Relations", () => {
     }
     world1.sync();
 
-    // Test WITH dontFragment (prevents fragmentation)
+    // Test WITH sparse (prevents fragmentation)
     const world2 = new World();
     const PositionId2 = component();
-    const ChildOf2 = component({ dontFragment: true }); // With dontFragment
+    const ChildOf2 = component({ sparse: true }); // With sparse
 
     const stats2: SyncDebugStats[] = [];
     using _collector2 = world2.createDebugStatsCollector((s) => stats2.push(s));
@@ -203,19 +203,19 @@ describe("DontFragment Relations", () => {
     const last1 = stats1[stats1.length - 1]!;
     const last2 = stats2[stats2.length - 1]!;
 
-    // Without dontFragment: we expect significantly more archetypes created due to fragmentation
+    // Without sparse: we expect significantly more archetypes created due to fragmentation
     // (one per unique parent relation target)
     expect(last1.archetypes.total).toBeGreaterThan(last2.archetypes.total);
 
-    // With dontFragment: far fewer archetypes for the same number of entities
+    // With sparse: far fewer archetypes for the same number of entities
     expect(last2.archetypes.total).toBeLessThanOrEqual(3); // entities + relations archetype(s)
   });
 
-  it("should query entities with wildcard relation on dontFragment component using createQuery", () => {
+  it("should query entities with wildcard relation on sparse component using createQuery", () => {
     const world = new World();
 
     const PositionId = component();
-    const ChildOf = component({ dontFragment: true });
+    const ChildOf = component({ sparse: true });
 
     const parent1 = world.new();
     const parent2 = world.new();
@@ -241,12 +241,12 @@ describe("DontFragment Relations", () => {
     expect(entities).toContain(child2);
   });
 
-  it("should query entities with wildcard relation + other components on dontFragment", () => {
+  it("should query entities with wildcard relation + other components on sparse", () => {
     const world = new World();
 
     const PositionId = component();
     const VelocityId = component();
-    const ChildOf = component({ dontFragment: true });
+    const ChildOf = component({ sparse: true });
 
     const parent1 = world.new();
     const parent2 = world.new();
@@ -280,17 +280,17 @@ describe("DontFragment Relations", () => {
     expect(entities).not.toContain(child3);
   });
 
-  it("should correctly cleanup dontFragment relations when target entity is destroyed", () => {
+  it("should correctly cleanup sparse relations when target entity is destroyed", () => {
     const world = new World();
 
     const PositionId = component();
     const VelocityId = component();
-    const ChildOf = component({ dontFragment: true });
+    const ChildOf = component({ sparse: true });
 
     const parent1 = world.new();
     const parent2 = world.new();
 
-    // Create children with dontFragment relations
+    // Create children with sparse relations
     const child1 = world.new();
     world.set(child1, PositionId);
     world.set(child1, VelocityId);
@@ -308,7 +308,7 @@ describe("DontFragment Relations", () => {
 
     world.sync();
 
-    // All children should be in the same archetype (due to dontFragment)
+    // All children should be in the same archetype (due to sparse)
     const archetypes = (world as any).archetypes;
     const matchingArchetypesBefore = archetypes.filter((arch: any) => {
       return arch.componentTypes.includes(PositionId) && arch.componentTypes.includes(VelocityId);
@@ -351,11 +351,11 @@ describe("DontFragment Relations", () => {
     expect(matchingArchetypesAfter.length).toBe(2);
   });
 
-  it("should not create new archetypes when removing dontFragment relation from entity", () => {
+  it("should not create new archetypes when removing sparse relation from entity", () => {
     const world = new World();
 
     const PositionId = component();
-    const ChildOf = component({ dontFragment: true });
+    const ChildOf = component({ sparse: true });
 
     const parent1 = world.new();
     const parent2 = world.new();
@@ -393,10 +393,10 @@ describe("DontFragment Relations", () => {
     }
   });
 
-  it("should trigger lifecycle hooks when dontFragment relations are removed due to entity destruction", () => {
+  it("should trigger lifecycle hooks when sparse relations are removed due to entity destruction", () => {
     const world = new World();
 
-    const ChildOf = component({ dontFragment: true });
+    const ChildOf = component({ sparse: true });
     const PositionId = component();
 
     const parent = world.new();
@@ -424,12 +424,12 @@ describe("DontFragment Relations", () => {
     expect(removedRelations[0]!.relations).toEqual([[parent, undefined]]);
   });
 
-  it("should handle cascade delete with dontFragment relations correctly", () => {
+  it("should handle cascade delete with sparse relations correctly", () => {
     const world = new World();
 
     const PositionId = component();
-    // Cascade delete AND dontFragment - when parent dies, children die too
-    const ChildOf = component({ dontFragment: true, cascadeDelete: true });
+    // Cascade delete AND sparse - when parent dies, children die too
+    const ChildOf = component({ sparse: true, cascadeDelete: true });
 
     const grandparent = world.new();
     const parent = world.new();
@@ -457,16 +457,16 @@ describe("DontFragment Relations", () => {
     expect(world.exists(child)).toBe(false);
   });
 
-  it("should maintain entity archetype integrity when removing dontFragment relations", () => {
+  it("should maintain entity archetype integrity when removing sparse relations", () => {
     const world = new World();
 
     const PositionId = component<{ x: number; y: number }>();
     const VelocityId = component<{ vx: number; vy: number }>();
-    const ChildOf = component({ dontFragment: true });
+    const ChildOf = component({ sparse: true });
 
     const parent = world.new();
 
-    // Create entity with components and dontFragment relation
+    // Create entity with components and sparse relation
     const entity = world.new();
     world.set(entity, PositionId, { x: 10, y: 20 });
     world.set(entity, VelocityId, { vx: 1, vy: 2 });

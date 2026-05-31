@@ -3,11 +3,11 @@ import { component, relation } from "../../../entity";
 import type { SyncDebugStats } from "../../../types";
 import { World } from "../../../world/world";
 
-describe("DontFragment Query Notification Issue", () => {
-  it("should handle dontFragment wildcard queries and archetype lifecycle", () => {
+describe("Sparse Query Notification Issue", () => {
+  it("should handle sparse wildcard queries and archetype lifecycle", () => {
     const world = new World();
     const Position = component();
-    const ChildOf = component({ dontFragment: true });
+    const ChildOf = component({ sparse: true });
     const WildcardChildOf = relation(ChildOf, "*");
 
     const collected: SyncDebugStats[] = [];
@@ -51,9 +51,9 @@ describe("DontFragment Query Notification Issue", () => {
     expect(lastStats.archetypes.total).toBeGreaterThanOrEqual(1);
   });
 
-  it("should handle exclusive dontFragment relations and specific target queries", () => {
+  it("should handle exclusive sparse relations and specific target queries", () => {
     const world = new World();
-    const ChildOf = component({ dontFragment: true, exclusive: true });
+    const ChildOf = component({ sparse: true, exclusive: true });
     const p1 = world.new();
     const p2 = world.new();
     const entity = world.new();
@@ -83,9 +83,9 @@ describe("DontFragment Query Notification Issue", () => {
     expect(wildcardQuery.getEntities()).toContain(entity);
   });
 
-  it("should handle multiple non-exclusive dontFragment relations", () => {
+  it("should handle multiple non-exclusive sparse relations", () => {
     const world = new World();
-    const Tag = component({ dontFragment: true });
+    const Tag = component({ sparse: true });
     const t1 = world.new();
     const t2 = world.new();
     const entity = world.new();
@@ -111,8 +111,8 @@ describe("DontFragment Query Notification Issue", () => {
 
   it("should correctly filter false positives in wildcard queries", () => {
     const world = new World();
-    const TagA = component({ dontFragment: true });
-    const TagB = component({ dontFragment: true });
+    const TagA = component({ sparse: true });
+    const TagB = component({ sparse: true });
     const p = world.new();
 
     const e1 = world.new();
