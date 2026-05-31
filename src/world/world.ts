@@ -1,4 +1,4 @@
-import { Archetype } from "../archetype/archetype";
+import type { Archetype } from "../archetype/archetype";
 import { SparseStoreImpl } from "../archetype/store";
 import { CommandBuffer, type Command } from "../commands/buffer";
 import { ComponentChangeset } from "../commands/changeset";
@@ -16,11 +16,10 @@ import {
   isEntityRelation,
   isExclusiveComponent,
   isSparseRelation,
-  isSparseWildcard,
   isWildcardRelationId,
   relation,
 } from "../entity";
-import { matchesFilter, serializeQueryFilter, type QueryFilter } from "../query/filter";
+import { serializeQueryFilter, type QueryFilter } from "../query/filter";
 import type { Query } from "../query/query";
 import { QueryRegistry } from "../query/registry";
 import type { SerializedWorld } from "../storage/serialization";
@@ -34,11 +33,10 @@ import type {
   SyncDebugStats,
 } from "../types";
 import { isOptionalEntityId } from "../types";
-import { getOrCompute } from "../utils/utils";
+import { ArchetypeManager } from "./archetype-manager";
 import { EntityBuilder } from "./builder";
 import {
   applyChangeset,
-  filterRegularComponentTypes,
   maybeRemoveWildcardMarker,
   processCommands,
   removeMatchingRelations,
@@ -66,17 +64,31 @@ import { deserializeWorld, serializeWorld } from "./serialization";
 export class World {
   // Core data structures for entity and archetype management
   private entityIdManager = new EntityIdManager();
-  private archetypes: Archetype[] = [];
-  private archetypeBySignature = new Map<string, Archetype>();
-  private entityToArchetype = new Map<EntityId, Archetype>();
-  private archetypesByComponent = new Map<EntityId<any>, Set<Archetype>>();
   private entityReferences: EntityReferencesMap = new Map();
-  /** Reverse index: entity ID → set of archetypes whose componentTypes include that entity ID */
-  private entityToReferencingArchetypes = new Map<EntityId, Set<Archetype>>();
   /** Sparse relation storage (for components created with `sparse: true`), shared with all Archetype instances */
   private readonly sparseStore = new SparseStoreImpl();
   /** Component entity (singleton) storage */
   private readonly componentEntities = new ComponentEntityStore();
+
+  // Archetype storage, indexes, creation/removal, and referencing are now encapsulated
+  // in ArchetypeManager (extracted to reduce World line count and improve cohesion).
+  private archetypeManager!: ArchetypeManager;
+
+  // Temporary forwarding accessors so the rest of World (and its internal collaborators)
+  // can continue using the familiar names with almost zero call-site changes.
+  // These can be removed in a follow-up cleanup pass if desired.
+  private get archetypes() {
+    return this.archetypeManager.archetypes;
+  }
+  private get entityToArchetype() {
+    return this.archetypeManager.entityToArchetype;
+  }
+  private get archetypesByComponent() {
+    return this.archetypeManager.archetypesByComponent;
+  }
+  private get entityToReferencingArchetypes() {
+    return this.archetypeManager.entityToReferencingArchetypes;
+  }
 
   // Query registry – manages caching, ref counts, and archetype notifications
   private readonly queryRegistry = new QueryRegistry();
@@ -112,6 +124,23 @@ export class World {
   };
 
   constructor(snapshot?: SerializedWorld) {
+    // Must create the manager before any code that may invoke ensureArchetype
+    // (including the snapshot deserialization path below, and the closures
+    // captured in the field-initialized _commandCtx).
+    this.archetypeManager = new ArchetypeManager(
+      {
+        queryRegistry: this.queryRegistry,
+        hooks: this.hooks,
+        recordArchetypeCreated: () => {
+          if (this._debugCollectors.size > 0) this._debugArchetypesCreated++;
+        },
+        recordArchetypeRemoved: () => {
+          if (this._debugCollectors.size > 0) this._debugArchetypesRemoved++;
+        },
+      },
+      this.sparseStore,
+    );
+
     if (snapshot && typeof snapshot === "object") {
       deserializeWorld(
         {
@@ -119,15 +148,11 @@ export class World {
           componentEntities: this.componentEntities,
           entityReferences: this.entityReferences,
           ensureArchetype: (ct) => this.ensureArchetype(ct),
-          setEntityToArchetype: (eid, arch) => this.entityToArchetype.set(eid, arch),
+          setEntityToArchetype: (eid, arch) => this.archetypeManager.entityToArchetype.set(eid, arch),
         },
         snapshot,
       );
     }
-  }
-
-  private createArchetypeSignature(componentTypes: EntityId<any>[]): string {
-    return componentTypes.join(",");
   }
 
   /**
@@ -1076,7 +1101,7 @@ export class World {
   createQuery(componentTypes: EntityId<any>[], filter: QueryFilter = {}): Query {
     const sortedTypes = normalizeComponentTypes(componentTypes);
     const filterKey = serializeQueryFilter(filter);
-    const key = `${this.createArchetypeSignature(sortedTypes)}${filterKey ? `|${filterKey}` : ""}`;
+    const key = `${sortedTypes.join(",")}${filterKey ? `|${filterKey}` : ""}`;
     return this.queryRegistry.getOrCreate(this, sortedTypes, key, filter);
   }
 
@@ -1146,71 +1171,7 @@ export class World {
    * @internal
    */
   getMatchingArchetypes(componentTypes: EntityId<any>[]): Archetype[] {
-    if (componentTypes.length === 0) {
-      return [...this.archetypes];
-    }
-
-    const regularComponents: EntityId<any>[] = [];
-    const wildcardRelations: { componentId: ComponentId<any>; relationId: EntityId<any> }[] = [];
-
-    for (const componentType of componentTypes) {
-      if (isWildcardRelationId(componentType)) {
-        const componentId = getComponentIdFromRelationId(componentType);
-        if (componentId !== undefined) {
-          wildcardRelations.push({ componentId, relationId: componentType });
-        }
-      } else {
-        regularComponents.push(componentType);
-      }
-    }
-
-    let matchingArchetypes = this.getArchetypesWithComponents(regularComponents);
-
-    for (const { componentId, relationId } of wildcardRelations) {
-      const markerSet = this.archetypesByComponent.get(relationId);
-      const archetypesWithMarker = markerSet ? Array.from(markerSet) : [];
-      matchingArchetypes =
-        matchingArchetypes.length === 0
-          ? archetypesWithMarker
-          : matchingArchetypes.filter((a) => markerSet?.has(a) || a.hasRelationWithComponentId(componentId));
-    }
-
-    return matchingArchetypes;
-  }
-
-  private getArchetypesWithComponents(componentTypes: EntityId<any>[]): Archetype[] {
-    if (componentTypes.length === 0) return [...this.archetypes];
-    if (componentTypes.length === 1) {
-      const set = this.archetypesByComponent.get(componentTypes[0]!);
-      return set ? Array.from(set) : [];
-    }
-
-    // Sort by Set size, intersect starting from the smallest
-    const sets = componentTypes
-      .map((type) => this.archetypesByComponent.get(type))
-      .filter((s): s is Set<Archetype> => s !== undefined && s.size > 0)
-      .sort((a, b) => a.size - b.size);
-
-    if (sets.length === 0) return [];
-    if (sets.length < componentTypes.length) return []; // One component has no matching archetypes
-
-    const smallest = sets[0]!;
-
-    // 2-component fast path
-    if (sets.length === 2) {
-      const other = sets[1]!;
-      return Array.from(smallest).filter((a) => other.has(a));
-    }
-
-    // Multi-component intersection
-    let result = new Set(smallest);
-    for (let i = 1; i < sets.length; i++) {
-      for (const item of result) {
-        if (!sets[i]!.has(item)) result.delete(item);
-      }
-      if (result.size === 0) return [];
-    }
-    return Array.from(result);
+    return this.archetypeManager.getMatchingArchetypes(componentTypes);
   }
 
   /**
@@ -1406,149 +1367,17 @@ export class World {
     }
   }
 
+  // Delegators to the extracted ArchetypeManager (keeps public + internal call sites unchanged).
   private ensureArchetype(componentTypes: Iterable<EntityId<any>>): Archetype {
-    const regularTypes = filterRegularComponentTypes(componentTypes);
-    const sortedTypes = normalizeComponentTypes(regularTypes);
-    const hashKey = this.createArchetypeSignature(sortedTypes);
-
-    return getOrCompute(this.archetypeBySignature, hashKey, () => this.createNewArchetype(sortedTypes));
-  }
-
-  /** Add componentType to the reverse index if it contains an entity ID */
-  private addToReferencingIndex(componentType: EntityId<any>, archetype: Archetype): void {
-    const detailedType = getDetailedIdType(componentType);
-    let entityId: EntityId | undefined;
-
-    if (detailedType.type === "entity") {
-      entityId = componentType as EntityId;
-    } else if (detailedType.type === "entity-relation") {
-      entityId = detailedType.targetId;
-    }
-
-    if (entityId !== undefined) {
-      let refs = this.entityToReferencingArchetypes.get(entityId);
-      if (!refs) {
-        refs = new Set();
-        this.entityToReferencingArchetypes.set(entityId, refs);
-      }
-      refs.add(archetype);
-    }
-  }
-
-  /** Remove componentType from the reverse index */
-  private removeFromReferencingIndex(componentType: EntityId<any>, archetype: Archetype): void {
-    const detailedType = getDetailedIdType(componentType);
-    let entityId: EntityId | undefined;
-
-    if (detailedType.type === "entity") {
-      entityId = componentType as EntityId;
-    } else if (detailedType.type === "entity-relation") {
-      entityId = detailedType.targetId;
-    }
-
-    if (entityId !== undefined) {
-      const refs = this.entityToReferencingArchetypes.get(entityId);
-      if (refs) {
-        refs.delete(archetype);
-        if (refs.size === 0) {
-          this.entityToReferencingArchetypes.delete(entityId);
-        }
-      }
-    }
-  }
-
-  private createNewArchetype(componentTypes: EntityId<any>[]): Archetype {
-    const newArchetype = new Archetype(componentTypes, this.sparseStore);
-    this.archetypes.push(newArchetype);
-
-    if (this._debugCollectors.size > 0) {
-      this._debugArchetypesCreated++;
-    }
-
-    for (const componentType of componentTypes) {
-      let archetypes = this.archetypesByComponent.get(componentType);
-      if (!archetypes) {
-        archetypes = new Set();
-        this.archetypesByComponent.set(componentType, archetypes);
-      }
-      archetypes.add(newArchetype);
-
-      // Update reverse index
-      this.addToReferencingIndex(componentType, newArchetype);
-    }
-
-    this.queryRegistry.onNewArchetype(newArchetype);
-    this.updateArchetypeHookMatches(newArchetype);
-
-    return newArchetype;
-  }
-
-  private updateArchetypeHookMatches(archetype: Archetype): void {
-    for (const entry of this.hooks) {
-      if (this.archetypeMatchesHook(archetype, entry)) {
-        archetype.matchingMultiHooks.add(entry);
-        if (entry.matchedArchetypes) {
-          entry.matchedArchetypes.add(archetype);
-        }
-      }
-    }
-  }
-
-  private archetypeMatchesHook(archetype: Archetype, entry: LifecycleHookEntry): boolean {
-    return (
-      entry.requiredComponents.every((c: EntityId<any>) => {
-        if (isWildcardRelationId(c)) {
-          if (isSparseWildcard(c)) return true;
-          const componentId = getComponentIdFromRelationId(c);
-          return componentId !== undefined && archetype.hasRelationWithComponentId(componentId);
-        }
-        return archetype.componentTypeSet.has(c) || isSparseRelation(c);
-      }) && matchesFilter(archetype, entry.filter)
-    );
+    return this.archetypeManager.ensureArchetype(componentTypes);
   }
 
   private cleanupArchetypesReferencingEntity(entityId: EntityId): void {
-    const refs = this.entityToReferencingArchetypes.get(entityId);
-    if (!refs) return;
-
-    for (const archetype of refs) {
-      if (archetype.getEntities().length === 0) {
-        this.removeArchetype(archetype);
-      }
-    }
-    // removeArchetype already cleans up the reverse index entries
-    this.entityToReferencingArchetypes.delete(entityId);
+    this.archetypeManager.cleanupArchetypesReferencingEntity(entityId);
   }
 
-  private removeArchetype(archetype: Archetype): void {
-    const index = this.archetypes.indexOf(archetype);
-    if (index !== -1) {
-      // swap-and-pop: O(1) removal
-      const last = this.archetypes[this.archetypes.length - 1]!;
-      this.archetypes[index] = last;
-      this.archetypes.pop();
-    }
-
-    if (this._debugCollectors.size > 0) {
-      this._debugArchetypesRemoved++;
-    }
-
-    this.archetypeBySignature.delete(this.createArchetypeSignature(archetype.componentTypes));
-
-    for (const componentType of archetype.componentTypes) {
-      const archetypes = this.archetypesByComponent.get(componentType);
-      if (archetypes) {
-        archetypes.delete(archetype);
-        if (archetypes.size === 0) {
-          this.archetypesByComponent.delete(componentType);
-        }
-      }
-
-      // Clean up reverse index
-      this.removeFromReferencingIndex(componentType, archetype);
-    }
-
-    this.queryRegistry.onArchetypeRemoved(archetype);
+  private archetypeMatchesHook(archetype: Archetype, entry: LifecycleHookEntry): boolean {
+    return this.archetypeManager.archetypeMatchesHook(archetype, entry);
   }
 
   /**
@@ -1573,6 +1402,10 @@ export class World {
    * const newWorld = new World(savedData);
    */
   serialize(): SerializedWorld {
-    return serializeWorld(this.archetypes, this.componentEntities, this.entityIdManager);
+    return serializeWorld(
+      this.archetypeManager.archetypes as Archetype[],
+      this.componentEntities,
+      this.entityIdManager,
+    );
   }
 }
