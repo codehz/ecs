@@ -1,20 +1,14 @@
 import type { Archetype } from "../archetype/archetype";
 import { SparseStoreImpl } from "../archetype/store";
-import { CommandBuffer, type Command } from "../commands/buffer";
-import { ComponentChangeset } from "../commands/changeset";
+import { CommandBuffer } from "../commands/buffer";
 import { ComponentEntityStore } from "../component/entity-store";
 import { normalizeComponentTypes } from "../component/type-utils";
 import type { ComponentId, EntityId, WildcardRelationId } from "../entity";
 import {
-  ENTITY_ID_START,
   EntityIdManager,
   RELATION_SHIFT,
   getComponentIdFromRelationId,
-  getDetailedIdType,
-  getTargetIdFromRelationId,
   isCascadeDeleteRelation,
-  isEntityRelation,
-  isExclusiveComponent,
   isSparseRelation,
   isWildcardRelationId,
   relation,
@@ -35,26 +29,16 @@ import type {
 import { isOptionalEntityId } from "../types";
 import { ArchetypeManager } from "./archetype-manager";
 import { EntityBuilder } from "./builder";
-import {
-  applyChangeset,
-  maybeRemoveWildcardMarker,
-  processCommands,
-  removeMatchingRelations,
-  type CommandProcessorContext,
-} from "./commands";
+import { CommandExecutor, type CommandExecutorContext } from "./command-executor";
+import { DebugStatsManager } from "./debug-stats";
 import {
   collectMultiHookComponents,
-  debugHookExecutionCounter,
   triggerLifecycleHooks,
   triggerRemoveHooksForEntityDeletion,
   type HooksContext,
 } from "./hooks";
-import {
-  getEntityReferences,
-  trackEntityReference,
-  untrackEntityReference,
-  type EntityReferencesMap,
-} from "./references";
+import { assertEntityExists, resolveRemoveOperation, resolveSetOperation } from "./operations";
+import { getEntityReferences, type EntityReferencesMap } from "./references";
 import { deserializeWorld, serializeWorld } from "./serialization";
 
 /**
@@ -96,32 +80,12 @@ export class World {
   // Lifecycle hooks (declared before cached contexts that reference them)
   private hooks: Set<LifecycleHookEntry> = new Set();
 
-  // Debug observability collectors (armed only when non-empty)
-  private readonly _debugCollectors = new Set<(stats: SyncDebugStats) => void>();
+  // Debug observability (extracted to DebugStatsManager to reduce World line count)
+  private readonly debugStats = new DebugStatsManager();
 
-  // Transient counters for the current armed sync (reset each time)
-  private _debugMigrations = 0;
-  private _debugArchetypesCreated = 0;
-  private _debugArchetypesRemoved = 0;
-
-  // Command execution
-  private commandBuffer = new CommandBuffer((entityId, commands) => this.executeEntityCommands(entityId, commands));
-
-  // Reusable instances to reduce per-frame allocations
-  private readonly _changeset = new ComponentChangeset();
-  private readonly _removeChangeset = new ComponentChangeset();
-  /** Cached command processor context to avoid per-entity object allocation */
-  private readonly _commandCtx: CommandProcessorContext = {
-    sparseStore: this.sparseStore,
-    ensureArchetype: (ct) => this.ensureArchetype(ct),
-  };
-  /** Cached hooks context to avoid per-entity object allocation */
-  private readonly _hooksCtx: HooksContext = {
-    multiHooks: this.hooks,
-    has: (eid, ct) => this.has(eid, ct),
-    get: (eid, ct) => this.get(eid, ct),
-    getOptional: (eid, ct) => this.getOptional(eid, ct),
-  };
+  // Command execution (orchestration extracted to CommandExecutor)
+  private commandBuffer!: CommandBuffer;
+  private commandExecutor!: CommandExecutor;
 
   constructor(snapshot?: SerializedWorld) {
     // Must create the manager before any code that may invoke ensureArchetype
@@ -131,12 +95,8 @@ export class World {
       {
         queryRegistry: this.queryRegistry,
         hooks: this.hooks,
-        recordArchetypeCreated: () => {
-          if (this._debugCollectors.size > 0) this._debugArchetypesCreated++;
-        },
-        recordArchetypeRemoved: () => {
-          if (this._debugCollectors.size > 0) this._debugArchetypesRemoved++;
-        },
+        recordArchetypeCreated: () => this.debugStats.recordArchetypeCreated(),
+        recordArchetypeRemoved: () => this.debugStats.recordArchetypeRemoved(),
       },
       this.sparseStore,
     );
@@ -153,6 +113,29 @@ export class World {
         snapshot,
       );
     }
+
+    // CommandExecutor must be created after archetypeManager (and debugStats) because its context
+    // closes over several pieces and the destroy fast path.
+    const execCtx: CommandExecutorContext = {
+      componentEntities: this.componentEntities,
+      entityReferences: this.entityReferences,
+      hooks: this.hooks,
+      entityToArchetype: this.entityToArchetype,
+      ensureArchetype: (ct) => this.ensureArchetype(ct),
+      sparseStore: this.sparseStore,
+      has: (eid, ct) => this.has(eid, ct),
+      get: (eid, ct) => this.get(eid, ct),
+      getOptional: (eid, ct) => this.getOptional(eid, ct),
+      destroyEntityImmediate: (eid) => this.destroyEntityImmediate(eid),
+      incrementMigrations: () => this.debugStats.incrementMigrations(),
+      triggerLifecycleHooks,
+      triggerRemoveHooksForEntityDeletion,
+    };
+    this.commandExecutor = new CommandExecutor(execCtx);
+
+    this.commandBuffer = new CommandBuffer((entityId, commands) =>
+      this.commandExecutor.executeEntityCommands(entityId, commands),
+    );
   }
 
   /**
@@ -280,71 +263,6 @@ export class World {
     return this.entityToArchetype.has(entityId);
   }
 
-  private assertEntityExists(entityId: EntityId, label: "Entity" | "Component entity"): void {
-    if (!this.exists(entityId)) {
-      throw new Error(`${label} ${entityId} does not exist`);
-    }
-  }
-
-  private assertComponentTypeValid(componentType: EntityId): void {
-    const detailedType = getDetailedIdType(componentType);
-    if (detailedType.type === "invalid") {
-      throw new Error(`Invalid component type: ${componentType}`);
-    }
-  }
-
-  private assertSetComponentTypeValid(componentType: EntityId): void {
-    const detailedType = getDetailedIdType(componentType);
-    if (detailedType.type === "invalid") {
-      throw new Error(`Invalid component type: ${componentType}`);
-    }
-    if (detailedType.type === "wildcard-relation") {
-      throw new Error(`Cannot directly add wildcard relation components: ${componentType}`);
-    }
-  }
-
-  private resolveSetOperation(
-    entityId: EntityId | ComponentId,
-    componentTypeOrComponent?: EntityId | any,
-    maybeComponent?: any,
-  ): { entityId: EntityId; componentType: EntityId; component: any } {
-    // Handle singleton component overload: set(componentId, data)
-    if (maybeComponent === undefined && componentTypeOrComponent !== undefined) {
-      const detailedType = getDetailedIdType(entityId);
-      if (detailedType.type === "component" || detailedType.type === "component-relation") {
-        const componentId = entityId as ComponentId;
-        this.assertEntityExists(componentId, "Component entity");
-        this.assertSetComponentTypeValid(componentId);
-        return { entityId: componentId, componentType: componentId, component: componentTypeOrComponent };
-      }
-    }
-
-    const targetEntityId = entityId as EntityId;
-    const componentType = componentTypeOrComponent as EntityId;
-    this.assertEntityExists(targetEntityId, "Entity");
-    this.assertSetComponentTypeValid(componentType);
-
-    return { entityId: targetEntityId, componentType, component: maybeComponent };
-  }
-
-  private resolveRemoveOperation<T>(
-    entityId: EntityId | ComponentId,
-    componentType?: EntityId<T>,
-  ): { entityId: EntityId; componentType: EntityId } {
-    // Handle singleton component overload: remove(componentId)
-    if (componentType === undefined) {
-      const componentId = entityId as ComponentId<T>;
-      this.assertEntityExists(componentId, "Component entity");
-      return { entityId: componentId, componentType: componentId };
-    }
-
-    const targetEntityId = entityId as EntityId;
-    this.assertEntityExists(targetEntityId, "Entity");
-    this.assertComponentTypeValid(componentType);
-
-    return { entityId: targetEntityId, componentType };
-  }
-
   /**
    * Adds or updates a component on an entity (or marks void component as present).
    * The change is buffered and takes effect after calling `world.sync()`.
@@ -376,7 +294,7 @@ export class World {
       entityId: targetEntityId,
       componentType,
       component,
-    } = this.resolveSetOperation(entityId, componentTypeOrComponent, maybeComponent);
+    } = resolveSetOperation(entityId, componentTypeOrComponent, maybeComponent, (id) => this.exists(id));
     this.commandBuffer.set(targetEntityId, componentType, component);
   }
 
@@ -406,9 +324,10 @@ export class World {
   remove<T>(componentId: ComponentId<T>): void;
   remove<T>(entityId: EntityId, componentType: EntityId<T>): void;
   remove<T>(entityId: EntityId | ComponentId, componentType?: EntityId<T>): void {
-    const { entityId: targetEntityId, componentType: targetComponentType } = this.resolveRemoveOperation(
+    const { entityId: targetEntityId, componentType: targetComponentType } = resolveRemoveOperation(
       entityId,
       componentType,
+      (id) => this.exists(id),
     );
     this.commandBuffer.remove(targetEntityId, targetComponentType);
   }
@@ -637,7 +556,7 @@ export class World {
     entityId: EntityId,
     relationComp: ComponentId<T>,
   ): [target: EntityId<unknown>, data: T | undefined][] {
-    this.assertEntityExists(entityId, "Entity");
+    assertEntityExists(entityId, "Entity", (id) => this.exists(id));
 
     const wildcard = relation(relationComp, "*") as WildcardRelationId<T>;
 
@@ -684,7 +603,7 @@ export class World {
    * given base component.
    */
   hasRelation(entityId: EntityId, relationComp: ComponentId<any>, targetId?: EntityId): boolean {
-    this.assertEntityExists(entityId, "Entity");
+    assertEntityExists(entityId, "Entity", (id) => this.exists(id));
 
     if (targetId !== undefined) {
       const specific = relation(relationComp, targetId);
@@ -700,7 +619,7 @@ export class World {
    * Returns the number of relations of the given base component held by the entity.
    */
   countRelations(entityId: EntityId, relationComp: ComponentId<any>): number {
-    this.assertEntityExists(entityId, "Entity");
+    assertEntityExists(entityId, "Entity", (id) => this.exists(id));
     const targets = this.getRelationTargets(entityId, relationComp);
     return targets.length;
   }
@@ -947,88 +866,7 @@ export class World {
    * This is intended for development/debugging and leak detection.
    */
   createDebugStatsCollector(callback: (stats: SyncDebugStats) => void): DebugStatsCollector {
-    this._debugCollectors.add(callback);
-
-    return {
-      [Symbol.dispose]: () => {
-        this._debugCollectors.delete(callback);
-      },
-    };
-  }
-
-  private _resetDebugActivityCounters(): void {
-    this._debugMigrations = 0;
-    this._debugArchetypesCreated = 0;
-    this._debugArchetypesRemoved = 0;
-    debugHookExecutionCounter.value = 0;
-  }
-
-  private _deliverDebugStats(timings: {
-    syncStart: number;
-    syncEnd: number;
-    commandBufferStart: number;
-    commandBufferEnd: number;
-    commandIterations: number;
-  }): void {
-    // Build structural counts (post-sync)
-    // Note: singletons (component-as-entity) are not included in the main archetype map.
-    // For debug purposes the dominant number is regular entities; we keep it simple here.
-    const entityCount = this.entityToArchetype.size;
-    let emptyArchetypes = 0;
-    for (const arch of this.archetypes) {
-      if (arch.size === 0) emptyArchetypes++;
-    }
-
-    let archetypesByComponentSize = 0;
-    for (const set of this.archetypesByComponent.values()) {
-      archetypesByComponentSize += set.size;
-    }
-
-    const stats: SyncDebugStats = {
-      timestamps: {
-        syncStart: timings.syncStart,
-        syncEnd: timings.syncEnd,
-        commandBufferStart: timings.commandBufferStart,
-        commandBufferEnd: timings.commandBufferEnd,
-      },
-      commandIterations: timings.commandIterations,
-
-      entities: {
-        total: entityCount,
-        freelistSize: this.entityIdManager.getFreelistSize(),
-        nextId: this.entityIdManager.getNextId(),
-      },
-      archetypes: {
-        total: this.archetypes.length,
-        empty: emptyArchetypes,
-      },
-      queries: {
-        cached: (this.queryRegistry as any).cache?.size ?? 0,
-        registered: (this.queryRegistry as any).queries?.size ?? 0,
-      },
-      hooks: {
-        total: this.hooks.size,
-      },
-      indices: {
-        entityReferences: this.entityReferences.size,
-        entityToReferencingArchetypes: this.entityToReferencingArchetypes.size,
-        archetypesByComponent: archetypesByComponentSize,
-      },
-      activity: {
-        migrations: this._debugMigrations,
-        hooksExecuted: debugHookExecutionCounter.value,
-        archetypesCreated: this._debugArchetypesCreated,
-        archetypesRemoved: this._debugArchetypesRemoved,
-      },
-    };
-
-    for (const cb of this._debugCollectors) {
-      try {
-        cb(stats);
-      } catch {
-        // Intentionally ignore user callback errors
-      }
-    }
+    return this.debugStats.createCollector(callback);
   }
 
   /**
@@ -1042,12 +880,12 @@ export class World {
    * world.sync(); // Apply all buffered changes
    */
   sync(): void {
-    const hasCollectors = this._debugCollectors.size > 0;
+    const hasCollectors = this.debugStats.hasActiveCollectors();
 
     const syncStart = hasCollectors ? performance.now() : 0;
 
     if (hasCollectors) {
-      this._resetDebugActivityCounters();
+      this.debugStats.resetActivity();
     }
 
     const commandBufferStart = hasCollectors ? performance.now() : 0;
@@ -1057,13 +895,40 @@ export class World {
     const syncEnd = hasCollectors ? performance.now() : 0;
 
     if (hasCollectors) {
-      this._deliverDebugStats({
-        syncStart,
-        syncEnd,
-        commandBufferStart,
-        commandBufferEnd,
-        commandIterations,
-      });
+      // Build the data bag for the extracted manager (keeps it decoupled from internal maps)
+      const entityCount = this.entityToArchetype.size;
+      let emptyArchetypes = 0;
+      for (const arch of this.archetypes) {
+        if (arch.size === 0) emptyArchetypes++;
+      }
+
+      let archetypesByComponentSize = 0;
+      for (const set of this.archetypesByComponent.values()) {
+        archetypesByComponentSize += set.size;
+      }
+
+      this.debugStats.deliver(
+        {
+          syncStart,
+          syncEnd,
+          commandBufferStart,
+          commandBufferEnd,
+          commandIterations,
+        },
+        {
+          entityCount,
+          freelistSize: this.entityIdManager.getFreelistSize(),
+          nextId: this.entityIdManager.getNextId(),
+          archetypeCount: this.archetypes.length,
+          emptyArchetypes,
+          archetypesByComponentSize,
+          cachedQueryCount: (this.queryRegistry as any).cache?.size ?? 0,
+          registeredQueryCount: (this.queryRegistry as any).queries?.size ?? 0,
+          hookCount: this.hooks.size,
+          entityReferencesSize: this.entityReferences.size,
+          entityToReferencingArchetypesSize: this.entityToReferencingArchetypes.size,
+        },
+      );
     }
   }
 
@@ -1229,144 +1094,6 @@ export class World {
     }
   }
 
-  private executeEntityCommands(entityId: EntityId, commands: Command[]): void {
-    this._changeset.clear();
-
-    // 1. Route: component entities use flat-map storage
-    if (this.componentEntities.exists(entityId)) {
-      this.componentEntities.executeCommands(entityId, commands);
-      return;
-    }
-
-    // 2. Route: destroy uses fast path
-    if (commands.some((cmd) => cmd.type === "destroy")) {
-      this.destroyEntityImmediate(entityId);
-      return;
-    }
-
-    // 3. Apply structural changes
-    this.applyEntityCommands(entityId, commands);
-  }
-
-  private applyEntityCommands(entityId: EntityId, commands: Command[]): void {
-    const currentArchetype = this.entityToArchetype.get(entityId);
-    if (!currentArchetype) return;
-
-    const changeset = this._changeset;
-    processCommands(entityId, currentArchetype, commands, changeset, (eid, arch, compId) => {
-      if (isExclusiveComponent(compId)) {
-        removeMatchingRelations(eid, arch, compId, changeset);
-      }
-    });
-
-    const hasStructuralChange = changeset.removes.size > 0 || changeset.adds.size > 0;
-
-    if (this.hooks.size === 0) {
-      // Fast path: no hooks, skip removedComponents map allocation and hook triggering
-      const newArchetype = applyChangeset(
-        this._commandCtx,
-        entityId,
-        currentArchetype,
-        changeset,
-        this.entityToArchetype,
-        null,
-      );
-      if (hasStructuralChange) {
-        this.updateEntityReferences(entityId, changeset);
-      }
-      if (this._debugCollectors.size > 0 && newArchetype !== currentArchetype) {
-        this._debugMigrations++;
-      }
-      return;
-    }
-
-    const removedComponents = new Map<EntityId<any>, any>();
-    const newArchetype = applyChangeset(
-      this._commandCtx,
-      entityId,
-      currentArchetype,
-      changeset,
-      this.entityToArchetype,
-      removedComponents,
-    );
-
-    if (hasStructuralChange) {
-      this.updateEntityReferences(entityId, changeset);
-    }
-
-    if (this._debugCollectors.size > 0 && newArchetype !== currentArchetype) {
-      this._debugMigrations++;
-    }
-
-    triggerLifecycleHooks(
-      this.createHooksContext(),
-      entityId,
-      changeset.adds,
-      removedComponents,
-      currentArchetype,
-      newArchetype,
-    );
-  }
-
-  private createHooksContext(): HooksContext {
-    return this._hooksCtx;
-  }
-
-  private removeComponentImmediate(entityId: EntityId, componentType: EntityId<any>, targetEntityId: EntityId): void {
-    const sourceArchetype = this.entityToArchetype.get(entityId);
-    if (!sourceArchetype) return;
-
-    const changeset = this._removeChangeset;
-    changeset.clear();
-    changeset.delete(componentType);
-    maybeRemoveWildcardMarker(
-      entityId,
-      sourceArchetype,
-      componentType,
-      getComponentIdFromRelationId(componentType),
-      changeset,
-    );
-
-    const removedComponent = sourceArchetype.get(entityId, componentType);
-    const newArchetype = applyChangeset(
-      this._commandCtx,
-      entityId,
-      sourceArchetype,
-      changeset,
-      this.entityToArchetype,
-      null,
-    );
-    untrackEntityReference(this.entityReferences, entityId, componentType, targetEntityId);
-    triggerLifecycleHooks(
-      this.createHooksContext(),
-      entityId,
-      new Map(),
-      new Map([[componentType, removedComponent]]),
-      sourceArchetype,
-      newArchetype,
-    );
-  }
-
-  private updateEntityReferences(entityId: EntityId, changeset: ComponentChangeset): void {
-    for (const componentType of changeset.removes) {
-      if (isEntityRelation(componentType)) {
-        const targetId = getTargetIdFromRelationId(componentType)!;
-        untrackEntityReference(this.entityReferences, entityId, componentType, targetId);
-      } else if (componentType >= ENTITY_ID_START) {
-        untrackEntityReference(this.entityReferences, entityId, componentType, componentType);
-      }
-    }
-
-    for (const [componentType] of changeset.adds) {
-      if (isEntityRelation(componentType)) {
-        const targetId = getTargetIdFromRelationId(componentType)!;
-        trackEntityReference(this.entityReferences, entityId, componentType, targetId);
-      } else if (componentType >= ENTITY_ID_START) {
-        trackEntityReference(this.entityReferences, entityId, componentType, componentType);
-      }
-    }
-  }
-
   // Delegators to the extracted ArchetypeManager (keeps public + internal call sites unchanged).
   private ensureArchetype(componentTypes: Iterable<EntityId<any>>): Archetype {
     return this.archetypeManager.ensureArchetype(componentTypes);
@@ -1401,6 +1128,23 @@ export class World {
    * const savedData = JSON.parse(localStorage.getItem('save'));
    * const newWorld = new World(savedData);
    */
+  // Thin delegator to the extracted CommandExecutor for cascade paths (destroy* methods).
+  private removeComponentImmediate(entityId: EntityId, componentType: EntityId<any>, targetEntityId: EntityId): void {
+    this.commandExecutor.removeComponentImmediate(entityId, componentType, targetEntityId);
+  }
+
+  private createHooksContext(): HooksContext {
+    // The executor owns the current HooksContext; expose for any remaining internal use.
+    return (
+      (this.commandExecutor as any).getHooksContext?.() ?? {
+        multiHooks: this.hooks,
+        has: (eid, ct) => this.has(eid, ct),
+        get: (eid, ct) => this.get(eid, ct),
+        getOptional: (eid, ct) => this.getOptional(eid, ct),
+      }
+    );
+  }
+
   serialize(): SerializedWorld {
     return serializeWorld(
       this.archetypeManager.archetypes as Archetype[],
