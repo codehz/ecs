@@ -880,56 +880,56 @@ export class World {
    * world.sync(); // Apply all buffered changes
    */
   sync(): void {
-    const hasCollectors = this.debugStats.hasActiveCollectors();
-
-    const syncStart = hasCollectors ? performance.now() : 0;
-
-    if (hasCollectors) {
-      this.debugStats.resetActivity();
+    if (!this.debugStats.hasActiveCollectors()) {
+      // Fast path: no debug collectors, skip all timing and stats work
+      this.commandBuffer.execute();
+      return;
     }
 
-    const commandBufferStart = hasCollectors ? performance.now() : 0;
+    // Slow path: full instrumentation for active debug stats collectors
+    const syncStart = performance.now();
+    this.debugStats.resetActivity();
+
+    const commandBufferStart = performance.now();
     const commandIterations = this.commandBuffer.execute();
-    const commandBufferEnd = hasCollectors ? performance.now() : 0;
+    const commandBufferEnd = performance.now();
 
-    const syncEnd = hasCollectors ? performance.now() : 0;
+    const syncEnd = performance.now();
 
-    if (hasCollectors) {
-      // Build the data bag for the extracted manager (keeps it decoupled from internal maps)
-      const entityCount = this.entityToArchetype.size;
-      let emptyArchetypes = 0;
-      for (const arch of this.archetypes) {
-        if (arch.size === 0) emptyArchetypes++;
-      }
-
-      let archetypesByComponentSize = 0;
-      for (const set of this.archetypesByComponent.values()) {
-        archetypesByComponentSize += set.size;
-      }
-
-      this.debugStats.deliver(
-        {
-          syncStart,
-          syncEnd,
-          commandBufferStart,
-          commandBufferEnd,
-          commandIterations,
-        },
-        {
-          entityCount,
-          freelistSize: this.entityIdManager.getFreelistSize(),
-          nextId: this.entityIdManager.getNextId(),
-          archetypeCount: this.archetypes.length,
-          emptyArchetypes,
-          archetypesByComponentSize,
-          cachedQueryCount: (this.queryRegistry as any).cache?.size ?? 0,
-          registeredQueryCount: (this.queryRegistry as any).queries?.size ?? 0,
-          hookCount: this.hooks.size,
-          entityReferencesSize: this.entityReferences.size,
-          entityToReferencingArchetypesSize: this.entityToReferencingArchetypes.size,
-        },
-      );
+    // Build the data bag for the extracted manager (keeps it decoupled from internal maps)
+    const entityCount = this.entityToArchetype.size;
+    let emptyArchetypes = 0;
+    for (const arch of this.archetypes) {
+      if (arch.size === 0) emptyArchetypes++;
     }
+
+    let archetypesByComponentSize = 0;
+    for (const set of this.archetypesByComponent.values()) {
+      archetypesByComponentSize += set.size;
+    }
+
+    this.debugStats.deliver(
+      {
+        syncStart,
+        syncEnd,
+        commandBufferStart,
+        commandBufferEnd,
+        commandIterations,
+      },
+      {
+        entityCount,
+        freelistSize: this.entityIdManager.getFreelistSize(),
+        nextId: this.entityIdManager.getNextId(),
+        archetypeCount: this.archetypes.length,
+        emptyArchetypes,
+        archetypesByComponentSize,
+        cachedQueryCount: (this.queryRegistry as any).cache?.size ?? 0,
+        registeredQueryCount: (this.queryRegistry as any).queries?.size ?? 0,
+        hookCount: this.hooks.size,
+        entityReferencesSize: this.entityReferences.size,
+        entityToReferencingArchetypesSize: this.entityToReferencingArchetypes.size,
+      },
+    );
   }
 
   /**
