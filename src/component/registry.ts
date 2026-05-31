@@ -518,13 +518,6 @@ export function isSparseComponent(id: ComponentId<any>): boolean {
 }
 
 /**
- * @deprecated Use {@link isSparseComponent} instead. Kept for backward compatibility.
- */
-export function isDontFragmentComponent(id: ComponentId<any>): boolean {
-  return isSparseComponent(id);
-}
-
-/**
  * Generic optimized function to check whether a relation ID's base component
  * has a specific flag in a bitset.
  *
@@ -533,8 +526,7 @@ export function isDontFragmentComponent(id: ComponentId<any>): boolean {
  * valid range, (3) the target satisfies the condition, and (4) the flag bit is set.
  *
  * Used as the fast-path implementation for `isSparseRelation`, `isSparseWildcard`,
- * `isDontFragmentRelation`, `isDontFragmentWildcard`, `isExclusiveRelation`,
- * `isExclusiveWildcard`, and `isCascadeDeleteRelation`.
+ * `isExclusiveRelation`, `isExclusiveWildcard`, and `isCascadeDeleteRelation`.
  *
  * @param id - The entity/relation ID to check.
  * @param flagBitSet - The bitset tracking which component IDs have the flag.
@@ -574,13 +566,6 @@ export function isSparseRelation(id: EntityId<any>): boolean {
 }
 
 /**
- * @deprecated Use {@link isSparseRelation} instead. Kept for backward compatibility.
- */
-export function isDontFragmentRelation(id: EntityId<any>): boolean {
-  return isSparseRelation(id);
-}
-
-/**
  * Check if an ID is a wildcard relation (`relation(Comp, "*")`) backed by a
  * `sparse` component.
  *
@@ -597,13 +582,6 @@ export function isDontFragmentRelation(id: EntityId<any>): boolean {
  */
 export function isSparseWildcard(id: EntityId<any>): boolean {
   return checkRelationFlag(id, sparseFlags, (targetId) => targetId === WILDCARD_TARGET_ID);
-}
-
-/**
- * @deprecated Use {@link isSparseWildcard} instead. Kept for backward compatibility.
- */
-export function isDontFragmentWildcard(id: EntityId<any>): boolean {
-  return isSparseWildcard(id);
 }
 
 /**

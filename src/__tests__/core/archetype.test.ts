@@ -5,7 +5,6 @@ import {
   buildRegularComponentValue,
   buildSingleComponent,
   buildWildcardRelationValue,
-  findMatchingDontFragmentRelations,
   findWildcardRelations,
   getWildcardRelationDataSource,
   hasWildcardRelation,
@@ -366,11 +365,6 @@ describe("Archetype", () => {
     expect(buildRegularComponentValue([{ x: 9 }], 0, false)).toEqual({ x: 9 });
     expect(buildRegularComponentValue(undefined, 0, true)).toBeUndefined();
     expect(() => buildRegularComponentValue(undefined, 0, false)).toThrow();
-
-    // findMatchingDontFragmentRelations (deprecated legacy helper)
-    const dfData = new Map<EntityId, any>([[relC, { df: 1 }]]);
-    const matches = findMatchingDontFragmentRelations(dfData, positionComponent, []);
-    expect(matches).toHaveLength(1);
 
     // buildWildcardRelationValue - optional empty -> undefined
     const dfStore = createSparseStore();

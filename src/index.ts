@@ -42,3 +42,13 @@ export type { ComponentTuple, ComponentType, LifecycleCallback, LifecycleHook } 
 
 // Debug / observability types
 export type { DebugStatsCollector, SyncDebugStats } from "./types";
+
+// Sparse / dontFragment flag checks (preferred + legacy aliases for BC)
+export {
+  isSparseComponent as isDontFragmentComponent,
+  isSparseRelation as isDontFragmentRelation,
+  isSparseWildcard as isDontFragmentWildcard,
+  isSparseComponent,
+  isSparseRelation,
+  isSparseWildcard,
+} from "./component/registry";

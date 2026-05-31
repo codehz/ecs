@@ -67,28 +67,6 @@ export function matchesRelationComponentId(componentType: EntityId<any>, compone
 }
 
 /**
- * Find all relations in sparse data that match a component ID.
- *
- * @deprecated Prefer calling the sparse store's `getRelationsForComponent` directly (via `SparseStore`).
- * This helper is kept temporarily for any remaining call sites during the refactor.
- */
-export function findMatchingDontFragmentRelations(
-  sparseData: Map<EntityId<any>, any> | undefined,
-  componentId: EntityId<any>,
-  relations: [EntityId<unknown>, any][] = [],
-): [EntityId<unknown>, any][] {
-  if (!sparseData) return relations;
-
-  for (const [relType, data] of sparseData) {
-    const relDetailed = getDetailedIdType(relType);
-    if (isRelationType(relDetailed) && relDetailed.componentId === componentId) {
-      relations.push([relDetailed.targetId, data]);
-    }
-  }
-  return relations;
-}
-
-/**
  * Build cache key for component types
  */
 export function buildCacheKey(componentTypes: readonly ComponentType<any>[]): string {
