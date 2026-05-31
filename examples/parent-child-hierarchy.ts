@@ -13,7 +13,7 @@ const LocalTransform = component<Transform>({ name: "LocalTransform" });
 const WorldTransform = component<Transform>({ name: "WorldTransform" });
 const LinearVelocity = component<LinearVelocity>({ name: "LinearVelocity" });
 const AngularVelocity = component<AngularVelocity>({ name: "AngularVelocity" });
-const ChildOf = component<void>({ exclusive: true, dontFragment: true, name: "ChildOf" });
+const ChildOf = component<void>({ exclusive: true, sparse: true, name: "ChildOf" });
 
 // Create the world
 const world = new World();

@@ -6,9 +6,9 @@ import { normalizeComponentTypes } from "../component/type-utils";
 import {
   getComponentIdFromRelationId,
   getComponentMerge,
-  isDontFragmentComponent,
-  isDontFragmentRelation,
-  isDontFragmentWildcard,
+  isSparseComponent,
+  isSparseRelation,
+  isSparseWildcard,
   isWildcardRelationId,
   relation,
   type ComponentId,
@@ -60,7 +60,7 @@ function processSetCommand(
     handleExclusiveRelation(entityId, currentArchetype, componentId);
 
     // For dontFragment relations, ensure wildcard marker is in archetype signature
-    if (isDontFragmentComponent(componentId)) {
+    if (isSparseComponent(componentId)) {
       const wildcardMarker = relation(componentId, "*");
       // Add wildcard marker to changeset if not already in archetype
       if (!currentArchetype.componentTypeSet.has(wildcardMarker)) {
@@ -131,7 +131,7 @@ function removeWildcardRelations(
   removeMatchingRelations(entityId, currentArchetype, baseComponentId, changeset);
 
   // If removing dontFragment relations, also remove the wildcard marker
-  if (isDontFragmentComponent(baseComponentId)) {
+  if (isSparseComponent(baseComponentId)) {
     changeset.delete(relation(baseComponentId, "*"));
   }
 }
@@ -143,7 +143,7 @@ export function maybeRemoveWildcardMarker(
   componentId: ComponentId<any> | undefined,
   changeset: ComponentChangeset,
 ): void {
-  if (componentId === undefined || !isDontFragmentComponent(componentId)) {
+  if (componentId === undefined || !isSparseComponent(componentId)) {
     return;
   }
 
@@ -210,13 +210,13 @@ function pruneMissingRemovals(changeset: ComponentChangeset, archetype: Archetyp
 
 function hasArchetypeStructuralChange(changeset: ComponentChangeset, currentArchetype: Archetype): boolean {
   for (const componentType of changeset.removes) {
-    if (!isDontFragmentRelation(componentType) && currentArchetype.componentTypeSet.has(componentType)) {
+    if (!isSparseRelation(componentType) && currentArchetype.componentTypeSet.has(componentType)) {
       return true;
     }
   }
 
   for (const componentType of changeset.adds.keys()) {
-    if (!isDontFragmentRelation(componentType) && !currentArchetype.componentTypeSet.has(componentType)) {
+    if (!isSparseRelation(componentType) && !currentArchetype.componentTypeSet.has(componentType)) {
       return true;
     }
   }
@@ -228,13 +228,13 @@ function buildFinalRegularComponentTypes(currentArchetype: Archetype, changeset:
   const finalRegularTypes = new Set(currentArchetype.componentTypes);
 
   for (const componentType of changeset.removes) {
-    if (!isDontFragmentRelation(componentType)) {
+    if (!isSparseRelation(componentType)) {
       finalRegularTypes.delete(componentType);
     }
   }
 
   for (const [componentType] of changeset.adds) {
-    if (!isDontFragmentRelation(componentType)) {
+    if (!isSparseRelation(componentType)) {
       finalRegularTypes.add(componentType);
     }
   }
@@ -278,7 +278,7 @@ export function applyChangeset(
 
   // Direct update for regular components in archetype
   for (const [componentType, component] of changeset.adds) {
-    if (isDontFragmentRelation(componentType)) {
+    if (isSparseRelation(componentType)) {
       continue;
     }
     currentArchetype.set(entityId, componentType, component);
@@ -290,7 +290,8 @@ export function applyChangeset(
 /**
  * No-hooks variant of applyDontFragmentChanges that skips tracking removed component data.
  *
- * Rewritten for the new DontFragmentStore interface (ComponentId-primary storage).
+ * Rewritten for the (renamed) DontFragmentStore interface (ComponentId-primary storage)
+ * used by `sparse` relations.
  */
 function applyDontFragmentChanges(
   dontFragmentRelations: DontFragmentStore,
@@ -299,7 +300,7 @@ function applyDontFragmentChanges(
   removedComponents: Map<EntityId<any>, any>,
 ): void {
   for (const componentType of changeset.removes) {
-    if (isDontFragmentRelation(componentType)) {
+    if (isSparseRelation(componentType)) {
       const removedValue = dontFragmentRelations.getValue(entityId, componentType);
       // Record for hooks if we are actually removing something
       if (
@@ -313,7 +314,7 @@ function applyDontFragmentChanges(
   }
 
   for (const [componentType, component] of changeset.adds) {
-    if (isDontFragmentRelation(componentType)) {
+    if (isSparseRelation(componentType)) {
       dontFragmentRelations.setValue(entityId, componentType, component);
     }
   }
@@ -325,13 +326,13 @@ function applyDontFragmentChangesNoHooks(
   changeset: ComponentChangeset,
 ): void {
   for (const componentType of changeset.removes) {
-    if (isDontFragmentRelation(componentType)) {
+    if (isSparseRelation(componentType)) {
       dontFragmentRelations.deleteValue(entityId, componentType);
     }
   }
 
   for (const [componentType, component] of changeset.adds) {
-    if (isDontFragmentRelation(componentType)) {
+    if (isSparseRelation(componentType)) {
       dontFragmentRelations.setValue(entityId, componentType, component);
     }
   }
@@ -342,13 +343,13 @@ export function filterRegularComponentTypes(componentTypes: Iterable<EntityId<an
 
   for (const componentType of componentTypes) {
     // Keep wildcard markers for dontFragment components (they mark the archetype)
-    if (isDontFragmentWildcard(componentType)) {
+    if (isSparseWildcard(componentType)) {
       regularTypes.push(componentType);
       continue;
     }
 
     // Skip specific dontFragment relations from archetype signature
-    if (isDontFragmentRelation(componentType)) {
+    if (isSparseRelation(componentType)) {
       continue;
     }
 

@@ -13,10 +13,10 @@ import {
   getDetailedIdType,
   getTargetIdFromRelationId,
   isCascadeDeleteRelation,
-  isDontFragmentRelation,
-  isDontFragmentWildcard,
   isEntityRelation,
   isExclusiveComponent,
+  isSparseRelation,
+  isSparseWildcard,
   isWildcardRelationId,
   relation,
 } from "../entity";
@@ -73,7 +73,7 @@ export class World {
   private entityReferences: EntityReferencesMap = new Map();
   /** Reverse index: entity ID → set of archetypes whose componentTypes include that entity ID */
   private entityToReferencingArchetypes = new Map<EntityId, Set<Archetype>>();
-  /** DontFragment relation storage, shared with all Archetype instances */
+  /** Sparse (dontFragment) relation storage, shared with all Archetype instances */
   private readonly dontFragmentStore = new DontFragmentStoreImpl();
   /** Component entity (singleton) storage */
   private readonly componentEntities = new ComponentEntityStore();
@@ -461,7 +461,7 @@ export class World {
 
     if (archetype.componentTypeSet.has(componentType)) return true;
 
-    if (isDontFragmentRelation(componentType)) {
+    if (isSparseRelation(componentType)) {
       // Use getValue; presence check via getAllForEntity only if value can legitimately be undefined
       const val = this.dontFragmentStore.getValue(entityId, componentType);
       if (val !== undefined) return true;
@@ -513,10 +513,10 @@ export class World {
 
     if (componentType >= 0 || componentType % RELATION_SHIFT !== 0) {
       const inArchetype = archetype.componentTypeSet.has(componentType);
-      const hasDontFragment = isDontFragmentRelation(componentType);
+      const hasSparse = isSparseRelation(componentType);
       const hasComponent =
         inArchetype ||
-        (hasDontFragment &&
+        (hasSparse &&
           (this.dontFragmentStore.getValue(entityId, componentType) !== undefined ||
             this.dontFragmentStore.getAllForEntity(entityId).some(([t]) => t === componentType)));
 
@@ -1498,11 +1498,11 @@ export class World {
     return (
       entry.requiredComponents.every((c: EntityId<any>) => {
         if (isWildcardRelationId(c)) {
-          if (isDontFragmentWildcard(c)) return true;
+          if (isSparseWildcard(c)) return true;
           const componentId = getComponentIdFromRelationId(c);
           return componentId !== undefined && archetype.hasRelationWithComponentId(componentId);
         }
-        return archetype.componentTypeSet.has(c) || isDontFragmentRelation(c);
+        return archetype.componentTypeSet.has(c) || isSparseRelation(c);
       }) && matchesFilter(archetype, entry.filter)
     );
   }

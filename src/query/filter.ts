@@ -1,12 +1,6 @@
 import type { Archetype } from "../archetype/archetype";
 import type { EntityId } from "../entity";
-import {
-  getComponentIdFromRelationId,
-  getDetailedIdType,
-  isDontFragmentComponent,
-  isRelationId,
-  relation,
-} from "../entity";
+import { getComponentIdFromRelationId, getDetailedIdType, isRelationId, isSparseComponent, relation } from "../entity";
 
 /**
  * Filter options for queries
@@ -41,7 +35,7 @@ export function matchesComponentTypes(archetype: Archetype, componentTypes: Enti
     } else if (
       (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
       detailedType.componentId !== undefined &&
-      isDontFragmentComponent(detailedType.componentId)
+      isSparseComponent(detailedType.componentId)
     ) {
       // For specific dontFragment relations, check if archetype has the wildcard marker
       const wildcardMarker = relation(detailedType.componentId, "*");

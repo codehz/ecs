@@ -196,7 +196,8 @@ export interface ComponentOptions<T = any> {
    */
   cascadeDelete?: boolean;
   /**
-   * If true, relations with this component will not cause archetype fragmentation.
+   * If true, relations with this component use sparse storage and will not cause
+   * archetype fragmentation.
    *
    * **Problem it solves**: By default, each unique relation pair `(component, target)`
    * creates a **separate archetype**. If 100 entities each have a `ChildOf` relation
@@ -204,28 +205,28 @@ export interface ComponentOptions<T = any> {
    * Queries that iterate over all entities with a `ChildOf` relation must check all
    * 100 archetypes, which degrades iteration performance and increases memory overhead.
    *
-   * **How it works**: When `dontFragment` is enabled, the relation's target does **not**
-   * contribute to the archetype signature. Entities with different targets for the same
-   * relation component share a **single archetype**, and the per-entity target data is
-   * stored in a separate `DontFragmentStore` (a `Map<EntityId, Map<EntityId, any>>`).
-   * A wildcard relation marker (`relation(Comp, "*")`) is placed in the archetype
-   * component list so queries can still discover matching archetypes.
+   * **How it works (sparse storage)**: When `sparse` is enabled, the relation's target
+   * does **not** contribute to the archetype signature. Entities with different targets
+   * for the same relation component share a **single archetype**, and the per-entity
+   * target data is stored in a separate side store (historically called
+   * `DontFragmentStore`). A wildcard relation marker (`relation(Comp, "*")`) is placed
+   * in the archetype component list so queries can still discover matching archetypes.
    *
    * **Use cases**:
    * - **Hierarchy/ownership**: `ChildOf` relations where thousands of entities each
    *   point to different parent entities.
    * - **Dynamic targeting**: Relations where targets change frequently (e.g., AI
-   *   targeting, inventory slots) — without `dontFragment`, each target change would
-   *   cause an archetype migration, which is expensive.
+   *   targeting, inventory slots) — without `sparse`, each target change would cause
+   *   an archetype migration, which is expensive.
    * - **High-cardinality relations**: Any relation where the number of unique targets
    *   is large compared to the number of entities.
    *
    * **Performance implications**:
-   * - **Without `dontFragment`**: Archetype count grows linearly with unique targets.
+   * - **Without `sparse`**: Archetype count grows linearly with unique targets.
    *   Each archetype migration (changing a relation target) requires moving the entity's
    *   data between component arrays.
-   * - **With `dontFragment`**: Archetype count stays constant regardless of target
-   *   diversity. Changing a relation target is an O(1) update in the `DontFragmentStore`.
+   * - **With `sparse`**: Archetype count stays constant regardless of target diversity.
+   *   Changing a relation target is an O(1) update in the sparse side store.
    *   The trade-off is an extra map lookup when accessing the relation data.
    *
    * **Constraints**:
@@ -234,13 +235,16 @@ export interface ComponentOptions<T = any> {
    *   archetype carries a wildcard marker so queries can discover it.
    * - Works with `exclusive` and `cascadeDelete` simultaneously.
    *
+   * **Backward compatibility**: The legacy key `dontFragment` is still accepted and
+   * behaves identically. Prefer `sparse` in new code.
+   *
    * @example
    * ```ts
-   * // Without dontFragment: 100 entities with different parents = 100 archetypes
+   * // Without sparse: 100 entities with different parents = 100 archetypes
    * const ChildOf = component(); // default: fragmentation happens
    *
-   * // With dontFragment: 100 entities with different parents = 1 archetype
-   * const ChildOf = component({ dontFragment: true });
+   * // With sparse: 100 entities with different parents = 1 archetype
+   * const ChildOf = component({ sparse: true });
    *
    * for (let i = 0; i < 100; i++) {
    *   const parent = world.new();
@@ -249,11 +253,17 @@ export interface ComponentOptions<T = any> {
    *   world.set(child, relation(ChildOf, parent));
    * }
    * world.sync();
-   * // dontFragment: 1 archetype for all 100 entities
+   * // sparse: 1 archetype for all 100 entities
    * // without: 100 archetypes, one per unique parent
    * ```
    *
-   * Inspired by Flecs' `DontFragment` trait.
+   * Inspired by Flecs' `DontFragment` trait (now exposed as the clearer `sparse` option).
+   */
+  sparse?: boolean;
+  /**
+   * @deprecated Use `sparse: true` instead. This key is kept solely for backward
+   * compatibility; `component({ dontFragment: true })` continues to work exactly
+   * as before and is equivalent to `sparse: true`.
    */
   dontFragment?: boolean;
   /**
@@ -324,7 +334,7 @@ const componentNames: (string | undefined)[] = new Array(COMPONENT_ID_MAX + 1);
 // BitSets for fast component option checks (Component ID range: 1-1023)
 const exclusiveFlags = new BitSet(COMPONENT_ID_MAX + 1);
 const cascadeDeleteFlags = new BitSet(COMPONENT_ID_MAX + 1);
-const dontFragmentFlags = new BitSet(COMPONENT_ID_MAX + 1);
+const sparseFlags = new BitSet(COMPONENT_ID_MAX + 1);
 const componentMerges: (ComponentMerge<any> | undefined)[] = new Array(COMPONENT_ID_MAX + 1);
 
 /**
@@ -370,7 +380,8 @@ export function component<T = void>(nameOrOptions?: string | ComponentOptions<T>
     // Set bitset flags for fast lookup
     if (options.exclusive) exclusiveFlags.set(id);
     if (options.cascadeDelete) cascadeDeleteFlags.set(id);
-    if (options.dontFragment) dontFragmentFlags.set(id);
+    // Support both `sparse` (preferred) and the legacy `dontFragment` alias for BC
+    if (options.sparse || options.dontFragment) sparseFlags.set(id);
     if (options.merge) componentMerges[id] = options.merge;
   }
 
@@ -406,12 +417,14 @@ export function getComponentOptions<T = any>(id: ComponentId<T>): ComponentOptio
   const hasName = componentNames[id] !== undefined;
   const hasExclusive = exclusiveFlags.has(id);
   const hasCascadeDelete = cascadeDeleteFlags.has(id);
-  const hasDontFragment = dontFragmentFlags.has(id);
+  const hasSparse = sparseFlags.has(id);
   return {
     name: hasName ? componentNames[id] : undefined,
     exclusive: hasExclusive ? true : undefined,
     cascadeDelete: hasCascadeDelete ? true : undefined,
-    dontFragment: hasDontFragment ? true : undefined,
+    sparse: hasSparse ? true : undefined,
+    // For full backward compatibility with code that inspects options.dontFragment
+    dontFragment: hasSparse ? true : undefined,
     merge: componentMerges[id] as ComponentMerge<T> | undefined,
   };
 }
@@ -487,20 +500,28 @@ export function isCascadeDeleteComponent(id: ComponentId<any>): boolean {
 }
 
 /**
- * Check if a component is marked as `dontFragment`.
+ * Check if a component is marked as `sparse` (sparse storage for relations).
  *
- * When a component has `dontFragment: true`, relations using it do not cause
- * archetype fragmentation — entities with different relation targets can share
- * the same archetype. This is a fast O(1) bitset lookup.
+ * When a component has `sparse: true`, relations using it do not cause archetype
+ * fragmentation — entities with different relation targets can share the same
+ * archetype. This is a fast O(1) bitset lookup. The legacy `dontFragment` key
+ * is still accepted and sets the same internal flag.
  *
  * @param id - The component ID to check.
- * @returns `true` if the component was created with `dontFragment: true`.
+ * @returns `true` if the component was created with `sparse: true` (or the
+ *   legacy `dontFragment: true`).
  *
- * @see {@link ComponentOptions.dontFragment} for the full explanation of how
- *   `dontFragment` prevents archetype fragmentation.
+ * @see {@link ComponentOptions.sparse} for the full explanation of sparse storage.
+ */
+export function isSparseComponent(id: ComponentId<any>): boolean {
+  return sparseFlags.has(id);
+}
+
+/**
+ * @deprecated Use {@link isSparseComponent} instead. Kept for backward compatibility.
  */
 export function isDontFragmentComponent(id: ComponentId<any>): boolean {
-  return dontFragmentFlags.has(id);
+  return isSparseComponent(id);
 }
 
 /**
@@ -511,9 +532,9 @@ export function isDontFragmentComponent(id: ComponentId<any>): boolean {
  * ID and checking: (1) the ID is a valid relation, (2) the component ID is in the
  * valid range, (3) the target satisfies the condition, and (4) the flag bit is set.
  *
- * Used as the fast-path implementation for `isDontFragmentRelation`,
- * `isDontFragmentWildcard`, `isExclusiveRelation`, `isExclusiveWildcard`,
- * and `isCascadeDeleteRelation`.
+ * Used as the fast-path implementation for `isSparseRelation`, `isSparseWildcard`,
+ * `isDontFragmentRelation`, `isDontFragmentWildcard`, `isExclusiveRelation`,
+ * `isExclusiveWildcard`, and `isCascadeDeleteRelation`.
  *
  * @param id - The entity/relation ID to check.
  * @param flagBitSet - The bitset tracking which component IDs have the flag.
@@ -534,53 +555,55 @@ function checkRelationFlag(
 }
 
 /**
- * Check if an ID is a specific (non-wildcard) relation backed by a `dontFragment`
- * component.
+ * Check if an ID is a specific (non-wildcard) relation backed by a `sparse`
+ * component (i.e. stored in the side sparse store rather than the archetype).
  *
  * This is used in hot paths (archetype resolution, command processing) to determine
- * whether a relation should be excluded from the archetype signature. Relations with
- * `dontFragment` components are stored in the shared {@link DontFragmentStore} instead
- * of being part of the archetype's component type list.
- *
- * This is an optimized function that avoids the overhead of `getDetailedIdType`
- * by directly decoding and checking the relation's component ID against the
- * `dontFragment` bitset.
+ * whether a relation should be excluded from the archetype signature.
  *
  * @param id - The entity/relation ID to check (must be a relation ID, not a plain
  *   component ID).
  * @returns `true` if this is a specific-target relation (not wildcard) whose base
- *   component was created with `dontFragment: true`.
+ *   component was created with `sparse: true` (or legacy `dontFragment: true`).
  *
- * @see {@link isDontFragmentWildcard} for the wildcard variant.
- * @see {@link ComponentOptions.dontFragment} for the full explanation.
+ * @see {@link isSparseWildcard} for the wildcard variant.
+ * @see {@link ComponentOptions.sparse} for the full explanation.
+ */
+export function isSparseRelation(id: EntityId<any>): boolean {
+  return checkRelationFlag(id, sparseFlags, (targetId) => targetId !== WILDCARD_TARGET_ID);
+}
+
+/**
+ * @deprecated Use {@link isSparseRelation} instead. Kept for backward compatibility.
  */
 export function isDontFragmentRelation(id: EntityId<any>): boolean {
-  return checkRelationFlag(id, dontFragmentFlags, (targetId) => targetId !== WILDCARD_TARGET_ID);
+  return isSparseRelation(id);
 }
 
 /**
  * Check if an ID is a wildcard relation (`relation(Comp, "*")`) backed by a
- * `dontFragment` component.
+ * `sparse` component.
  *
- * Wildcard markers for `dontFragment` components are placed in the archetype
- * component list so that queries can discover archetypes containing entities
- * with that relation type. This function is used in `filterRegularComponentTypes`
- * to **keep** these wildcard markers in the archetype signature while stripping
- * out specific-target `dontFragment` relations.
- *
- * This is an optimized function that avoids the overhead of `getDetailedIdType`
- * by directly decoding and checking the relation's component ID against the
- * `dontFragment` bitset.
+ * Wildcard markers for sparse components are placed in the archetype component
+ * list so that queries can discover archetypes containing entities with that
+ * relation type.
  *
  * @param id - The entity/relation ID to check.
  * @returns `true` if this is a wildcard relation (`"*"` target) whose base
- *   component was created with `dontFragment: true`.
+ *   component was created with `sparse: true` (or legacy `dontFragment: true`).
  *
- * @see {@link isDontFragmentRelation} for the specific-target variant.
- * @see {@link ComponentOptions.dontFragment} for the full explanation.
+ * @see {@link isSparseRelation} for the specific-target variant.
+ * @see {@link ComponentOptions.sparse} for the full explanation.
+ */
+export function isSparseWildcard(id: EntityId<any>): boolean {
+  return checkRelationFlag(id, sparseFlags, (targetId) => targetId === WILDCARD_TARGET_ID);
+}
+
+/**
+ * @deprecated Use {@link isSparseWildcard} instead. Kept for backward compatibility.
  */
 export function isDontFragmentWildcard(id: EntityId<any>): boolean {
-  return checkRelationFlag(id, dontFragmentFlags, (targetId) => targetId === WILDCARD_TARGET_ID);
+  return isSparseWildcard(id);
 }
 
 /**

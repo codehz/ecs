@@ -9,7 +9,7 @@ const ItemName = component<ItemName>({ name: "ItemName" });
 const Stackable = component<Stackable>({ name: "Stackable" });
 const Gold = component<Gold>({ name: "Gold" });
 const EquipmentSlot = component<EquipmentSlot>({ name: "EquipmentSlot" });
-const InInventory = component<void>({ name: "InInventory", dontFragment: true });
+const InInventory = component<void>({ name: "InInventory", sparse: true });
 
 const world = new World();
 

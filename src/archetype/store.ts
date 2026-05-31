@@ -10,7 +10,10 @@ type RelationEntry =
   | { type: "multi"; targets: Map<EntityId, { relationType: EntityId<any>; data: any }> };
 
 /**
- * Interface for storing dontFragment relation data.
+ * Interface for storing sparse (dontFragment) relation data.
+ *
+ * Components declared with `sparse: true` (or the legacy `dontFragment: true`)
+ * have their relation values kept in this side store instead of archetype columns.
  *
  * Storage is now primarily keyed by relation ComponentId (the "kind" of relation)
  * rather than by entity. This provides O(1) or near-O(1) answers for the hot
@@ -18,7 +21,7 @@ type RelationEntry =
  * during iteration, hook matching, etc.).
  *
  * A lightweight reverse index (entity -> Set of base ComponentIds) is maintained
- * to efficiently support the infrequent "get all dontFragment data for this entity"
+ * to efficiently support the infrequent "get all sparse data for this entity"
  * operations (removeEntity, dump, getEntity, serialization).
  *
  * The interface no longer leaks internal Map structures. Callers work with
@@ -47,12 +50,12 @@ export interface DontFragmentStore {
 }
 
 /**
- * Production implementation of DontFragmentStore.
+ * Production implementation of DontFragmentStore (the backing store for `sparse` relations).
  *
  * Internal layout (optimized):
  * - byComponent: baseComponentId → (entityId → RelationEntry)
  *   RelationEntry uses a single-value form for the common exclusive case (1 target),
- *   avoiding Map allocation entirely for the vast majority of dontFragment usage.
+ *   avoiding Map allocation entirely for the vast majority of sparse/dontFragment usage.
  * - entityIndex: entityId → Set<baseComponentId>
  *   Lightweight reverse index.
  */

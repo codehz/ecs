@@ -13,7 +13,7 @@ type Velocity = { x: number; y: number };
 // Components
 const Position = component<Position>();
 const Velocity = component<Velocity>();
-const ChildOf = component<void>({ exclusive: true, dontFragment: true });
+const ChildOf = component<void>({ exclusive: true, sparse: true });
 
 const world = new World();
 

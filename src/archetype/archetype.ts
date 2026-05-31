@@ -4,7 +4,7 @@ import {
   getComponentIdFromRelationId,
   getDetailedIdType,
   getIdType,
-  isDontFragmentComponent,
+  isSparseComponent,
   isWildcardRelationId,
 } from "../entity";
 import type { SerializedComponent, SerializedEntity, SerializedEntityId } from "../storage/serialization";
@@ -117,7 +117,7 @@ export class Archetype {
       if (this.componentTypeSet.has(componentType)) continue;
 
       const detailedType = getDetailedIdType(componentType);
-      if (isRelationType(detailedType) && isDontFragmentComponent(detailedType.componentId!)) {
+      if (isRelationType(detailedType) && isSparseComponent(detailedType.componentId!)) {
         this.dontFragmentRelations.setValue(entityId, componentType, data);
       }
     }
@@ -381,7 +381,7 @@ export class Archetype {
     }
 
     const detailedType = getDetailedIdType(componentType);
-    if (isRelationType(detailedType) && isDontFragmentComponent(detailedType.componentId!)) {
+    if (isRelationType(detailedType) && isSparseComponent(detailedType.componentId!)) {
       this.dontFragmentRelations.setValue(entityId, componentType, data);
       return;
     }

@@ -34,7 +34,7 @@ The library uses **archetype storage + deferred command buffering**. All structu
 7. **NEVER** call `sync()` inside `forEach`, hooks, or while iterating query results.
 8. **NEVER** confuse `remove(entity, Component)` with `delete(entity)`.
 9. **MUST** use relation components (`relation(Comp, target)`) instead of storing `EntityId` in data when you need to reference other entities.
-10. **MUST** understand the three relation flags (`exclusive`, `cascadeDelete`, `dontFragment`) before using relations.
+10. **MUST** understand the three relation flags (`exclusive`, `cascadeDelete`, `sparse` / legacy `dontFragment`) before using relations.
 
 ---
 
@@ -205,7 +205,7 @@ Use `relation(Component, target)` to create entity-to-entity references.
 - When the target entity is deleted, **the entire referencing entity is deleted**.
 - This is transitive and powerful. Use deliberately.
 
-**`dontFragment: true`**
+**`sparse: true`** (preferred; legacy key `dontFragment` is fully equivalent and supported)
 
 - Prevents archetype fragmentation when many different targets exist.
 - **Required** for relations with high cardinality or frequent target changes (e.g. `ChildOf` with thousands of children, AI targeting, inventory).
@@ -214,8 +214,8 @@ Use `relation(Component, target)` to create entity-to-entity references.
 
 ```ts
 const ChildOf = component({ exclusive: true, cascadeDelete: true });
-const Targeting = component({ exclusive: true, dontFragment: true });
-const InventorySlot = component({ dontFragment: true });
+const Targeting = component({ exclusive: true, sparse: true });
+const InventorySlot = component({ sparse: true });
 ```
 
 ### 8. Referencing Other Entities — Never Store Raw EntityId

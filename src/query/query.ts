@@ -1,7 +1,7 @@
 import type { Archetype } from "../archetype/archetype";
 import { normalizeComponentTypes } from "../component/type-utils";
 import type { EntityId, WildcardRelationId } from "../entity";
-import { getDetailedIdType, isDontFragmentComponent } from "../entity";
+import { getDetailedIdType, isSparseComponent } from "../entity";
 import type { ComponentTuple, ComponentType } from "../types";
 import type { World } from "../world/world";
 import { matchesComponentTypes, matchesFilter, type QueryFilter } from "./filter";
@@ -53,7 +53,7 @@ export class Query {
       return (
         (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
         detailedType.componentId !== undefined &&
-        isDontFragmentComponent(detailedType.componentId)
+        isSparseComponent(detailedType.componentId)
       );
     });
     this.updateCache();

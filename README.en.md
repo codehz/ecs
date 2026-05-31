@@ -78,7 +78,7 @@ const ChildOf = component({ exclusive: true, name: "ChildOf" });
 | `name`          | `string`            | Component name, used for serialization/debugging                                                                                                                                                                                           |
 | `exclusive`     | `boolean`           | Relation components only: an entity can have at most one relation of the same base component                                                                                                                                               |
 | `cascadeDelete` | `boolean`           | Entity relations only: when the target entity is deleted, the **entire referencing entity** is deleted. Differs from default behavior (default only cleans up the relation component, the entity survives). Supports transitive cascading. |
-| `dontFragment`  | `boolean`           | Relation components only: relations with different target entities are stored in the same Archetype, preventing excessive fragmentation                                                                                                    |
+| `sparse`        | `boolean`           | Relation components only: relations with different target entities are stored in the same Archetype, preventing excessive fragmentation (legacy `dontFragment` alias remains fully supported)                                              |
 | `merge`         | `(prev, next) => T` | Merge strategy when `set()` is called multiple times on the same component within a single sync batch                                                                                                                                      |
 
 ### Lifecycle Hooks
@@ -274,7 +274,7 @@ component<T>();
 // With a name
 component<T>("Name");
 // With options
-component<T>({ name?: string, exclusive?: boolean, cascadeDelete?: boolean, dontFragment?: boolean, merge?: (prev, next) => T });
+component<T>({ name?: string, exclusive?: boolean, cascadeDelete?: boolean, sparse?: boolean, dontFragment?: boolean /* legacy alias, fully compatible */, merge?: (prev, next) => T });
 ```
 
 ### relation()
@@ -293,7 +293,7 @@ relation(componentId, otherComponentId);
 To stop users from repeatedly hand-writing `buildChildrenByParent` + recursive descent for parent-child hierarchies and inventory systems, we now ship first-class helpers:
 
 ```typescript
-const ChildOf = component<void>({ exclusive: true, dontFragment: true });
+const ChildOf = component<void>({ exclusive: true, sparse: true });
 const world = new World();
 // ... build hierarchy ...
 

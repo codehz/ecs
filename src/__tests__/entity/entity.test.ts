@@ -22,6 +22,7 @@ import {
   isEntityId,
   isExclusiveComponent,
   isRelationId,
+  isSparseComponent,
   isWildcardRelationId,
   relation,
 } from "../../entity";
@@ -501,6 +502,38 @@ describe("Component Options", () => {
 
     expect(isCascadeDeleteComponent(combinedComp)).toBe(true);
     expect(isDontFragmentComponent(combinedComp)).toBe(true);
+  });
+
+  it("should support the new `sparse` option (preferred name) and treat it identically to the legacy `dontFragment`", () => {
+    const sparseComp = component({ sparse: true });
+    const normalComp = component();
+
+    // New primary predicates
+    expect(isSparseComponent(sparseComp)).toBe(true);
+    expect(isSparseComponent(normalComp)).toBe(false);
+
+    // Old aliases must still work (BC)
+    expect(isDontFragmentComponent(sparseComp)).toBe(true);
+    expect(isDontFragmentComponent(normalComp)).toBe(false);
+
+    const options = getComponentOptions(sparseComp);
+    expect(options.sparse).toBe(true);
+    // Full BC: old key is also populated
+    expect(options.dontFragment).toBe(true);
+  });
+
+  it("should treat `sparse` and `dontFragment` as equivalent (both spellings set the same flag)", () => {
+    const viaSparse = component({ sparse: true });
+    const viaLegacy = component({ dontFragment: true });
+    const viaBoth = component({ sparse: true, dontFragment: true });
+
+    for (const c of [viaSparse, viaLegacy, viaBoth]) {
+      expect(isSparseComponent(c)).toBe(true);
+      expect(isDontFragmentComponent(c)).toBe(true);
+      const opts = getComponentOptions(c);
+      expect(opts.sparse).toBe(true);
+      expect(opts.dontFragment).toBe(true);
+    }
   });
 
   it("should store and retrieve component merge callback", () => {
