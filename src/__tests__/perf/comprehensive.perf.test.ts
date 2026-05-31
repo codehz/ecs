@@ -117,7 +117,7 @@ describe("Comprehensive ECS performance benchmarks", () => {
     }
     world.sync();
 
-    const movementQuery = world.createQuery([Position, Velocity]);
+    using movementQuery = world.createQuery([Position, Velocity]);
 
     // Pure iteration (no writes)
     const readAvg = benchmark("10k entities: forEach read-only query", 2, 6, () => {
@@ -136,8 +136,6 @@ describe("Comprehensive ECS performance benchmarks", () => {
         sumX += pos.x + vel.vx;
       });
     });
-
-    movementQuery.dispose();
 
     console.log(`Sum X (to prevent optimization): ${sumX}`);
     expect(readAvg).toBeLessThan(20);
@@ -195,7 +193,7 @@ describe("Comprehensive ECS performance benchmarks", () => {
     }
     world.sync();
 
-    const movementQuery = world.createQuery([Position, Health]);
+    using movementQuery = world.createQuery([Position, Health]);
 
     const mixedAvg = benchmark("2k entities: mixed ops (update 90%, spawn 5%, delete 5%) + sync", 2, 6, (round) => {
       const deleteCount = Math.floor(entities.length * 0.05);
@@ -226,7 +224,6 @@ describe("Comprehensive ECS performance benchmarks", () => {
       world.sync();
     });
 
-    movementQuery.dispose();
     expect(mixedAvg).toBeLessThan(300);
   });
 

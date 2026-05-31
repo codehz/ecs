@@ -11,7 +11,7 @@ describe("DontFragment Query Notification Issue", () => {
     const WildcardChildOf = relation(ChildOf, "*");
 
     const collected: SyncDebugStats[] = [];
-    const collector = world.createDebugStatsCollector((s) => collected.push(s));
+    using _collector = world.createDebugStatsCollector((s) => collected.push(s));
 
     const query = world.createQuery([WildcardChildOf, Position]);
     expect(query.getEntities().length).toBe(0);
@@ -49,8 +49,6 @@ describe("DontFragment Query Notification Issue", () => {
     // Debug stats should reflect archetype lifecycle changes from the wildcard marker add/remove
     const lastStats = collected[collected.length - 1]!;
     expect(lastStats.archetypes.total).toBeGreaterThanOrEqual(1);
-
-    collector[Symbol.dispose]();
   });
 
   it("should handle exclusive dontFragment relations and specific target queries", () => {

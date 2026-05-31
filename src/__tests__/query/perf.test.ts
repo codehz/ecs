@@ -51,8 +51,8 @@ function performanceTest() {
   console.log(`Entity creation time: ${(endCreate - startCreate).toFixed(2)}ms`);
 
   // Create queries
-  const positionVelocityQuery = world.createQuery([positionComponent, velocityComponent]);
-  const healthQuery = world.createQuery([healthComponent]);
+  using positionVelocityQuery = world.createQuery([positionComponent, velocityComponent]);
+  using _healthQuery = world.createQuery([healthComponent]);
 
   // Test getEntitiesWithComponents performance
   console.log("\nTesting getEntitiesWithComponents performance...");
@@ -89,9 +89,7 @@ function performanceTest() {
   });
   console.log(`forEach iterated over ${forEachCount} entities`);
 
-  // Cleanup
-  positionVelocityQuery.dispose();
-  healthQuery.dispose();
+  // Cleanup handled by using declarations for positionVelocityQuery / healthQuery
 
   console.log("\nPerformance test completed!");
 }

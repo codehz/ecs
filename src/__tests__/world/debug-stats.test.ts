@@ -16,7 +16,7 @@ describe("World - Debug Stats Collector", () => {
 
     const received: SyncDebugStats[] = [];
 
-    const collector = world.createDebugStatsCollector((stats) => {
+    using _collector = world.createDebugStatsCollector((stats) => {
       received.push(stats);
     });
 
@@ -30,8 +30,6 @@ describe("World - Debug Stats Collector", () => {
     expect(stats.archetypes.total).toBeGreaterThanOrEqual(1);
     expect(typeof stats.timestamps.syncStart).toBe("number");
     expect(stats.timestamps.syncEnd).toBeGreaterThanOrEqual(stats.timestamps.syncStart);
-
-    collector[Symbol.dispose]();
   });
 
   it("should report archetype creation and removal activity", () => {
@@ -40,7 +38,7 @@ describe("World - Debug Stats Collector", () => {
     const e2 = world.new();
 
     const received: SyncDebugStats[] = [];
-    const collector = world.createDebugStatsCollector((s) => received.push(s));
+    using _collector = world.createDebugStatsCollector((s) => received.push(s));
 
     // First sync creates the empty archetype + entities
     world.sync();
@@ -64,8 +62,6 @@ describe("World - Debug Stats Collector", () => {
 
     const afterRemove = received[received.length - 1]!;
     expect(afterRemove.activity.archetypesRemoved).toBeGreaterThanOrEqual(0);
-
-    collector[Symbol.dispose]();
   });
 
   it("should count actual entity migrations", () => {
@@ -73,7 +69,7 @@ describe("World - Debug Stats Collector", () => {
     const entity = world.new();
 
     const received: SyncDebugStats[] = [];
-    const collector = world.createDebugStatsCollector((s) => received.push(s));
+    using _collector = world.createDebugStatsCollector((s) => received.push(s));
 
     world.set(entity, Position, { x: 1, y: 1 });
     world.sync();
@@ -84,8 +80,6 @@ describe("World - Debug Stats Collector", () => {
 
     const last = received[received.length - 1]!;
     expect(last.activity.migrations).toBeGreaterThanOrEqual(1);
-
-    collector[Symbol.dispose]();
   });
 
   it("should count hook executions", () => {
@@ -93,7 +87,7 @@ describe("World - Debug Stats Collector", () => {
     const entity = world.new();
 
     const received: SyncDebugStats[] = [];
-    const collector = world.createDebugStatsCollector((s) => received.push(s));
+    using _collector = world.createDebugStatsCollector((s) => received.push(s));
 
     // Register a hook
     world.hook([Position], {
@@ -106,8 +100,6 @@ describe("World - Debug Stats Collector", () => {
     const stats = received[received.length - 1]!;
     expect(stats.activity.hooksExecuted).toBeGreaterThanOrEqual(1);
     expect(stats.hooks.total).toBeGreaterThanOrEqual(1);
-
-    collector[Symbol.dispose]();
   });
 
   it("should deliver identical object reference to multiple collectors", () => {
@@ -117,8 +109,8 @@ describe("World - Debug Stats Collector", () => {
     const receivedA: SyncDebugStats[] = [];
     const receivedB: SyncDebugStats[] = [];
 
-    const c1 = world.createDebugStatsCollector((s) => receivedA.push(s));
-    const c2 = world.createDebugStatsCollector((s) => receivedB.push(s));
+    using _c1 = world.createDebugStatsCollector((s) => receivedA.push(s));
+    using _c2 = world.createDebugStatsCollector((s) => receivedB.push(s));
 
     world.set(e, Position, { x: 5, y: 5 });
     world.sync();
@@ -126,9 +118,6 @@ describe("World - Debug Stats Collector", () => {
     expect(receivedA.length).toBe(1);
     expect(receivedB.length).toBe(1);
     expect(receivedA[0]).toBe(receivedB[0]); // exact same reference
-
-    c1[Symbol.dispose]();
-    c2[Symbol.dispose]();
   });
 
   it("should stop delivering after collector is disposed", () => {
@@ -159,7 +148,7 @@ describe("World - Debug Stats Collector", () => {
     }
 
     const received: SyncDebugStats[] = [];
-    const collector = world.createDebugStatsCollector((s) => received.push(s));
+    using _collector = world.createDebugStatsCollector((s) => received.push(s));
 
     // Many sets on different entities should require at least one iteration
     for (const e of entities) {
@@ -169,8 +158,6 @@ describe("World - Debug Stats Collector", () => {
 
     const stats = received[received.length - 1]!;
     expect(stats.commandIterations).toBeGreaterThanOrEqual(1);
-
-    collector[Symbol.dispose]();
   });
 
   it("should only collect for syncs after the collector was created", () => {
@@ -181,14 +168,12 @@ describe("World - Debug Stats Collector", () => {
     world.sync(); // This sync happens before any collector exists
 
     const received: SyncDebugStats[] = [];
-    const collector = world.createDebugStatsCollector((s) => received.push(s));
+    using _collector = world.createDebugStatsCollector((s) => received.push(s));
 
     world.set(e, Position, { x: 2, y: 2 });
     world.sync(); // This one should be observed
 
     expect(received.length).toBe(1);
-
-    collector[Symbol.dispose]();
   });
 
   it("should observe activity and index changes from relations", () => {
@@ -201,7 +186,7 @@ describe("World - Debug Stats Collector", () => {
     const child = world.new();
 
     const received: SyncDebugStats[] = [];
-    const collector = world.createDebugStatsCollector((s) => received.push(s));
+    using _collector = world.createDebugStatsCollector((s) => received.push(s));
 
     // Establish a relation (should populate entity reference indices)
     world.set(child, relation(ChildOf, parent1));
@@ -217,7 +202,5 @@ describe("World - Debug Stats Collector", () => {
     const afterSwitch = received[received.length - 1]!;
     // Exclusive relation flip typically causes at least one structural change
     expect(afterSwitch.activity.migrations).toBeGreaterThanOrEqual(0);
-
-    collector[Symbol.dispose]();
   });
 });

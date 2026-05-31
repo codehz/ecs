@@ -56,7 +56,7 @@ describe("DontFragment + Wildcard Performance (post-refactor)", () => {
     world.sync();
 
     const wildcard = relation(ChildOf, "*");
-    const q = world.createQuery([Position, wildcard]);
+    using q = world.createQuery([Position, wildcard]);
 
     const avg = benchmark("10k entities: wildcard query over exclusive dontFragment", 2, 6, () => {
       let count = 0;
@@ -65,8 +65,6 @@ describe("DontFragment + Wildcard Performance (post-refactor)", () => {
       });
       expect(count).toBeGreaterThan(0);
     });
-
-    q.dispose();
 
     // These numbers will be tuned after the implementation stabilizes.
     // The goal is to verify we did not regress the hot wildcard + dontFragment path.

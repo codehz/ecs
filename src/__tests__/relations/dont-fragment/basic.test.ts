@@ -16,7 +16,7 @@ describe("DontFragment Relations", () => {
     const ChildOf = component({ dontFragment: true });
 
     const collected: SyncDebugStats[] = [];
-    const collector = world.createDebugStatsCollector((s) => collected.push(s));
+    using _collector = world.createDebugStatsCollector((s) => collected.push(s));
 
     // Create parent entities
     const parent1 = world.new();
@@ -54,8 +54,6 @@ describe("DontFragment Relations", () => {
     // Verify queries still work
     const entities = world.query([PositionId, VelocityId]);
     expect(entities.length).toBe(3);
-
-    collector[Symbol.dispose]();
   });
 
   it("should handle dontFragment relations with wildcard queries", () => {
@@ -144,7 +142,7 @@ describe("DontFragment Relations", () => {
     const ChildOf = component({ dontFragment: true });
 
     const collected: SyncDebugStats[] = [];
-    const collector = world.createDebugStatsCollector((s) => collected.push(s));
+    using _collector = world.createDebugStatsCollector((s) => collected.push(s));
 
     const parent1 = world.new();
     const parent2 = world.new();
@@ -167,8 +165,6 @@ describe("DontFragment Relations", () => {
     // Use debug collector to verify we stayed in a single archetype despite 10 different parents
     const stats = collected[collected.length - 1]!;
     expect(stats.archetypes.total).toBeLessThanOrEqual(3);
-
-    collector[Symbol.dispose]();
   });
 
   it("should compare fragmentation: with and without dontFragment", () => {
@@ -178,7 +174,7 @@ describe("DontFragment Relations", () => {
     const ChildOf1 = component(); // No dontFragment
 
     const stats1: SyncDebugStats[] = [];
-    const collector1 = world1.createDebugStatsCollector((s) => stats1.push(s));
+    using _collector1 = world1.createDebugStatsCollector((s) => stats1.push(s));
 
     for (let i = 0; i < 5; i++) {
       const parent = world1.new();
@@ -194,7 +190,7 @@ describe("DontFragment Relations", () => {
     const ChildOf2 = component({ dontFragment: true }); // With dontFragment
 
     const stats2: SyncDebugStats[] = [];
-    const collector2 = world2.createDebugStatsCollector((s) => stats2.push(s));
+    using _collector2 = world2.createDebugStatsCollector((s) => stats2.push(s));
 
     for (let i = 0; i < 5; i++) {
       const parent = world2.new();
@@ -213,9 +209,6 @@ describe("DontFragment Relations", () => {
 
     // With dontFragment: far fewer archetypes for the same number of entities
     expect(last2.archetypes.total).toBeLessThanOrEqual(3); // entities + relations archetype(s)
-
-    collector1[Symbol.dispose]();
-    collector2[Symbol.dispose]();
   });
 
   it("should query entities with wildcard relation on dontFragment component using createQuery", () => {
