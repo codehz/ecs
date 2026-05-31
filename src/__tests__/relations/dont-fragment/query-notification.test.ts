@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { component, relation } from "../../../entity";
+import type { SyncDebugStats } from "../../../types";
 import { World } from "../../../world/world";
 
 describe("DontFragment Query Notification Issue", () => {
@@ -8,6 +9,9 @@ describe("DontFragment Query Notification Issue", () => {
     const Position = component();
     const ChildOf = component({ dontFragment: true });
     const WildcardChildOf = relation(ChildOf, "*");
+
+    const collected: SyncDebugStats[] = [];
+    const collector = world.createDebugStatsCollector((s) => collected.push(s));
 
     const query = world.createQuery([WildcardChildOf, Position]);
     expect(query.getEntities().length).toBe(0);
@@ -41,6 +45,12 @@ describe("DontFragment Query Notification Issue", () => {
     world.sync();
     expect(query.getEntities()).not.toContain(child1);
     expect((world as any).entityToArchetype.get(child1).componentTypes).not.toContain(WildcardChildOf);
+
+    // Debug stats should reflect archetype lifecycle changes from the wildcard marker add/remove
+    const lastStats = collected[collected.length - 1]!;
+    expect(lastStats.archetypes.total).toBeGreaterThanOrEqual(1);
+
+    collector[Symbol.dispose]();
   });
 
   it("should handle exclusive dontFragment relations and specific target queries", () => {

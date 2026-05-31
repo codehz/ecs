@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { component, type EntityId } from "../../entity";
+import type { SyncDebugStats } from "../../types";
 import { World } from "../../world/world";
 
 describe("World - Multi-Component Hooks", () => {
@@ -10,6 +11,9 @@ describe("World - Multi-Component Hooks", () => {
     const initCalls: { entityId: EntityId; value: number }[] = [];
     const setCalls: { entityId: EntityId; value: number }[] = [];
     const removeCalls: { entityId: EntityId; value: number }[] = [];
+
+    const collectedStats: SyncDebugStats[] = [];
+    const collector = world.createDebugStatsCollector((stats) => collectedStats.push(stats));
 
     // First create an entity before registering the hook (for on_init test)
     const existingEntity = world.spawn().with(A, 100).build();
@@ -64,6 +68,17 @@ describe("World - Multi-Component Hooks", () => {
     expect(removeCalls.length).toBe(2);
     expect(removeCalls[1]!.entityId).toBe(existingEntity);
     expect(removeCalls[1]!.value).toBe(100);
+
+    // Cross-verify with the new debug stats collector
+    const lastStats = collectedStats[collectedStats.length - 1];
+    expect(lastStats).toBeDefined();
+    expect(lastStats!.hooks.total).toBeGreaterThanOrEqual(1);
+    // Note: hooksExecuted counts individual invokeHook calls. The exact number
+    // can be lower than the sum of manual arrays depending on event paths.
+    // We only assert that at least some hook activity was recorded.
+    expect(lastStats!.activity.hooksExecuted).toBeGreaterThanOrEqual(1);
+
+    collector[Symbol.dispose]();
   });
 
   it("should throw error when hook has no required components (only optional)", () => {

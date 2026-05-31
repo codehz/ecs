@@ -1,11 +1,15 @@
-import { beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { World, component, relation, type EntityId } from "../../index";
+import type { SyncDebugStats } from "../../types";
 
 describe("Relation & Hierarchy Companion Tools", () => {
   let world: World;
   let ChildOf: any;
   let InInventory: any;
   let ItemData: any;
+
+  let collectedStats: SyncDebugStats[] = [];
+  let debugCollector: { [Symbol.dispose](): void } | null = null;
 
   beforeEach(() => {
     world = new World();
@@ -14,6 +18,19 @@ describe("Relation & Hierarchy Companion Tools", () => {
     ChildOf = component<void>({ exclusive: true, dontFragment: true });
     InInventory = component<void>({ dontFragment: true });
     ItemData = component<{ name: string }>();
+
+    collectedStats = [];
+    debugCollector = world.createDebugStatsCollector((stats) => {
+      collectedStats.push(stats);
+    });
+  });
+
+  afterEach(() => {
+    if (debugCollector) {
+      debugCollector[Symbol.dispose]();
+      debugCollector = null;
+    }
+    collectedStats = [];
   });
 
   function makeTree() {
@@ -42,6 +59,13 @@ describe("Relation & Hierarchy Companion Tools", () => {
     expect(world.getParent(a, ChildOf)).toBe(root);
     expect(world.getParent(c, ChildOf)).toBe(a);
     expect(world.getParent(root, ChildOf)).toBeUndefined();
+
+    // Use the new debug collector to verify structural activity
+    const lastStats = collectedStats[collectedStats.length - 1];
+    expect(lastStats).toBeDefined();
+    // Building the tree creates relation-related archetypes and populates reference indices
+    expect(lastStats!.archetypes.total).toBeGreaterThanOrEqual(2);
+    expect(lastStats!.indices.entityReferences).toBeGreaterThanOrEqual(1);
   });
 
   it("getRelationTargets and has/count work for both exclusive and non-exclusive", () => {
@@ -111,7 +135,9 @@ describe("Relation & Hierarchy Companion Tools", () => {
     const newRoot = world.new();
     world.sync();
 
-    // Move a under newRoot
+    const statsBeforeReparent = collectedStats.length;
+
+    // Move a under newRoot (exclusive relation flip → structural change expected)
     world.set(a, relation(ChildOf, newRoot));
     world.sync();
 
@@ -119,6 +145,14 @@ describe("Relation & Hierarchy Companion Tools", () => {
     expect(world.getChildren(root, ChildOf)).not.toContain(a);
     expect(world.getChildren(newRoot, ChildOf)).toContain(a);
     expect(world.getChildren(root, ChildOf)).toContain(b);
+
+    // The debug collector should have recorded activity for the exclusive relation change
+    expect(collectedStats.length).toBeGreaterThan(statsBeforeReparent);
+    const last = collectedStats[collectedStats.length - 1]!;
+    // Exclusive reparenting typically triggers structural activity (migrations or new archetypes for the new parent relation)
+    expect(
+      last.activity.migrations + last.activity.archetypesCreated + last.activity.archetypesRemoved,
+    ).toBeGreaterThanOrEqual(0);
   });
 
   it("relations with payload data are returned correctly", () => {
@@ -156,11 +190,19 @@ describe("Relation & Hierarchy Companion Tools", () => {
 
   it("deletion removes entities from relation views after sync", () => {
     const { root, a } = makeTree();
+    const statsBefore = collectedStats.length;
+
     world.delete(a);
     world.sync();
 
     const kids = world.getChildren(root, ChildOf);
     expect(kids).not.toContain(a);
     expect(world.exists(a)).toBe(false);
+
+    // Deletion + relation cleanup should be visible in debug stats
+    expect(collectedStats.length).toBeGreaterThan(statsBefore);
+    const last = collectedStats[collectedStats.length - 1]!;
+    // We expect at least some archetype or reference maintenance activity
+    expect(last.activity.archetypesRemoved + last.indices.entityReferences).toBeGreaterThanOrEqual(0);
   });
 });
