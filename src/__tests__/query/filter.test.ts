@@ -11,7 +11,7 @@ const velocityComponent = 2 as ComponentId<{ dx: number; dy: number }>;
 const healthComponent = 3 as ComponentId<{ value: number }>;
 const relationComponent = 4 as ComponentId<{ strength: number }>;
 
-// Helper function to create a real DontFragmentStore for testing.
+// Helper function to create a real SparseStore for testing.
 const createSparseStore = () => new SparseStoreImpl();
 
 describe("Query Filter Functions", () => {

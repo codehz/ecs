@@ -22,7 +22,7 @@ describe("Archetype", () => {
   const positionComponent = component<Position>();
   const velocityComponent = component<Velocity>();
 
-  // Helper function to create a real DontFragmentStore for testing.
+  // Helper function to create a real SparseStore for testing.
   // We use the production implementation because the interface is now fully semantic.
   const createSparseStore = () => new SparseStoreImpl();
 
@@ -367,7 +367,7 @@ describe("Archetype", () => {
     expect(buildRegularComponentValue(undefined, 0, true)).toBeUndefined();
     expect(() => buildRegularComponentValue(undefined, 0, false)).toThrow();
 
-    // findMatchingDontFragmentRelations (deprecated helper)
+    // findMatchingDontFragmentRelations (deprecated legacy helper)
     const dfData = new Map<EntityId, any>([[relC, { df: 1 }]]);
     const matches = findMatchingDontFragmentRelations(dfData, positionComponent, []);
     expect(matches).toHaveLength(1);

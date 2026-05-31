@@ -47,7 +47,7 @@ export class Query {
     this.wildcardTypes = this.componentTypes.filter(
       (ct) => getDetailedIdType(ct).type === "wildcard-relation",
     ) as WildcardRelationId<any>[];
-    // Pre-compute specific dontFragment relation types that need entity-level filtering
+    // Pre-compute specific sparse relation types that need entity-level filtering
     this.specificSparseRelationTypes = this.componentTypes.filter((ct) => {
       const detailedType = getDetailedIdType(ct);
       return (
@@ -86,7 +86,7 @@ export class Query {
   getEntities(): EntityId[] {
     this.ensureNotDisposed();
 
-    // Fast path: no wildcard relations and no specific dontFragment relations
+    // Fast path: no wildcard relations and no specific sparse relations
     if (this.wildcardTypes.length === 0 && this.specificSparseRelationTypes.length === 0) {
       const result: EntityId[] = [];
       for (const archetype of this.cachedArchetypes) {
@@ -100,7 +100,7 @@ export class Query {
     // Slow path: need to filter entities that actually have the required relations
     // This is necessary for:
     // 1. Wildcard relations where an archetype can contain entities with/without the relation
-    // 2. Specific dontFragment relations where the archetype only has the wildcard marker
+    // 2. Specific sparse relations where the archetype only has the wildcard marker
     const result: EntityId[] = [];
     for (const archetype of this.cachedArchetypes) {
       for (const entity of archetype.getEntities()) {
@@ -113,7 +113,7 @@ export class Query {
   }
 
   /**
-   * Check if entity matches all query requirements (wildcards and specific dontFragment relations)
+   * Check if entity matches all query requirements (wildcards and specific sparse relations)
    */
   private entityMatchesQuery(archetype: Archetype, entity: EntityId): boolean {
     // Check wildcard relations
@@ -124,7 +124,7 @@ export class Query {
       }
     }
 
-    // Check specific dontFragment relations
+    // Check specific sparse relations
     for (const specificType of this.specificSparseRelationTypes) {
       const result = archetype.getOptional(entity, specificType);
       if (result === undefined) {

@@ -138,7 +138,7 @@ export interface ComponentOptions<T = any> {
    *   `cascadeDelete`, deleting the target entity will both (a) delete the
    *   referencing entity, and (b) the exclusivity constraint prevents the
    *   entity from having multiple cascade-delete relations of the same type.
-   * - **`dontFragment`**: Compatible. Exclusivity is enforced at the data level
+   * - **`sparse`**: Compatible. Exclusivity is enforced at the data level
    *   regardless of whether the archetype is fragmented.
    *
    * @example
@@ -209,7 +209,7 @@ export interface ComponentOptions<T = any> {
    * does **not** contribute to the archetype signature. Entities with different targets
    * for the same relation component share a **single archetype**, and the per-entity
    * target data is stored in a separate side store (historically called
-   * `DontFragmentStore`). A wildcard relation marker (`relation(Comp, "*")`) is placed
+   * `DontFragmentStore`, now `SparseStore`). A wildcard relation marker (`relation(Comp, "*")`) is placed
    * in the archetype component list so queries can still discover matching archetypes.
    *
    * **Use cases**:

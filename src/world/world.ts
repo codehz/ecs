@@ -216,7 +216,7 @@ export class World {
         }
       }
 
-      // Remove entity from archetype - this also cleans up dontFragment relations
+      // Remove entity from archetype - this also cleans up sparse relations
       // and returns all removed component data
       this.entityReferences.delete(cur);
       const removedComponents = archetype.removeEntity(cur)!;
@@ -601,7 +601,7 @@ export class World {
    *   world.get(entity, relation(Comp, "*"))
    *
    * @example
-   * const ChildOf = component({ exclusive: true, dontFragment: true });
+   * const ChildOf = component({ exclusive: true, sparse: true });
    * const children = world.getRelationTargets(parent, ChildOf); // usually []
    * const items = world.getRelationTargets(player, InInventory);
    *
@@ -622,7 +622,7 @@ export class World {
     }
 
     // Regular entity path — archetype.get for wildcard always materializes the array
-    // (even if empty for a dontFragment relation that only has the marker)
+    // (even if empty for a sparse relation that only has the marker)
     const data = this.get(entityId, wildcard);
     return data as [EntityId<unknown>, T | undefined][];
   }
@@ -635,7 +635,7 @@ export class World {
    * prefer the higher-level `world.getChildren(parent, ChildOf)` instead.
    *
    * @example
-   * const ChildOf = component({ exclusive: true, dontFragment: true });
+   * const ChildOf = component({ exclusive: true, sparse: true });
    * const directChildren = world.getRelationSources(ship, ChildOf);
    */
   getRelationSources(targetId: EntityId, relationComp: ComponentId<any>): EntityId[] {
@@ -698,13 +698,13 @@ export class World {
 
   /**
    * Returns the direct children of `parent` for the given relationship component
-   * (typically a `ChildOf` or similar exclusive `dontFragment` relation).
+   * (typically a `ChildOf` or similar exclusive `sparse` relation).
    *
    * This is the recommended high-level API for hierarchy traversal.
    * It uses the internal reverse reference index for efficiency.
    *
    * @example
-   * const ChildOf = component({ exclusive: true, dontFragment: true });
+   * const ChildOf = component({ exclusive: true, sparse: true });
    * const kids = world.getChildren(ship, ChildOf);
    */
   getChildren(parent: EntityId, childOf: ComponentId<any>): EntityId[] {
@@ -716,7 +716,7 @@ export class World {
    * (typically an exclusive `ChildOf` relation).
    *
    * @example
-   * const ChildOf = component({ exclusive: true, dontFragment: true });
+   * const ChildOf = component({ exclusive: true, sparse: true });
    * const parent = world.getParent(turret, ChildOf);
    */
   getParent(child: EntityId, childOf: ComponentId<any>): EntityId | undefined {
@@ -728,7 +728,7 @@ export class World {
    * including) the root for the given relationship component.
    *
    * @example
-   * const ChildOf = component({ exclusive: true, dontFragment: true });
+   * const ChildOf = component({ exclusive: true, sparse: true });
    * const ancestors = world.getAncestors(muzzle, ChildOf); // [turret, ship]
    */
   getAncestors(entity: EntityId, childOf: ComponentId<any>): EntityId[] {

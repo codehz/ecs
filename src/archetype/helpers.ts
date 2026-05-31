@@ -69,7 +69,7 @@ export function matchesRelationComponentId(componentType: EntityId<any>, compone
 /**
  * Find all relations in sparse data that match a component ID.
  *
- * @deprecated Prefer calling `DontFragmentStore.getRelationsForComponent` directly.
+ * @deprecated Prefer calling the sparse store's `getRelationsForComponent` directly (via `SparseStore`).
  * This helper is kept temporarily for any remaining call sites during the refactor.
  */
 export function findMatchingDontFragmentRelations(
