@@ -11,7 +11,7 @@ import type { SerializedComponent, SerializedEntity, SerializedEntityId } from "
 import { isOptionalEntityId, type ComponentTuple, type ComponentType, type LifecycleHookEntry } from "../types";
 import { getOrCompute } from "../utils/utils";
 import { buildCacheKey, buildSingleComponent, getWildcardRelationDataSource, isRelationType } from "./helpers";
-import type { DontFragmentStore } from "./store";
+import type { SparseStore } from "./store";
 
 /**
  * Special value to represent missing component data
@@ -51,11 +51,10 @@ export class Archetype {
   private entityToIndex: Map<EntityId, number> = new Map();
 
   /**
-   * DontFragmentStore (keyed primarily by relation ComponentId).
-   * Uses optimized RelationEntry (single/multi) for the common exclusive case.
+   * SparseStore used for relations declared with `sparse: true`.
    * See store.ts for implementation details.
    */
-  private dontFragmentRelations: DontFragmentStore;
+  private sparseRelations: SparseStore;
 
   /**
    * Multi-hooks that match this archetype
@@ -67,10 +66,10 @@ export class Archetype {
    */
   private componentDataSourcesCache: Map<string, (any[] | EntityId<any>[] | undefined)[]> = new Map();
 
-  constructor(componentTypes: EntityId<any>[], dontFragmentRelations: DontFragmentStore) {
+  constructor(componentTypes: EntityId<any>[], sparseStore: SparseStore) {
     this.componentTypes = normalizeComponentTypes(componentTypes);
     this.componentTypeSet = new Set(this.componentTypes);
-    this.dontFragmentRelations = dontFragmentRelations;
+    this.sparseRelations = sparseStore;
 
     for (const componentType of this.componentTypes) {
       this.componentData.set(componentType, []);
@@ -108,17 +107,17 @@ export class Archetype {
       this.getComponentData(componentType).push(!componentData.has(componentType) ? MISSING_COMPONENT : data);
     }
 
-    // Add dontFragment relations separately
-    this.addDontFragmentRelations(entityId, componentData);
+    // Add sparse-stored relations separately
+    this.addSparseRelations(entityId, componentData);
   }
 
-  private addDontFragmentRelations(entityId: EntityId, componentData: Map<EntityId<any>, any>): void {
+  private addSparseRelations(entityId: EntityId, componentData: Map<EntityId<any>, any>): void {
     for (const [componentType, data] of componentData) {
       if (this.componentTypeSet.has(componentType)) continue;
 
       const detailedType = getDetailedIdType(componentType);
       if (isRelationType(detailedType) && isSparseComponent(detailedType.componentId!)) {
-        this.dontFragmentRelations.setValue(entityId, componentType, data);
+        this.sparseRelations.setValue(entityId, componentType, data);
       }
     }
   }
@@ -135,9 +134,9 @@ export class Archetype {
       entityData.set(componentType, data === MISSING_COMPONENT ? undefined : data);
     }
 
-    // Add dontFragment relations
-    const dontFragmentTuples = this.dontFragmentRelations.getAllForEntity(entityId);
-    for (const [componentType, data] of dontFragmentTuples) {
+    // Add sparse-stored relations
+    const sparseTuples = this.sparseRelations.getAllForEntity(entityId);
+    for (const [componentType, data] of sparseTuples) {
       entityData.set(componentType, data);
     }
 
@@ -145,13 +144,11 @@ export class Archetype {
   }
 
   /**
-   * Returns all dontFragment relations for the given entity as an array of tuples.
-   * This is a compatibility adapter during the store refactor.
-   *
-   * Prefer the new DontFragmentStore methods when possible.
+   * Returns all sparse-stored relations for the given entity.
+   * Internal helper used by command processing and tests.
    */
-  getEntityDontFragmentRelations(entityId: EntityId): Map<EntityId<any>, any> | undefined {
-    const tuples = this.dontFragmentRelations.getAllForEntity(entityId);
+  getEntitySparseRelations(entityId: EntityId): Map<EntityId<any>, any> | undefined {
+    const tuples = this.sparseRelations.getAllForEntity(entityId);
     if (tuples.length === 0) return undefined;
 
     const map = new Map<EntityId<any>, any>();
@@ -170,8 +167,8 @@ export class Archetype {
         components.set(componentType, data === MISSING_COMPONENT ? undefined : data);
       }
 
-      const dontFragmentTuples = this.dontFragmentRelations.getAllForEntity(entity);
-      for (const [componentType, data] of dontFragmentTuples) {
+      const sparseTuples = this.sparseRelations.getAllForEntity(entity);
+      for (const [componentType, data] of sparseTuples) {
         components.set(componentType, data);
       }
 
@@ -183,23 +180,23 @@ export class Archetype {
    * @internal Serialization fast-path.
    *
    * Appends SerializedEntity records directly from the archetype's column storage
-   * (componentData arrays) plus dontFragment relations, avoiding per-entity Map
+   * (componentData arrays) plus sparse relations, avoiding per-entity Map
    * allocation and repeated Array.from(entries()).
    *
    * Component type IDs should be pre-encoded by the caller (once per archetype)
    * and passed in `encodedComponentTypes` (same order and length as this.componentTypes).
    *
    * The provided `encode` function should be the cached variant for best performance
-   * on entity IDs and any dontFragment relation type IDs.
+   * on entity IDs and any sparse relation type IDs.
    *
-   * `dontFragmentByEntity` is an optional pre-fetched map from a bulk
-   * `DontFragmentStore.getAllForEntities` call (further reduces per-entity calls).
+   * `sparseByEntity` is an optional pre-fetched map from a bulk
+   * `SparseStore.getAllForEntities` call (further reduces per-entity calls).
    */
   appendSerializedEntities(
     out: SerializedEntity[],
     encode: (id: EntityId<any>) => SerializedEntityId,
     encodedComponentTypes: SerializedEntityId[],
-    dontFragmentByEntity?: Map<EntityId, Array<[EntityId<any>, any]>>,
+    sparseByEntity?: Map<EntityId, Array<[EntityId<any>, any]>>,
   ): void {
     if (encodedComponentTypes.length !== this.componentTypes.length) {
       throw new Error("encodedComponentTypes length must match archetype componentTypes");
@@ -209,7 +206,7 @@ export class Archetype {
       const entity = this.entities[i]!;
 
       const components: SerializedComponent[] = [];
-      // Regular (non-dontFragment) components from column arrays
+      // Regular (non-sparse) components from column arrays
       for (let c = 0; c < this.componentTypes.length; c++) {
         const data = this.getComponentData(this.componentTypes[c]!)[i];
         components.push({
@@ -218,10 +215,9 @@ export class Archetype {
         });
       }
 
-      // Append any dontFragment relations for this entity (usually small or zero)
-      const dontFragmentTuples =
-        dontFragmentByEntity?.get(entity) ?? this.dontFragmentRelations.getAllForEntity(entity);
-      for (const [componentType, data] of dontFragmentTuples) {
+      // Append any sparse relations for this entity (usually small or zero)
+      const sparseTuples = sparseByEntity?.get(entity) ?? this.sparseRelations.getAllForEntity(entity);
+      for (const [componentType, data] of sparseTuples) {
         components.push({
           type: encode(componentType),
           value: data,
@@ -245,12 +241,12 @@ export class Archetype {
       removedData.set(componentType, this.getComponentData(componentType)[index]);
     }
 
-    // Include dontFragment relations
-    const dontFragmentTuples = this.dontFragmentRelations.getAllForEntity(entityId);
-    for (const [componentType, data] of dontFragmentTuples) {
+    // Include sparse relations
+    const sparseTuples = this.sparseRelations.getAllForEntity(entityId);
+    for (const [componentType, data] of sparseTuples) {
       removedData.set(componentType, data);
     }
-    this.dontFragmentRelations.deleteEntity(entityId);
+    this.sparseRelations.deleteEntity(entityId);
 
     this.entityToIndex.delete(entityId);
 
@@ -314,9 +310,9 @@ export class Archetype {
       }
     }
 
-    // Check dontFragment relations (now uses the efficient per-component path)
+    // Check sparse relations (now uses the efficient per-component path)
     if (componentId !== undefined) {
-      const matches = this.dontFragmentRelations.getRelationsForComponent(entityId, componentId);
+      const matches = this.sparseRelations.getRelationsForComponent(entityId, componentId);
       for (const m of matches) relations.push(m);
     }
 
@@ -332,14 +328,11 @@ export class Archetype {
       return data as T;
     }
 
-    const value = this.dontFragmentRelations.getValue(entityId, componentType);
-    if (
-      value !== undefined ||
-      this.dontFragmentRelations.getAllForEntity(entityId).some(([t]) => t === componentType)
-    ) {
+    const value = this.sparseRelations.getValue(entityId, componentType);
+    if (value !== undefined || this.sparseRelations.getAllForEntity(entityId).some(([t]) => t === componentType)) {
       // Note: the extra check above handles the (rare) case where `undefined` is a legitimate stored value.
       // For the common case we just return whatever getValue gave us.
-      return this.dontFragmentRelations.getValue(entityId, componentType);
+      return this.sparseRelations.getValue(entityId, componentType);
     }
 
     throw new Error(`Component type ${componentType} not found for entity ${entityId}`);
@@ -357,14 +350,14 @@ export class Archetype {
       return { value: data as T };
     }
 
-    const value = this.dontFragmentRelations.getValue(entityId, componentType);
+    const value = this.sparseRelations.getValue(entityId, componentType);
     // We use getAllForEntity only as a presence check when the value itself might be undefined.
     if (value !== undefined) {
       return { value };
     }
-    const all = this.dontFragmentRelations.getAllForEntity(entityId);
+    const all = this.sparseRelations.getAllForEntity(entityId);
     if (all.some(([t]) => t === componentType)) {
-      return { value: this.dontFragmentRelations.getValue(entityId, componentType) };
+      return { value: this.sparseRelations.getValue(entityId, componentType) };
     }
     return undefined;
   }
@@ -382,7 +375,7 @@ export class Archetype {
 
     const detailedType = getDetailedIdType(componentType);
     if (isRelationType(detailedType) && isSparseComponent(detailedType.componentId!)) {
-      this.dontFragmentRelations.setValue(entityId, componentType, data);
+      this.sparseRelations.setValue(entityId, componentType, data);
       return;
     }
 
@@ -444,7 +437,7 @@ export class Archetype {
         entityIndex,
         entityId,
         (type) => this.getComponentData(type),
-        this.dontFragmentRelations,
+        this.sparseRelations,
       ),
     ) as ComponentTuple<T>;
   }
@@ -500,9 +493,9 @@ export class Archetype {
         components.set(componentType, data === MISSING_COMPONENT ? undefined : data);
       }
 
-      // Append dontFragment relations (Y-class path, acceptable cost)
-      const dontFragmentTuples = this.dontFragmentRelations.getAllForEntity(entity);
-      for (const [componentType, data] of dontFragmentTuples) {
+      // Append sparse relations (Y-class path, acceptable cost)
+      const sparseTuples = this.sparseRelations.getAllForEntity(entity);
+      for (const [componentType, data] of sparseTuples) {
         components.set(componentType, data);
       }
 
@@ -519,11 +512,11 @@ export class Archetype {
       }
     }
 
-    // Check dontFragment relations only for entities that actually belong to *this* archetype.
+    // Check sparse relations only for entities that actually belong to *this* archetype.
     // We must not use the global hasAnyForComponent here, otherwise unrelated archetypes
     // can be incorrectly pulled into wildcard queries when any entity in the world has the relation.
     for (const entityId of this.entities) {
-      const rels = this.dontFragmentRelations.getRelationsForComponent(entityId, componentId);
+      const rels = this.sparseRelations.getRelationsForComponent(entityId, componentId);
       if (rels.length > 0) {
         return true;
       }

@@ -10,24 +10,16 @@ type RelationEntry =
   | { type: "multi"; targets: Map<EntityId, { relationType: EntityId<any>; data: any }> };
 
 /**
- * Interface for storing sparse (dontFragment) relation data.
+ * Interface for the sparse side store used by components declared with `sparse: true`
+ * (or the legacy `dontFragment: true` alias).
  *
- * Components declared with `sparse: true` (or the legacy `dontFragment: true`)
- * have their relation values kept in this side store instead of archetype columns.
+ * Relation data for these components lives here instead of in archetype columns,
+ * preventing fragmentation for high-cardinality or frequently-changing relations.
  *
- * Storage is now primarily keyed by relation ComponentId (the "kind" of relation)
- * rather than by entity. This provides O(1) or near-O(1) answers for the hot
- * wildcard-related paths (hasRelationWithComponentId, wildcard materialization
- * during iteration, hook matching, etc.).
- *
- * A lightweight reverse index (entity -> Set of base ComponentIds) is maintained
- * to efficiently support the infrequent "get all sparse data for this entity"
- * operations (removeEntity, dump, getEntity, serialization).
- *
- * The interface no longer leaks internal Map structures. Callers work with
- * semantic operations only.
+ * Storage is primarily keyed by base relation ComponentId for efficient wildcard
+ * and per-component lookups.
  */
-export interface DontFragmentStore {
+export interface SparseStore {
   // High-frequency operations (used by get/set/getOptional and structural changes)
   getValue(entityId: EntityId, relationType: EntityId<any>): any | undefined;
   setValue(entityId: EntityId, relationType: EntityId<any>, data: any): void;
@@ -50,16 +42,16 @@ export interface DontFragmentStore {
 }
 
 /**
- * Production implementation of DontFragmentStore (the backing store for `sparse` relations).
+ * Production implementation of SparseStore.
  *
  * Internal layout (optimized):
  * - byComponent: baseComponentId → (entityId → RelationEntry)
  *   RelationEntry uses a single-value form for the common exclusive case (1 target),
- *   avoiding Map allocation entirely for the vast majority of sparse/dontFragment usage.
+ *   avoiding Map allocation for the vast majority of usage.
  * - entityIndex: entityId → Set<baseComponentId>
  *   Lightweight reverse index.
  */
-export class DontFragmentStoreImpl implements DontFragmentStore {
+export class SparseStoreImpl implements SparseStore {
   /**
    * Primary storage, keyed by the base relation component ID.
    */
@@ -97,7 +89,7 @@ export class DontFragmentStoreImpl implements DontFragmentStore {
   setValue(entityId: EntityId, relationType: EntityId<any>, data: any): void {
     const componentId = getComponentIdFromRelationId(relationType);
     if (componentId === undefined) {
-      throw new Error("setValue called with a non-relation type on DontFragmentStore");
+      throw new Error("setValue called with a non-relation type on SparseStore");
     }
 
     let entities = this.byComponent.get(componentId);

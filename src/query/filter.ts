@@ -37,11 +37,11 @@ export function matchesComponentTypes(archetype: Archetype, componentTypes: Enti
       detailedType.componentId !== undefined &&
       isSparseComponent(detailedType.componentId)
     ) {
-      // For specific dontFragment relations, check if archetype has the wildcard marker
+      // For specific sparse relations, check if archetype has the wildcard marker
       const wildcardMarker = relation(detailedType.componentId, "*");
       return archetype.componentTypeSet.has(wildcardMarker);
     } else {
-      // For regular components and non-dontFragment relations, check direct inclusion
+      // For regular components and non-sparse relations, check direct inclusion
       return archetype.componentTypeSet.has(type);
     }
   });

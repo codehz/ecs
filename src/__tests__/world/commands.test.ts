@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Archetype } from "../../archetype/archetype";
-import { DontFragmentStoreImpl } from "../../archetype/store";
+import { SparseStoreImpl } from "../../archetype/store";
 import { ComponentChangeset } from "../../commands/changeset";
 import { component, createEntityId, relation, type ComponentId, type EntityId } from "../../entity";
 import {
@@ -12,18 +12,18 @@ import {
 } from "../../world/commands";
 import { World } from "../../world/world";
 
-function createDontFragmentStore() {
-  return new DontFragmentStoreImpl();
+function createSparseStore() {
+  return new SparseStoreImpl();
 }
 
 function makeArchetype(componentTypes: EntityId<any>[]): Archetype {
-  return new Archetype(componentTypes, createDontFragmentStore());
+  return new Archetype(componentTypes, createSparseStore());
 }
 
 function makeCtx(): CommandProcessorContext {
-  const store = createDontFragmentStore();
+  const store = createSparseStore();
   return {
-    dontFragmentStore: store,
+    sparseStore: store,
     ensureArchetype: (types) => new Archetype(Array.from(types), store),
   };
 }
@@ -68,7 +68,7 @@ describe("world/commands internal coverage", () => {
 
   describe("removeMatchingRelations + maybeRemoveWildcardMarker (marker retention)", () => {
     it("keeps wildcard marker when removing one of multiple non-exclusive dontFragment relations (archetype path)", () => {
-      const store = createDontFragmentStore();
+      const store = createSparseStore();
       const p1 = createEntityId(2001) as EntityId;
       const p2 = createEntityId(2002) as EntityId;
       const r1 = relation(Tag, p1);
@@ -100,7 +100,7 @@ describe("world/commands internal coverage", () => {
     });
 
     it("keeps wildcard marker when other relation exists only in dontFragmentData for the entity", () => {
-      const store = createDontFragmentStore();
+      const store = createSparseStore();
       const p1 = createEntityId(2001) as EntityId;
       const p2 = createEntityId(2002) as EntityId;
       const r1 = relation(Tag, p1);
@@ -124,7 +124,7 @@ describe("world/commands internal coverage", () => {
     });
 
     it("keeps wildcard marker on exclusive dontFragment flip when remove+add are in same changeset (batch)", () => {
-      const store = createDontFragmentStore();
+      const store = createSparseStore();
       const p1 = createEntityId(3001) as EntityId;
       const p2 = createEntityId(3002) as EntityId;
       const r1 = relation(ExclusiveTag, p1);
@@ -178,7 +178,7 @@ describe("world/commands internal coverage", () => {
 
   describe("applyDontFragmentChanges recording paths (with hooks)", () => {
     it("records removal of dontFragment relation even when stored value is undefined (tag/void case)", () => {
-      const store = createDontFragmentStore();
+      const store = createSparseStore();
       const p = createEntityId(4001) as EntityId;
       const r = relation(Tag, p); // Tag is dontFragment void-style
       const wild = relation(Tag, "*");
@@ -195,7 +195,7 @@ describe("world/commands internal coverage", () => {
       const removedComponents = new Map<EntityId<any>, any>();
 
       const ctx: CommandProcessorContext = {
-        dontFragmentStore: store,
+        sparseStore: store,
         ensureArchetype: (t) => new Archetype(Array.from(t), store),
       };
 
@@ -208,7 +208,7 @@ describe("world/commands internal coverage", () => {
     });
 
     it("records and applies normal dontFragment add/remove with data payloads", () => {
-      const store = createDontFragmentStore();
+      const store = createSparseStore();
       const p = createEntityId(4002) as EntityId;
       const r = relation(Data, p);
       const wild = relation(Data, "*");
@@ -221,7 +221,7 @@ describe("world/commands internal coverage", () => {
       changeset.set(r, { v: 99 });
 
       const ctx: CommandProcessorContext = {
-        dontFragmentStore: store,
+        sparseStore: store,
         ensureArchetype: (t) => new Archetype(Array.from(t), store),
       };
 
@@ -233,7 +233,7 @@ describe("world/commands internal coverage", () => {
 
   describe("applyChangeset archetype move vs in-place dontFragment update", () => {
     it("moves archetype when regular component is added/removed alongside dontFragment changes", () => {
-      const store = createDontFragmentStore();
+      const store = createSparseStore();
       const p = createEntityId(5005) as EntityId;
       const r = relation(Data, p);
       const wild = relation(Data, "*");
@@ -248,7 +248,7 @@ describe("world/commands internal coverage", () => {
       changeset.delete(r); // dontFragment
 
       const ctx: CommandProcessorContext = {
-        dontFragmentStore: store,
+        sparseStore: store,
         ensureArchetype: (t) => new Archetype(Array.from(t), store),
       };
       const entityToArch = new Map([[entity, arch]]);

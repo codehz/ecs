@@ -416,7 +416,7 @@ src/
 │   ├── component-registry.ts # 组件注册表
 │   ├── component-entity-store.ts # 单例组件存储
 │   ├── component-type-utils.ts   # 组件类型工具
-│   ├── dont-fragment-store.ts    # DontFragment 存储
+│   ├── store.ts                  # SparseStore (内部稀疏存储)
 │   ├── entity.ts            # 实体/组件/关系类型导出（聚合）
 │   ├── entity-types.ts      # 实体 ID 类型定义与常量
 │   ├── entity-relation.ts   # 关系 ID 编码/解码

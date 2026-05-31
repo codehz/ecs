@@ -8,7 +8,7 @@ import {
 } from "../entity";
 import { isOptionalEntityId, type ComponentType } from "../types";
 import { MISSING_COMPONENT } from "./archetype";
-import type { DontFragmentStore } from "./store";
+import type { SparseStore } from "./store";
 
 type DetailedIdType = ReturnType<typeof getDetailedIdType>;
 
@@ -67,19 +67,19 @@ export function matchesRelationComponentId(componentType: EntityId<any>, compone
 }
 
 /**
- * Find all relations in dontFragment data that match a component ID.
+ * Find all relations in sparse data that match a component ID.
  *
  * @deprecated Prefer calling `DontFragmentStore.getRelationsForComponent` directly.
  * This helper is kept temporarily for any remaining call sites during the refactor.
  */
 export function findMatchingDontFragmentRelations(
-  dontFragmentData: Map<EntityId<any>, any> | undefined,
+  sparseData: Map<EntityId<any>, any> | undefined,
   componentId: EntityId<any>,
   relations: [EntityId<unknown>, any][] = [],
 ): [EntityId<unknown>, any][] {
-  if (!dontFragmentData) return relations;
+  if (!sparseData) return relations;
 
-  for (const [relType, data] of dontFragmentData) {
+  for (const [relType, data] of sparseData) {
     const relDetailed = getDetailedIdType(relType);
     if (isRelationType(relDetailed) && relDetailed.componentId === componentId) {
       relations.push([relDetailed.targetId, data]);
@@ -109,13 +109,13 @@ export function getWildcardRelationDataSource(
 
 /**
  * Build wildcard relation value from matching relations.
- * Now receives the DontFragmentStore directly for efficient per-component lookups.
+ * Receives the SparseStore directly for efficient per-component lookups.
  */
 export function buildWildcardRelationValue(
   wildcardRelationType: WildcardRelationId<any>,
   matchingRelations: EntityId<any>[] | undefined,
   getDataAtIndex: (relType: EntityId<any>) => any,
-  dontFragmentStore: DontFragmentStore,
+  sparseStore: SparseStore,
   entityId: EntityId,
   optional: boolean,
 ): any {
@@ -129,9 +129,9 @@ export function buildWildcardRelationValue(
     relations.push([targetId, data === MISSING_COMPONENT ? undefined : data]);
   }
 
-  // Add dontFragment relations using the efficient store API (key win for X-class workload)
+  // Add sparse relations using the efficient store API (key win for X-class workload)
   if (targetComponentId !== undefined) {
-    const dfMatches = dontFragmentStore.getRelationsForComponent(entityId, targetComponentId);
+    const dfMatches = sparseStore.getRelationsForComponent(entityId, targetComponentId);
     for (const m of dfMatches) {
       relations.push(m);
     }
@@ -173,7 +173,7 @@ export function buildSingleComponent(
   entityIndex: number,
   entityId: EntityId,
   getComponentData: (type: EntityId<any>) => any[],
-  dontFragmentRelations: DontFragmentStore,
+  sparseRelations: SparseStore,
 ): any {
   const optional = isOptionalEntityId(compType);
   const actualType = optional ? compType.optional : compType;
@@ -183,7 +183,7 @@ export function buildSingleComponent(
       actualType as WildcardRelationId<any>,
       dataSource as EntityId<any>[] | undefined,
       (relType) => getComponentData(relType)[entityIndex],
-      dontFragmentRelations,
+      sparseRelations,
       entityId,
       optional,
     );

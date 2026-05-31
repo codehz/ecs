@@ -1,5 +1,5 @@
 import { Archetype } from "../archetype/archetype";
-import { DontFragmentStoreImpl } from "../archetype/store";
+import { SparseStoreImpl } from "../archetype/store";
 import { CommandBuffer, type Command } from "../commands/buffer";
 import { ComponentChangeset } from "../commands/changeset";
 import { ComponentEntityStore } from "../component/entity-store";
@@ -73,8 +73,8 @@ export class World {
   private entityReferences: EntityReferencesMap = new Map();
   /** Reverse index: entity ID → set of archetypes whose componentTypes include that entity ID */
   private entityToReferencingArchetypes = new Map<EntityId, Set<Archetype>>();
-  /** Sparse (dontFragment) relation storage, shared with all Archetype instances */
-  private readonly dontFragmentStore = new DontFragmentStoreImpl();
+  /** Sparse relation storage (for components created with `sparse: true`), shared with all Archetype instances */
+  private readonly sparseStore = new SparseStoreImpl();
   /** Component entity (singleton) storage */
   private readonly componentEntities = new ComponentEntityStore();
 
@@ -100,7 +100,7 @@ export class World {
   private readonly _removeChangeset = new ComponentChangeset();
   /** Cached command processor context to avoid per-entity object allocation */
   private readonly _commandCtx: CommandProcessorContext = {
-    dontFragmentStore: this.dontFragmentStore,
+    sparseStore: this.sparseStore,
     ensureArchetype: (ct) => this.ensureArchetype(ct),
   };
   /** Cached hooks context to avoid per-entity object allocation */
@@ -463,9 +463,9 @@ export class World {
 
     if (isSparseRelation(componentType)) {
       // Use getValue; presence check via getAllForEntity only if value can legitimately be undefined
-      const val = this.dontFragmentStore.getValue(entityId, componentType);
+      const val = this.sparseStore.getValue(entityId, componentType);
       if (val !== undefined) return true;
-      return this.dontFragmentStore.getAllForEntity(entityId).some(([t]) => t === componentType);
+      return this.sparseStore.getAllForEntity(entityId).some(([t]) => t === componentType);
     }
 
     return false;
@@ -517,8 +517,8 @@ export class World {
       const hasComponent =
         inArchetype ||
         (hasSparse &&
-          (this.dontFragmentStore.getValue(entityId, componentType) !== undefined ||
-            this.dontFragmentStore.getAllForEntity(entityId).some(([t]) => t === componentType)));
+          (this.sparseStore.getValue(entityId, componentType) !== undefined ||
+            this.sparseStore.getAllForEntity(entityId).some(([t]) => t === componentType)));
 
       if (!hasComponent) {
         throw new Error(
@@ -1458,7 +1458,7 @@ export class World {
   }
 
   private createNewArchetype(componentTypes: EntityId<any>[]): Archetype {
-    const newArchetype = new Archetype(componentTypes, this.dontFragmentStore);
+    const newArchetype = new Archetype(componentTypes, this.sparseStore);
     this.archetypes.push(newArchetype);
 
     if (this._debugCollectors.size > 0) {

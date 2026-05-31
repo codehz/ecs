@@ -414,7 +414,7 @@ src/
 │   ├── component-registry.ts # Component registry
 │   ├── component-entity-store.ts # Singleton component storage
 │   ├── component-type-utils.ts   # Component type utilities
-│   ├── dont-fragment-store.ts    # DontFragment storage
+│   ├── store.ts                  # SparseStore (internal sparse storage)
 │   ├── entity.ts            # Entity/component/relation type exports (aggregate)
 │   ├── entity-types.ts      # Entity ID type definitions & constants
 │   ├── entity-relation.ts   # Relation ID encoding/decoding

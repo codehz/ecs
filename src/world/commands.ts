@@ -1,5 +1,5 @@
 import type { Archetype } from "../archetype/archetype";
-import type { DontFragmentStore } from "../archetype/store";
+import type { SparseStore } from "../archetype/store";
 import type { Command } from "../commands/buffer";
 import type { ComponentChangeset } from "../commands/changeset";
 import { normalizeComponentTypes } from "../component/type-utils";
@@ -16,7 +16,7 @@ import {
 } from "../entity";
 
 export interface CommandProcessorContext {
-  dontFragmentStore: DontFragmentStore;
+  sparseStore: SparseStore;
   ensureArchetype: (componentTypes: Iterable<EntityId<any>>) => Archetype;
 }
 
@@ -59,7 +59,7 @@ function processSetCommand(
     // Handle exclusive relations by removing existing relations with the same base component
     handleExclusiveRelation(entityId, currentArchetype, componentId);
 
-    // For dontFragment relations, ensure wildcard marker is in archetype signature
+    // For sparse relations, ensure wildcard marker is in archetype signature
     if (isSparseComponent(componentId)) {
       const wildcardMarker = relation(componentId, "*");
       // Add wildcard marker to changeset if not already in archetype
@@ -111,10 +111,10 @@ export function removeMatchingRelations(
     }
   }
 
-  // Check dontFragment relations stored on entity
-  const dontFragmentData = archetype.getEntityDontFragmentRelations(entityId);
-  if (dontFragmentData) {
-    for (const componentType of dontFragmentData.keys()) {
+  // Check sparse relations stored on entity
+  const sparseData = archetype.getEntitySparseRelations(entityId);
+  if (sparseData) {
+    for (const componentType of sparseData.keys()) {
       if (getComponentIdFromRelationId(componentType) === baseComponentId) {
         changeset.delete(componentType);
       }
@@ -130,7 +130,7 @@ function removeWildcardRelations(
 ): void {
   removeMatchingRelations(entityId, currentArchetype, baseComponentId, changeset);
 
-  // If removing dontFragment relations, also remove the wildcard marker
+  // If removing sparse relations, also remove the wildcard marker
   if (isSparseComponent(baseComponentId)) {
     changeset.delete(relation(baseComponentId, "*"));
   }
@@ -160,9 +160,9 @@ export function maybeRemoveWildcardMarker(
     }
   }
 
-  const dontFragmentData = archetype.getEntityDontFragmentRelations(entityId);
-  if (dontFragmentData) {
-    for (const otherComponentType of dontFragmentData.keys()) {
+  const sparseData = archetype.getEntitySparseRelations(entityId);
+  if (sparseData) {
+    for (const otherComponentType of sparseData.keys()) {
       if (otherComponentType === removedComponentType) continue;
       if (changeset.removes.has(otherComponentType)) continue;
 
@@ -173,7 +173,7 @@ export function maybeRemoveWildcardMarker(
   }
 
   // Also check if this changeset itself is adding another relation of the same kind
-  // (common in exclusive dontFragment flips: remove old target + add new target in one batch)
+  // (common in exclusive sparse flips: remove old target + add new target in one batch)
   for (const addedType of changeset.adds.keys()) {
     if (addedType === removedComponentType) continue;
     if (getComponentIdFromRelationId(addedType) === componentId) {
@@ -189,7 +189,7 @@ function hasEntityComponent(archetype: Archetype, entityId: EntityId, componentT
     return true;
   }
 
-  return archetype.getEntityDontFragmentRelations(entityId)?.has(componentType) ?? false;
+  return archetype.getEntitySparseRelations(entityId)?.has(componentType) ?? false;
 }
 
 function pruneMissingRemovals(changeset: ComponentChangeset, archetype: Archetype, entityId: EntityId): void {
@@ -269,11 +269,11 @@ export function applyChangeset(
     return newArchetype;
   }
 
-  // No archetype move needed: only component payload updates and/or dontFragment relation updates.
+  // No archetype move needed: only component payload updates and/or sparse relation updates.
   if (removedComponents !== null) {
-    applyDontFragmentChanges(ctx.dontFragmentStore, entityId, changeset, removedComponents);
+    applySparseChanges(ctx.sparseStore, entityId, changeset, removedComponents);
   } else {
-    applyDontFragmentChangesNoHooks(ctx.dontFragmentStore, entityId, changeset);
+    applySparseChangesNoHooks(ctx.sparseStore, entityId, changeset);
   }
 
   // Direct update for regular components in archetype
@@ -287,53 +287,40 @@ export function applyChangeset(
   return currentArchetype;
 }
 
-/**
- * No-hooks variant of applyDontFragmentChanges that skips tracking removed component data.
- *
- * Rewritten for the (renamed) DontFragmentStore interface (ComponentId-primary storage)
- * used by `sparse` relations.
- */
-function applyDontFragmentChanges(
-  dontFragmentRelations: DontFragmentStore,
+function applySparseChanges(
+  sparseStore: SparseStore,
   entityId: EntityId,
   changeset: ComponentChangeset,
   removedComponents: Map<EntityId<any>, any>,
 ): void {
   for (const componentType of changeset.removes) {
     if (isSparseRelation(componentType)) {
-      const removedValue = dontFragmentRelations.getValue(entityId, componentType);
+      const removedValue = sparseStore.getValue(entityId, componentType);
       // Record for hooks if we are actually removing something
-      if (
-        removedValue !== undefined ||
-        dontFragmentRelations.getAllForEntity(entityId).some(([t]) => t === componentType)
-      ) {
+      if (removedValue !== undefined || sparseStore.getAllForEntity(entityId).some(([t]) => t === componentType)) {
         removedComponents.set(componentType, removedValue);
       }
-      dontFragmentRelations.deleteValue(entityId, componentType);
+      sparseStore.deleteValue(entityId, componentType);
     }
   }
 
   for (const [componentType, component] of changeset.adds) {
     if (isSparseRelation(componentType)) {
-      dontFragmentRelations.setValue(entityId, componentType, component);
+      sparseStore.setValue(entityId, componentType, component);
     }
   }
 }
 
-function applyDontFragmentChangesNoHooks(
-  dontFragmentRelations: DontFragmentStore,
-  entityId: EntityId,
-  changeset: ComponentChangeset,
-): void {
+function applySparseChangesNoHooks(sparseStore: SparseStore, entityId: EntityId, changeset: ComponentChangeset): void {
   for (const componentType of changeset.removes) {
     if (isSparseRelation(componentType)) {
-      dontFragmentRelations.deleteValue(entityId, componentType);
+      sparseStore.deleteValue(entityId, componentType);
     }
   }
 
   for (const [componentType, component] of changeset.adds) {
     if (isSparseRelation(componentType)) {
-      dontFragmentRelations.setValue(entityId, componentType, component);
+      sparseStore.setValue(entityId, componentType, component);
     }
   }
 }
@@ -342,13 +329,13 @@ export function filterRegularComponentTypes(componentTypes: Iterable<EntityId<an
   const regularTypes: EntityId<any>[] = [];
 
   for (const componentType of componentTypes) {
-    // Keep wildcard markers for dontFragment components (they mark the archetype)
+    // Keep wildcard markers for sparse components (they mark the archetype)
     if (isSparseWildcard(componentType)) {
       regularTypes.push(componentType);
       continue;
     }
 
-    // Skip specific dontFragment relations from archetype signature
+    // Skip specific sparse relations from archetype signature
     if (isSparseRelation(componentType)) {
       continue;
     }

@@ -262,12 +262,12 @@ describe("Comprehensive ECS performance benchmarks", () => {
   });
 
   /**
-   * Benchmark 7: dontFragment relation updates (the existing benchmark scenario)
+   * Benchmark 7: sparse relation updates
    */
-  it("should handle dontFragment exclusive relation flips efficiently", () => {
+  it("should handle exclusive sparse relation flips efficiently", () => {
     const world = new World();
     const Position = component<{ x: number; y: number }>();
-    const ChildOf = component({ dontFragment: true, exclusive: true });
+    const ChildOf = component({ sparse: true, exclusive: true });
 
     const parentA = world.new();
     const parentB = world.new();
@@ -282,7 +282,7 @@ describe("Comprehensive ECS performance benchmarks", () => {
     }
     world.sync();
 
-    const relationFlipAvg = benchmark("4k entities: exclusive dontFragment relation flip + sync", 2, 8, (round) => {
+    const relationFlipAvg = benchmark("4k entities: exclusive sparse relation flip + sync", 2, 8, (round) => {
       const target = round % 2 === 0 ? parentB : parentA;
       for (let i = 0; i < entities.length; i++) {
         world.set(entities[i]!, relation(ChildOf, target));

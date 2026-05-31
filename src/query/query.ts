@@ -33,8 +33,8 @@ export class Query {
   _cacheKey: string | undefined;
   /** Cached wildcard component types for faster entity filtering */
   private wildcardTypes: WildcardRelationId<any>[];
-  /** Cached specific dontFragment relation types that need entity-level filtering */
-  private specificDontFragmentTypes: EntityId<any>[];
+  /** Cached specific sparse relation types that need entity-level filtering */
+  private specificSparseRelationTypes: EntityId<any>[];
 
   /**
    * @internal Queries should be created via {@link World.createQuery}, not instantiated directly.
@@ -48,7 +48,7 @@ export class Query {
       (ct) => getDetailedIdType(ct).type === "wildcard-relation",
     ) as WildcardRelationId<any>[];
     // Pre-compute specific dontFragment relation types that need entity-level filtering
-    this.specificDontFragmentTypes = this.componentTypes.filter((ct) => {
+    this.specificSparseRelationTypes = this.componentTypes.filter((ct) => {
       const detailedType = getDetailedIdType(ct);
       return (
         (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
@@ -87,7 +87,7 @@ export class Query {
     this.ensureNotDisposed();
 
     // Fast path: no wildcard relations and no specific dontFragment relations
-    if (this.wildcardTypes.length === 0 && this.specificDontFragmentTypes.length === 0) {
+    if (this.wildcardTypes.length === 0 && this.specificSparseRelationTypes.length === 0) {
       const result: EntityId[] = [];
       for (const archetype of this.cachedArchetypes) {
         for (const entity of archetype.getEntities()) {
@@ -125,7 +125,7 @@ export class Query {
     }
 
     // Check specific dontFragment relations
-    for (const specificType of this.specificDontFragmentTypes) {
+    for (const specificType of this.specificSparseRelationTypes) {
       const result = archetype.getOptional(entity, specificType);
       if (result === undefined) {
         return false;
