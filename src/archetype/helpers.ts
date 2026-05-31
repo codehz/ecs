@@ -107,7 +107,7 @@ export function buildWildcardRelationValue(
     relations.push([targetId, data === MISSING_COMPONENT ? undefined : data]);
   }
 
-  // Add sparse relations using the efficient store API (key win for X-class workload)
+  // Add sparse relations using the efficient store API (critical for wildcard query performance)
   if (targetComponentId !== undefined) {
     const dfMatches = sparseStore.getRelationsForComponent(entityId, targetComponentId);
     for (const m of dfMatches) {

@@ -3,12 +3,12 @@ import { component, relation, type EntityId } from "../../entity";
 import { World } from "../../world/world";
 
 /**
- * Focused performance tests for the refactored DontFragmentStore.
+ * Focused performance tests for the refactored sparse relation store (SparseStore).
  *
- * These tests specifically exercise the X-class paths that motivated the refactor:
- * - Wildcard queries over dontFragment relations (relation(Comp, "*"))
- * - Frequent exclusive relation flips (the classic ChildOf pattern)
- * - hasRelationWithComponentId / archetype filtering cost
+ * These tests exercise the performance-critical access patterns that motivated the design:
+ * - Wildcard queries over sparse relations (relation(Comp, "*"))
+ * - Frequent exclusive relation changes (the classic ChildOf / hierarchy pattern)
+ * - Archetype filtering via hasRelationWithComponentId
  */
 
 function benchmark(label: string, warmupRounds: number, measuredRounds: number, fn: (round: number) => void): number {

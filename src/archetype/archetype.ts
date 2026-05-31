@@ -493,7 +493,7 @@ export class Archetype {
         components.set(componentType, data === MISSING_COMPONENT ? undefined : data);
       }
 
-      // Append sparse relations (Y-class path, acceptable cost)
+      // Append sparse relations (entity-wide enumeration; acceptable cost for forEach)
       const sparseTuples = this.sparseRelations.getAllForEntity(entity);
       for (const [componentType, data] of sparseTuples) {
         components.set(componentType, data);

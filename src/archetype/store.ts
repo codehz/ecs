@@ -16,20 +16,21 @@ type RelationEntry =
  * Relation data for these components lives here instead of in archetype columns,
  * preventing fragmentation for high-cardinality or frequently-changing relations.
  *
- * Storage is primarily keyed by base relation ComponentId for efficient wildcard
- * and per-component lookups.
+ * Storage is primarily keyed by base relation ComponentId. This enables efficient
+ * per-component lookups required by wildcard queries (relation(Comp, "*")) and
+ * archetype filtering, while still supporting full-entity enumeration when needed.
  */
 export interface SparseStore {
-  // High-frequency operations (used by get/set/getOptional and structural changes)
+  // High-frequency per-(entity, relation) operations (get/set/has/remove, structural changes)
   getValue(entityId: EntityId, relationType: EntityId<any>): any | undefined;
   setValue(entityId: EntityId, relationType: EntityId<any>, data: any): void;
   deleteValue(entityId: EntityId, relationType: EntityId<any>): boolean;
 
-  // Wildcard / filtering hot paths (X-class priority)
+  // Hot paths for wildcard queries and archetype filtering (per-component lookups)
   hasAnyForComponent(componentId: EntityId<any>): boolean;
   getRelationsForComponent(entityId: EntityId, componentId: EntityId<any>): [target: EntityId, data: any][];
 
-  // Low-frequency "get everything for entity" paths (Y-class, acceptable cost)
+  // Entity-wide enumeration paths (used for snapshots, serialization, forEach, and rare presence checks)
   getAllForEntity(entityId: EntityId): Array<[relationType: EntityId<any>, data: any]>;
   deleteEntity(entityId: EntityId): void;
 
@@ -62,7 +63,8 @@ export class SparseStoreImpl implements SparseStore {
 
   /**
    * Reverse index: which base component kinds an entity participates in.
-   * Used only by the infrequent getAllForEntity / deleteEntity paths.
+   * Only required to support getAllForEntity and deleteEntity efficiently.
+   * The primary storage (byComponent) is deliberately not optimized for these operations.
    */
   private entityIndex = new Map<EntityId, Set<EntityId<any>>>();
 
