@@ -239,8 +239,7 @@ describe("Serialization edge cases", () => {
   it("should serialize and deserialize singleton components (covers componentEntities paths)", () => {
     const world = new World();
     const Config = component<{ debug: boolean }>();
-    // Singleton shorthand populates internal component entity
-    world.set(Config, { debug: true });
+    world.singleton(Config).set({ debug: true });
     world.sync();
 
     const snapshot = world.serialize();
@@ -347,7 +346,7 @@ describe("Serialization edge cases", () => {
     it("should ignore componentEntities snapshot entries whose id is not a real component entity (covers continue guard)", () => {
       const world = new World();
       const Config = component<{ debug: boolean }>();
-      world.set(Config, { debug: true });
+      world.singleton(Config).set({ debug: true });
       world.sync();
 
       const snap: any = world.serialize();

@@ -111,15 +111,16 @@ describe("World - Component Management", () => {
     const Inbox = component<string[]>({
       merge: (prev, next) => [...prev, ...next],
     });
+    const inbox = world.singleton(Inbox);
 
-    world.set(Inbox, ["A"]);
-    world.set(Inbox, ["B"]);
+    inbox.set(["A"]);
+    inbox.set(["B"]);
     world.sync();
     expect(world.get(Inbox)).toEqual(["A", "B"]);
 
-    world.remove(Inbox);
-    world.set(Inbox, ["C"]);
-    world.set(Inbox, ["D"]);
+    inbox.remove();
+    inbox.set(["C"]);
+    inbox.set(["D"]);
     world.sync();
     expect(world.get(Inbox)).toEqual(["C", "D"]);
   });

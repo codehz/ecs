@@ -92,7 +92,6 @@ export class World {
   // Command execution (orchestration extracted to CommandExecutor)
   private commandBuffer!: CommandBuffer;
   private commandExecutor!: CommandExecutor;
-  private hasWarnedDeprecatedComponentSetShorthand = false;
 
   constructor(snapshot?: SerializedWorld) {
     // Must create the manager before any code that may invoke ensureArchetype
@@ -281,41 +280,23 @@ export class World {
    * @overload set<T>(entityId: EntityId, componentType: EntityId<T>, component: NoInfer<T>): void
    * Adds or updates a component with data on the entity
    *
-   * @overload set<T>(componentId: ComponentId<T>, component: NoInfer<T>): void
-   * Adds or updates a singleton component (shorthand for set(componentId, componentId, component))
-   *
    * @throws {Error} If the entity does not exist
    * @throws {Error} If the component type is invalid or is a wildcard relation
    *
    * @example
    * world.set(entity, Position, { x: 10, y: 20 });
    * world.set(entity, Marker); // void component
-   * world.set(GlobalConfig, { debug: true }); // singleton component
+   * world.singleton(GlobalConfig).set({ debug: true }); // singleton component
    * world.sync(); // Apply changes
    */
   set(entityId: EntityId, componentType: EntityId<void>): void;
   set<T>(entityId: EntityId, componentType: EntityId<T>, component: NoInfer<T>): void;
-  /**
-   * @deprecated Use `world.singleton(componentId).set(value)` or
-   * `set(componentId, componentId, value)` instead. The 2-argument form is
-   * ambiguous when the first argument is a component id.
-   */
-  set<T>(componentId: ComponentId<T>, component: NoInfer<T>): void;
   set(entityId: EntityId | ComponentId, componentTypeOrComponent?: EntityId | any, maybeComponent?: any): void {
     const {
       entityId: targetEntityId,
       componentType,
       component,
-      usedDeprecatedComponentShorthand,
     } = resolveSetOperation(entityId, componentTypeOrComponent, maybeComponent, (id) => this.exists(id));
-    if (usedDeprecatedComponentShorthand && !this.hasWarnedDeprecatedComponentSetShorthand) {
-      this.hasWarnedDeprecatedComponentSetShorthand = true;
-      console.warn(
-        "[ecs] Deprecated world.set(componentId, value) shorthand detected. " +
-          "Use world.singleton(componentId).set(value) or world.set(componentId, componentId, value) instead. " +
-          "The 2-argument form is ambiguous when the first argument is a component id.",
-      );
-    }
     this.commandBuffer.set(targetEntityId, componentType, component);
   }
 
@@ -371,8 +352,7 @@ export class World {
   /**
    * Returns an explicit handle for a singleton component (component-as-entity).
    *
-   * This is the preferred replacement for the deprecated
-   * `world.set(componentId, value)` shorthand.
+   * This is the preferred API for singleton components.
    *
    * @example
    * const config = world.singleton(GlobalConfig);

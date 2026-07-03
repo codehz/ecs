@@ -223,7 +223,6 @@ bun run examples/inventory-system-relations.ts
 | `exists(entity)`                      | 检查实体是否存在                                                                    |
 | `set(entity, componentId, data?)`     | 添加/更新组件（缓冲，`sync()` 后生效）。对 `void` 组件可不传 data                   |
 | `singleton(componentId)`              | 获取单例组件句柄，推荐用 `world.singleton(Config).set(value)`                       |
-| `set(componentId, data)`              | 已废弃的单例组件简写；改用 `world.singleton(componentId).set(value)`                |
 | `get(entity, componentId?)`           | 获取组件数据。**若组件不存在会抛出异常**，请先用 `has()` 检查或使用 `getOptional()` |
 | `getOptional(entity, componentId?)`   | 安全获取组件，返回 `{ value: T } \| undefined`                                      |
 | `has(entity, componentId?)`           | 检查组件是否存在                                                                    |

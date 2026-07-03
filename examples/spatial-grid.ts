@@ -216,7 +216,7 @@ function main() {
   console.log("=========================================================\n");
 
   // Create singleton SpatialGrid
-  world.set(SpatialGrid, { cells: new Map(), cellSize: 64 });
+  world.singleton(SpatialGrid).set({ cells: new Map(), cellSize: 64 });
   console.log("SpatialGrid singleton created (cellSize=64)");
 
   // Create 1 player near the center

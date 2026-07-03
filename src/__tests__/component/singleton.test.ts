@@ -10,79 +10,37 @@ describe("World - Singleton Component", () => {
   const GlobalConfigId = component<GlobalConfig>();
   const GameStateId = component<GameState>();
 
-  it("should set singleton component using shorthand syntax", () => {
+  it("should set singleton component through the explicit handle", () => {
     const world = new World();
     const config: GlobalConfig = { debug: true, version: "1.0.0" };
+    const singleton = world.singleton(GlobalConfigId);
 
-    // Use singleton syntax: set(componentId, data)
-    world.set(GlobalConfigId, config);
+    singleton.set(config);
     world.sync();
 
-    // Verify it was set on the component entity itself
     expect(world.has(GlobalConfigId)).toBe(true);
     expect(world.get(GlobalConfigId)).toEqual(config);
   });
 
-  it("should warn once when using deprecated singleton shorthand", () => {
+  it("should interpret 2-argument set on a component entity as a void component set", () => {
     const world = new World();
-    const config1: GlobalConfig = { debug: true, version: "1.0.0" };
-    const config2: GlobalConfig = { debug: false, version: "2.0.0" };
-    const warnings: string[] = [];
-    const originalWarn = console.warn;
+    const singleton = world.singleton(GlobalConfigId);
+    const Marker = component<void>();
 
-    console.warn = (...args: unknown[]) => {
-      warnings.push(args.join(" "));
-    };
+    world.set(GlobalConfigId, Marker);
+    world.sync();
 
-    try {
-      world.set(GlobalConfigId, config1);
-      world.set(GlobalConfigId, config2);
-    } finally {
-      console.warn = originalWarn;
-    }
-
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain("Deprecated world.set(componentId, value) shorthand");
-    expect(warnings[0]).toContain("Use world.singleton(componentId).set(value)");
+    expect(world.has(GlobalConfigId, Marker)).toBe(true);
+    expect(singleton.has()).toBe(false);
   });
 
-  it("should not warn for explicit singleton syntax", () => {
+  it("should reject the removed singleton data shorthand at runtime", () => {
     const world = new World();
     const config: GlobalConfig = { debug: true, version: "1.0.0" };
-    const warnings: string[] = [];
-    const originalWarn = console.warn;
 
-    console.warn = (...args: unknown[]) => {
-      warnings.push(args.join(" "));
-    };
-
-    try {
-      world.set(GlobalConfigId, GlobalConfigId, config);
-    } finally {
-      console.warn = originalWarn;
-    }
-
-    expect(warnings).toHaveLength(0);
-  });
-
-  it("should not warn for regular 2-argument entity set calls", () => {
-    const world = new World();
-    const entity = world.new();
-    const Marker = component();
-    const warnings: string[] = [];
-    const originalWarn = console.warn;
-
-    console.warn = (...args: unknown[]) => {
-      warnings.push(args.join(" "));
-    };
-
-    try {
-      world.set(entity, Marker);
-    } finally {
-      console.warn = originalWarn;
-    }
-
-    expect(warnings).toHaveLength(0);
+    expect(() => {
+      world.set(GlobalConfigId as any, config as any);
+    }).toThrow("Invalid component type");
   });
 
   it("should manage singleton data through an explicit handle", () => {
@@ -109,35 +67,25 @@ describe("World - Singleton Component", () => {
     const world = new World();
     const Tag = component<void>();
     const tag = world.singleton(Tag);
-    const warnings: string[] = [];
-    const originalWarn = console.warn;
 
-    console.warn = (...args: unknown[]) => {
-      warnings.push(args.join(" "));
-    };
+    tag.set();
+    world.sync();
 
-    try {
-      tag.set();
-      world.sync();
-    } finally {
-      console.warn = originalWarn;
-    }
-
-    expect(warnings).toHaveLength(0);
     expect(tag.has()).toBe(true);
     expect(world.has(Tag)).toBe(true);
   });
 
-  it("should update singleton component using shorthand syntax", () => {
+  it("should update singleton component through the explicit handle", () => {
     const world = new World();
     const config1: GlobalConfig = { debug: true, version: "1.0.0" };
     const config2: GlobalConfig = { debug: false, version: "2.0.0" };
+    const singleton = world.singleton(GlobalConfigId);
 
-    world.set(GlobalConfigId, config1);
+    singleton.set(config1);
     world.sync();
     expect(world.get(GlobalConfigId)).toEqual(config1);
 
-    world.set(GlobalConfigId, config2);
+    singleton.set(config2);
     world.sync();
     expect(world.get(GlobalConfigId)).toEqual(config2);
   });
@@ -147,15 +95,12 @@ describe("World - Singleton Component", () => {
     const world2 = new World();
     const config: GlobalConfig = { debug: true, version: "1.0.0" };
 
-    // Singleton syntax
-    world1.set(GlobalConfigId, config);
+    world1.singleton(GlobalConfigId).set(config);
     world1.sync();
 
-    // Traditional syntax
     world2.set(GlobalConfigId, GlobalConfigId, config);
     world2.sync();
 
-    // Both should have the same result
     expect(world1.get(GlobalConfigId)).toEqual(world2.get(GlobalConfigId));
   });
 
@@ -164,8 +109,8 @@ describe("World - Singleton Component", () => {
     const config: GlobalConfig = { debug: true, version: "1.0.0" };
     const state: GameState = { score: 100, level: 5 };
 
-    world.set(GlobalConfigId, config);
-    world.set(GameStateId, state);
+    world.singleton(GlobalConfigId).set(config);
+    world.singleton(GameStateId).set(state);
     world.sync();
 
     expect(world.get(GlobalConfigId)).toEqual(config);
@@ -183,19 +128,17 @@ describe("World - Singleton Component", () => {
     }).toThrow("does not exist");
   });
 
-  it("should check singleton component existence using shorthand syntax", () => {
+  it("should check singleton component existence through the explicit handle", () => {
     const world = new World();
     const config: GlobalConfig = { debug: true, version: "1.0.0" };
+    const singleton = world.singleton(GlobalConfigId);
 
-    // Before setting, should return false
-    expect(world.has(GlobalConfigId)).toBe(false);
+    expect(singleton.has()).toBe(false);
 
-    // Set singleton component
-    world.set(GlobalConfigId, config);
+    singleton.set(config);
     world.sync();
 
-    // After setting, should return true
-    expect(world.has(GlobalConfigId)).toBe(true);
+    expect(singleton.has()).toBe(true);
   });
 
   it("should be equivalent to has(comp, comp)", () => {
@@ -203,29 +146,26 @@ describe("World - Singleton Component", () => {
     const world2 = new World();
     const config: GlobalConfig = { debug: true, version: "1.0.0" };
 
-    // Singleton syntax
-    world1.set(GlobalConfigId, config);
+    world1.singleton(GlobalConfigId).set(config);
     world1.sync();
 
-    // Traditional syntax
     world2.set(GlobalConfigId, GlobalConfigId, config);
     world2.sync();
 
-    // Both should have the same result
     expect(world1.has(GlobalConfigId)).toBe(world2.has(GlobalConfigId, GlobalConfigId));
     expect(world1.has(GlobalConfigId)).toBe(true);
   });
 
-  it("should remove singleton component using shorthand syntax", () => {
+  it("should remove singleton component through the explicit handle", () => {
     const world = new World();
     const config: GlobalConfig = { debug: true, version: "1.0.0" };
+    const singleton = world.singleton(GlobalConfigId);
 
-    world.set(GlobalConfigId, config);
+    singleton.set(config);
     world.sync();
     expect(world.has(GlobalConfigId)).toBe(true);
 
-    // Remove using singleton syntax
-    world.remove(GlobalConfigId);
+    singleton.remove();
     world.sync();
     expect(world.has(GlobalConfigId)).toBe(false);
   });
@@ -235,19 +175,16 @@ describe("World - Singleton Component", () => {
     const world2 = new World();
     const config: GlobalConfig = { debug: true, version: "1.0.0" };
 
-    // Set on both worlds
-    world1.set(GlobalConfigId, config);
+    world1.singleton(GlobalConfigId).set(config);
     world1.sync();
     world2.set(GlobalConfigId, GlobalConfigId, config);
     world2.sync();
 
-    // Remove using different syntax
-    world1.remove(GlobalConfigId); // Singleton syntax
-    world2.remove(GlobalConfigId, GlobalConfigId); // Traditional syntax
+    world1.singleton(GlobalConfigId).remove();
+    world2.remove(GlobalConfigId, GlobalConfigId);
     world1.sync();
     world2.sync();
 
-    // Both should have the same result
     expect(world1.has(GlobalConfigId)).toBe(world2.has(GlobalConfigId, GlobalConfigId));
     expect(world1.has(GlobalConfigId)).toBe(false);
   });

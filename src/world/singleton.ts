@@ -11,8 +11,8 @@ export interface SingletonHandleOps<T> {
 /**
  * Explicit handle for a singleton component (component-as-entity).
  *
- * This avoids the ambiguity of the deprecated `world.set(componentId, value)`
- * shorthand while staying concise at the call site.
+ * This provides an explicit and concise API for singleton components without
+ * overloading `world.set()` semantics.
  *
  * @example
  * const config = world.singleton(Config);

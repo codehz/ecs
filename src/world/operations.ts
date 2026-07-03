@@ -9,7 +9,7 @@ import { getDetailedIdType } from "../entity";
  * for assertEntityExists, supplied by the caller).
  *
  * Pure type checks (assert*TypeValid) and the resolve* helpers for set/remove
- * singleton-vs-entity overloads live here.
+ * overloads live here.
  */
 
 /**
@@ -45,47 +45,20 @@ export function assertSetComponentTypeValid(componentType: EntityId): void {
 }
 
 /**
- * Resolve the (entity, componentType, value) for a set() call, handling the
- * singleton component overload (set(componentId, data)) vs normal entity form.
+ * Resolve the (entity, componentType, value) for a set() call.
  */
 export function resolveSetOperation(
   entityId: EntityId | ComponentId,
   componentTypeOrComponent?: EntityId | any,
   maybeComponent?: any,
   exists: (id: EntityId) => boolean = () => true, // default permissive for tests / internal
-): {
-  entityId: EntityId;
-  componentType: EntityId;
-  component: any;
-  usedDeprecatedComponentShorthand: boolean;
-} {
-  // Handle singleton component overload: set(componentId, data)
-  if (maybeComponent === undefined && componentTypeOrComponent !== undefined) {
-    const detailedType = getDetailedIdType(entityId);
-    if (detailedType.type === "component" || detailedType.type === "component-relation") {
-      const componentId = entityId as ComponentId;
-      assertEntityExists(componentId, "Component entity", exists);
-      assertSetComponentTypeValid(componentId);
-      return {
-        entityId: componentId,
-        componentType: componentId,
-        component: componentTypeOrComponent,
-        usedDeprecatedComponentShorthand: detailedType.type === "component",
-      };
-    }
-  }
-
+): { entityId: EntityId; componentType: EntityId; component: any } {
   const targetEntityId = entityId as EntityId;
   const componentType = componentTypeOrComponent as EntityId;
   assertEntityExists(targetEntityId, "Entity", exists);
   assertSetComponentTypeValid(componentType);
 
-  return {
-    entityId: targetEntityId,
-    componentType,
-    component: maybeComponent,
-    usedDeprecatedComponentShorthand: false,
-  };
+  return { entityId: targetEntityId, componentType, component: maybeComponent };
 }
 
 /**
