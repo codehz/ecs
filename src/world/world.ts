@@ -37,9 +37,15 @@ import {
   triggerRemoveHooksForEntityDeletion,
   type HooksContext,
 } from "./hooks";
-import { assertEntityExists, resolveRemoveOperation, resolveSetOperation } from "./operations";
+import {
+  assertEntityExists,
+  assertSetComponentTypeValid,
+  resolveRemoveOperation,
+  resolveSetOperation,
+} from "./operations";
 import { getEntityReferences, type EntityReferencesMap } from "./references";
 import { deserializeWorld, serializeWorld } from "./serialization";
+import { SingletonHandle } from "./singleton";
 
 /**
  * World class for ECS architecture
@@ -290,8 +296,9 @@ export class World {
   set(entityId: EntityId, componentType: EntityId<void>): void;
   set<T>(entityId: EntityId, componentType: EntityId<T>, component: NoInfer<T>): void;
   /**
-   * @deprecated Use `set(componentId, componentId, value)` instead.
-   * The 2-argument form is ambiguous when the first argument is a component id.
+   * @deprecated Use `world.singleton(componentId).set(value)` or
+   * `set(componentId, componentId, value)` instead. The 2-argument form is
+   * ambiguous when the first argument is a component id.
    */
   set<T>(componentId: ComponentId<T>, component: NoInfer<T>): void;
   set(entityId: EntityId | ComponentId, componentTypeOrComponent?: EntityId | any, maybeComponent?: any): void {
@@ -305,7 +312,7 @@ export class World {
       this.hasWarnedDeprecatedComponentSetShorthand = true;
       console.warn(
         "[ecs] Deprecated world.set(componentId, value) shorthand detected. " +
-          "Use world.set(componentId, componentId, value) instead. " +
+          "Use world.singleton(componentId).set(value) or world.set(componentId, componentId, value) instead. " +
           "The 2-argument form is ambiguous when the first argument is a component id.",
       );
     }
@@ -359,6 +366,33 @@ export class World {
    */
   delete(entityId: EntityId): void {
     this.commandBuffer.delete(entityId);
+  }
+
+  /**
+   * Returns an explicit handle for a singleton component (component-as-entity).
+   *
+   * This is the preferred replacement for the deprecated
+   * `world.set(componentId, value)` shorthand.
+   *
+   * @example
+   * const config = world.singleton(GlobalConfig);
+   * config.set({ debug: true });
+   * world.sync();
+   * console.log(config.get());
+   */
+  singleton<T>(componentId: ComponentId<T>): SingletonHandle<T> {
+    assertEntityExists(componentId, "Component entity", (id) => this.exists(id));
+    assertSetComponentTypeValid(componentId);
+
+    return new SingletonHandle(componentId, {
+      has: () => this.componentEntities.hasSingleton(componentId),
+      get: () => this.get(componentId),
+      getOptional: () => this.getOptional(componentId),
+      remove: () => this.commandBuffer.remove(componentId, componentId),
+      set: (value) => {
+        this.commandBuffer.set(componentId, componentId as EntityId<any>, value as any);
+      },
+    });
   }
 
   /**

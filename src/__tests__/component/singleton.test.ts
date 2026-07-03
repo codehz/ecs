@@ -43,7 +43,7 @@ describe("World - Singleton Component", () => {
 
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("Deprecated world.set(componentId, value) shorthand");
-    expect(warnings[0]).toContain("Use world.set(componentId, componentId, value) instead");
+    expect(warnings[0]).toContain("Use world.singleton(componentId).set(value)");
   });
 
   it("should not warn for explicit singleton syntax", () => {
@@ -83,6 +83,49 @@ describe("World - Singleton Component", () => {
     }
 
     expect(warnings).toHaveLength(0);
+  });
+
+  it("should manage singleton data through an explicit handle", () => {
+    const world = new World();
+    const config = world.singleton(GlobalConfigId);
+
+    expect(config.getOptional()).toBeUndefined();
+    expect(config.has()).toBe(false);
+
+    config.set({ debug: true, version: "1.0.0" });
+    world.sync();
+
+    expect(config.has()).toBe(true);
+    expect(config.get()).toEqual({ debug: true, version: "1.0.0" });
+
+    config.remove();
+    world.sync();
+
+    expect(config.has()).toBe(false);
+    expect(config.getOptional()).toBeUndefined();
+  });
+
+  it("should support void singleton components through an explicit handle", () => {
+    const world = new World();
+    const Tag = component<void>();
+    const tag = world.singleton(Tag);
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.join(" "));
+    };
+
+    try {
+      tag.set();
+      world.sync();
+    } finally {
+      console.warn = originalWarn;
+    }
+
+    expect(warnings).toHaveLength(0);
+    expect(tag.has()).toBe(true);
+    expect(world.has(Tag)).toBe(true);
   });
 
   it("should update singleton component using shorthand syntax", () => {

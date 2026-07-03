@@ -32,6 +32,8 @@ export type {
 } from "./storage/serialization";
 export { EntityBuilder } from "./world/builder";
 export type { ComponentDef } from "./world/builder";
+export { SingletonHandle } from "./world/singleton";
+export type { SingletonHandleOps } from "./world/singleton";
 export { World } from "./world/world";
 
 // Query class
