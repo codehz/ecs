@@ -53,7 +53,12 @@ export function resolveSetOperation(
   componentTypeOrComponent?: EntityId | any,
   maybeComponent?: any,
   exists: (id: EntityId) => boolean = () => true, // default permissive for tests / internal
-): { entityId: EntityId; componentType: EntityId; component: any } {
+): {
+  entityId: EntityId;
+  componentType: EntityId;
+  component: any;
+  usedDeprecatedComponentShorthand: boolean;
+} {
   // Handle singleton component overload: set(componentId, data)
   if (maybeComponent === undefined && componentTypeOrComponent !== undefined) {
     const detailedType = getDetailedIdType(entityId);
@@ -61,7 +66,12 @@ export function resolveSetOperation(
       const componentId = entityId as ComponentId;
       assertEntityExists(componentId, "Component entity", exists);
       assertSetComponentTypeValid(componentId);
-      return { entityId: componentId, componentType: componentId, component: componentTypeOrComponent };
+      return {
+        entityId: componentId,
+        componentType: componentId,
+        component: componentTypeOrComponent,
+        usedDeprecatedComponentShorthand: detailedType.type === "component",
+      };
     }
   }
 
@@ -70,7 +80,12 @@ export function resolveSetOperation(
   assertEntityExists(targetEntityId, "Entity", exists);
   assertSetComponentTypeValid(componentType);
 
-  return { entityId: targetEntityId, componentType, component: maybeComponent };
+  return {
+    entityId: targetEntityId,
+    componentType,
+    component: maybeComponent,
+    usedDeprecatedComponentShorthand: false,
+  };
 }
 
 /**

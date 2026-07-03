@@ -23,6 +23,68 @@ describe("World - Singleton Component", () => {
     expect(world.get(GlobalConfigId)).toEqual(config);
   });
 
+  it("should warn once when using deprecated singleton shorthand", () => {
+    const world = new World();
+    const config1: GlobalConfig = { debug: true, version: "1.0.0" };
+    const config2: GlobalConfig = { debug: false, version: "2.0.0" };
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.join(" "));
+    };
+
+    try {
+      world.set(GlobalConfigId, config1);
+      world.set(GlobalConfigId, config2);
+    } finally {
+      console.warn = originalWarn;
+    }
+
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("Deprecated world.set(componentId, value) shorthand");
+    expect(warnings[0]).toContain("Use world.set(componentId, componentId, value) instead");
+  });
+
+  it("should not warn for explicit singleton syntax", () => {
+    const world = new World();
+    const config: GlobalConfig = { debug: true, version: "1.0.0" };
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.join(" "));
+    };
+
+    try {
+      world.set(GlobalConfigId, GlobalConfigId, config);
+    } finally {
+      console.warn = originalWarn;
+    }
+
+    expect(warnings).toHaveLength(0);
+  });
+
+  it("should not warn for regular 2-argument entity set calls", () => {
+    const world = new World();
+    const entity = world.new();
+    const Marker = component();
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.join(" "));
+    };
+
+    try {
+      world.set(entity, Marker);
+    } finally {
+      console.warn = originalWarn;
+    }
+
+    expect(warnings).toHaveLength(0);
+  });
+
   it("should update singleton component using shorthand syntax", () => {
     const world = new World();
     const config1: GlobalConfig = { debug: true, version: "1.0.0" };

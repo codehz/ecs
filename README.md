@@ -222,7 +222,7 @@ bun run examples/inventory-system-relations.ts
 | `spawnMany(count, configure)`         | 批量创建多个实体                                                                    |
 | `exists(entity)`                      | 检查实体是否存在                                                                    |
 | `set(entity, componentId, data?)`     | 添加/更新组件（缓冲，`sync()` 后生效）。对 `void` 组件可不传 data                   |
-| `set(componentId, data)`              | 单例组件简写：`world.set(GlobalConfig, { ... })`                                    |
+| `set(componentId, data)`              | 已废弃的单例组件简写；改用 `world.set(componentId, componentId, data)`              |
 | `get(entity, componentId?)`           | 获取组件数据。**若组件不存在会抛出异常**，请先用 `has()` 检查或使用 `getOptional()` |
 | `getOptional(entity, componentId?)`   | 安全获取组件，返回 `{ value: T } \| undefined`                                      |
 | `has(entity, componentId?)`           | 检查组件是否存在                                                                    |

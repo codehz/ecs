@@ -86,6 +86,7 @@ export class World {
   // Command execution (orchestration extracted to CommandExecutor)
   private commandBuffer!: CommandBuffer;
   private commandExecutor!: CommandExecutor;
+  private hasWarnedDeprecatedComponentSetShorthand = false;
 
   constructor(snapshot?: SerializedWorld) {
     // Must create the manager before any code that may invoke ensureArchetype
@@ -288,13 +289,26 @@ export class World {
    */
   set(entityId: EntityId, componentType: EntityId<void>): void;
   set<T>(entityId: EntityId, componentType: EntityId<T>, component: NoInfer<T>): void;
+  /**
+   * @deprecated Use `set(componentId, componentId, value)` instead.
+   * The 2-argument form is ambiguous when the first argument is a component id.
+   */
   set<T>(componentId: ComponentId<T>, component: NoInfer<T>): void;
   set(entityId: EntityId | ComponentId, componentTypeOrComponent?: EntityId | any, maybeComponent?: any): void {
     const {
       entityId: targetEntityId,
       componentType,
       component,
+      usedDeprecatedComponentShorthand,
     } = resolveSetOperation(entityId, componentTypeOrComponent, maybeComponent, (id) => this.exists(id));
+    if (usedDeprecatedComponentShorthand && !this.hasWarnedDeprecatedComponentSetShorthand) {
+      this.hasWarnedDeprecatedComponentSetShorthand = true;
+      console.warn(
+        "[ecs] Deprecated world.set(componentId, value) shorthand detected. " +
+          "Use world.set(componentId, componentId, value) instead. " +
+          "The 2-argument form is ambiguous when the first argument is a component id.",
+      );
+    }
     this.commandBuffer.set(targetEntityId, componentType, component);
   }
 
