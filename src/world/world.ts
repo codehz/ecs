@@ -273,34 +273,41 @@ export class World {
   }
 
   /**
-   * Adds or updates a component on an entity (or marks void component as present).
+   * Marks a void component as present on an entity.
    * The change is buffered and takes effect after calling `world.sync()`.
-   * If the entity does not exist, throws an error.
    *
-   * @overload set(entityId: EntityId, componentType: EntityId<void>): void
-   * Marks a void component as present on the entity
+   * @throws {Error} If the entity does not exist
+   * @throws {Error} If the component type is invalid or is a wildcard relation
    *
-   * @overload set<T>(componentId: ComponentId<T>, component: Exclude<NoInfer<T>, number>): void
+   * @example
+   * world.set(entity, Marker);
+   * world.sync();
+   */
+  set(entityId: EntityId, componentType: EntityId<void>): void;
+  /**
    * @deprecated Use `world.singleton(componentId).set(value)` or `world.set(componentId, componentId, value)` instead.
-   * Compatibility shorthand for singleton component data when the second argument is not a number
+   * Compatibility shorthand for singleton component data when the second argument is not a number.
    *
-   * @overload set<T>(entityId: EntityId, componentType: EntityId<T>, component: NoInfer<T>): void
-   * Adds or updates a component with data on the entity
+   * @throws {Error} If the component entity does not exist
+   *
+   * @example
+   * world.set(GlobalConfig, { debug: true });
+   * world.sync();
+   */
+  set<T>(componentId: ComponentId<T>, component: Exclude<NoInfer<T>, number>): void;
+  /**
+   * Adds or updates component data on an entity.
+   * The change is buffered and takes effect after calling `world.sync()`.
    *
    * @throws {Error} If the entity does not exist
    * @throws {Error} If the component type is invalid or is a wildcard relation
    *
    * @example
    * world.set(entity, Position, { x: 10, y: 20 });
-   * world.set(entity, Marker); // void component
-   * world.singleton(GlobalConfig).set({ debug: true }); // singleton component
-   * world.set(GlobalConfig, { debug: true }); // deprecated singleton compatibility shorthand
-   * world.sync(); // Apply changes
+   * world.sync();
    */
-  set(entityId: EntityId, componentType: EntityId<void>): void;
-  /** @deprecated Use `world.singleton(componentId).set(value)` or `world.set(componentId, componentId, value)` instead. */
-  set<T>(componentId: ComponentId<T>, component: Exclude<NoInfer<T>, number>): void;
   set<T>(entityId: EntityId, componentType: EntityId<T>, component: NoInfer<T>): void;
+  /** Internal implementation for `set()` overloads. */
   set(entityId: EntityId | ComponentId, componentTypeOrComponent?: EntityId | any, maybeComponent?: any): void {
     const {
       entityId: targetEntityId,
@@ -319,13 +326,6 @@ export class World {
   /**
    * Removes a component from an entity.
    * The change is buffered and takes effect after calling `world.sync()`.
-   * If the entity does not exist, throws an error.
-   *
-   * @overload remove<T>(entityId: EntityId, componentType: EntityId<T>): void
-   * Removes a component from an entity.
-   *
-   * @overload remove<T>(componentId: ComponentId<T>): void
-   * Removes a singleton component (shorthand for remove(componentId, componentId)).
    *
    * @template T - The component data type
    * @param entityId - The entity identifier
@@ -336,11 +336,22 @@ export class World {
    *
    * @example
    * world.remove(entity, Position);
+   * world.sync(); // Apply changes
+   */
+  remove<T>(entityId: EntityId, componentType: EntityId<T>): void;
+  /**
+   * Removes a singleton component (shorthand for remove(componentId, componentId)).
+   * The change is buffered and takes effect after calling `world.sync()`.
+   *
+   * @template T - The component data type
+   *
+   * @throws {Error} If the component entity does not exist
+   *
+   * @example
    * world.remove(GlobalConfig); // Remove singleton component
    * world.sync(); // Apply changes
    */
   remove<T>(componentId: ComponentId<T>): void;
-  remove<T>(entityId: EntityId, componentType: EntityId<T>): void;
   remove<T>(entityId: EntityId | ComponentId, componentType?: EntityId<T>): void {
     const { entityId: targetEntityId, componentType: targetComponentType } = resolveRemoveOperation(
       entityId,
@@ -400,15 +411,8 @@ export class World {
    *
    * Immediately reflects the current state without waiting for `sync()`.
    *
-   * @overload has<T>(entityId: EntityId, componentType: EntityId<T>): boolean
-   * Checks if a specific component type is present on the entity.
-   *
-   * @overload has<T>(componentId: ComponentId<T>): boolean
-   * Shorthand for checking a **singleton component** — a component that is its own
-   * entity (component-as-entity pattern). Equivalent to `has(componentId, componentId)`.
-   *
    * @template T - The component data type
-   * @param entityId - The entity identifier, or a singleton component ID
+   * @param entityId - The entity identifier
    * @param componentType - The component type to check
    * @returns `true` if the entity has the component, `false` otherwise
    *
@@ -417,17 +421,24 @@ export class World {
    * if (world.has(entity, Position)) {
    *   const pos = world.get(entity, Position);
    * }
+   */
+  has<T>(entityId: EntityId, componentType: EntityId<T>): boolean;
+  /**
+   * Checks if a **singleton component** (component-as-entity) is present.
+   * Equivalent to `has(componentId, componentId)`.
    *
-   * // Check a singleton component (component-as-entity)
+   * Immediately reflects the current state without waiting for `sync()`.
+   *
+   * @template T - The component data type
+   * @param componentId - The singleton component ID
+   * @returns `true` if the singleton component exists, `false` otherwise
+   *
+   * @example
    * if (world.has(GlobalConfig)) {
    *   const config = world.get(GlobalConfig);
    * }
-   *
-   * // Use exists() for entity liveness checks
-   * if (world.exists(entity)) { ... }
    */
   has<T>(componentId: ComponentId<T>): boolean;
-  has<T>(entityId: EntityId, componentType: EntityId<T>): boolean;
   has<T>(entityId: EntityId | ComponentId, componentType?: EntityId<T>): boolean {
     // Handle singleton component overload: has(componentId)
     if (componentType === undefined) {
@@ -461,28 +472,45 @@ export class World {
 
   /**
    * Retrieves a component from an entity.
-   * For wildcard relations, returns all relations of that type.
    * Throws an error if the component does not exist; use `has()` to check first or use `getOptional()`.
    *
-   * @overload get<T>(entityId: EntityId<T>): T
-   * When called with only an entity ID, retrieves the entity's primary component.
-   *
-   * @overload get<T>(entityId: EntityId, componentType: WildcardRelationId<T>): [EntityId<unknown>, T][]
-   * For wildcard relations, returns an array of [target entity, component value] pairs.
-   *
-   * @overload get<T>(entityId: EntityId, componentType: EntityId<T>): T
-   * Retrieves a specific component from the entity.
+   * @template T - The component data type
+   * @param entityId - The entity identifier
+   * @param componentType - The component type to retrieve
    *
    * @throws {Error} If the entity does not exist
    * @throws {Error} If the component does not exist on the entity
    *
    * @example
-   * const position = world.get(entity, Position); // Throws if no Position
-   * const relations = world.get(entity, relation(Parent, "*")); // Wildcard relation
+   * const position = world.get(entity, Position);
+   */
+  get<T>(entityId: EntityId, componentType: EntityId<T>): T;
+  /**
+   * Retrieves all relations of a given wildcard type for an entity.
+   * Returns an array of [target entity, component value] pairs.
+   *
+   * @template T - The component data type
+   * @param entityId - The entity identifier
+   * @param componentType - The wildcard relation type
+   * @returns Array of [target entity, component value] pairs
+   *
+   * @throws {Error} If the entity does not exist
+   *
+   * @example
+   * const relations = world.get(entity, relation(Parent, "*"));
+   */
+  get<T>(entityId: EntityId, componentType: WildcardRelationId<T>): [EntityId<unknown>, T][];
+  /**
+   * Retrieves the entity's primary component when called with only an entity ID.
+   *
+   * @template T - The component data type
+   * @param entityId - The entity identifier
+   * @returns The component value
+   *
+   * @throws {Error} If the entity does not exist
+   * @throws {Error} If the component does not exist on the entity
    */
   get<T>(entityId: EntityId<T>): T;
-  get<T>(entityId: EntityId, componentType: WildcardRelationId<T>): [EntityId<unknown>, T][];
-  get<T>(entityId: EntityId, componentType: EntityId<T>): T;
   get<T>(
     entityId: EntityId,
     componentType: EntityId<T> | WildcardRelationId<T> = entityId as EntityId<T>,
@@ -521,17 +549,11 @@ export class World {
   /**
    * Safely retrieves a component from an entity without throwing an error.
    * Returns `undefined` if the component does not exist.
-   * For wildcard relations, returns `undefined` if there are no relations.
    *
    * @template T - The component data type
-   * @overload getOptional<T>(entityId: EntityId<T>): { value: T } | undefined
-   * Retrieves the entity's primary component safely.
-   *
-   * @overload getOptional<T>(entityId: EntityId, componentType: WildcardRelationId<T>): { value: [EntityId<unknown>, T][] } | undefined
-   * Retrieves all matching relation values safely.
-   *
-   * @overload getOptional<T>(entityId: EntityId, componentType: EntityId<T>): { value: T } | undefined
-   * Retrieves a specific component safely.
+   * @param entityId - The entity identifier
+   * @param componentType - The component type to retrieve
+   * @returns The component value wrapped in `{ value }`, or `undefined` if absent
    *
    * @throws {Error} If the entity does not exist
    *
@@ -541,12 +563,33 @@ export class World {
    *   console.log(position.value.x);
    * }
    */
-  getOptional<T>(entityId: EntityId<T>): { value: T } | undefined;
+  getOptional<T>(entityId: EntityId, componentType: EntityId<T>): { value: T } | undefined;
+  /**
+   * Safely retrieves all matching relation values for a wildcard relation type.
+   * Returns `undefined` if there are no relations.
+   *
+   * @template T - The component data type
+   * @param entityId - The entity identifier
+   * @param componentType - The wildcard relation type
+   * @returns Array of [target, value] pairs wrapped in `{ value }`, or `undefined` if none
+   *
+   * @throws {Error} If the entity does not exist
+   */
   getOptional<T>(
     entityId: EntityId,
     componentType: WildcardRelationId<T>,
   ): { value: [EntityId<unknown>, T][] } | undefined;
-  getOptional<T>(entityId: EntityId, componentType: EntityId<T>): { value: T } | undefined;
+  /**
+   * Safely retrieves the entity's primary component without throwing an error.
+   * Returns `undefined` if the component does not exist.
+   *
+   * @template T - The component data type
+   * @param entityId - The entity identifier
+   * @returns The component value wrapped in `{ value }`, or `undefined` if absent
+   *
+   * @throws {Error} If the entity does not exist
+   */
+  getOptional<T>(entityId: EntityId<T>): { value: T } | undefined;
   getOptional<T>(
     entityId: EntityId,
     componentType: EntityId<T> | WildcardRelationId<T> = entityId as EntityId<T>,
@@ -786,21 +829,15 @@ export class World {
 
   /**
    * Registers a lifecycle hook that responds to component changes.
-   * The hook callback is invoked when components matching the specified types are added, updated, or removed.
-   * @overload hook<const T extends readonly ComponentType<any>[]>(
-   *   componentTypes: T,
-   *   hook: LifecycleHook<T> | LifecycleCallback<T>,
-   *   filter?: QueryFilter,
-   * ): () => void
-   * Registers a hook for multiple component types.
-   * The hook is triggered when entities enter/exit the matching set.
+   * The hook callback is invoked when components matching the specified types
+   * are added, updated, or removed.
    *
    * @param componentTypes - Component types that define the matching entity set
    * @param hook - Either a hook object with on_init/on_set/on_remove handlers, or a callback function
    * @param filter - Optional query-style filter applied to the hook match set
    * @returns A function that unsubscribes the hook when called
    *
-   * @throws {Error} If no required components are specified in array overload
+   * @throws {Error} If no required components are specified
    *
    * @example
    * const unsubscribe = world.hook([Position, Velocity], {
@@ -1085,32 +1122,30 @@ export class World {
 
   /**
    * Queries entities with specific components.
+   * Returns an array of entity IDs that have all specified components.
    * For simpler use cases, prefer using `createQuery()` with `forEach()` which is cached and more efficient.
    *
-   * @overload query(componentTypes: EntityId<any>[]): EntityId[]
-   * Returns an array of entity IDs that have all specified components.
-   *
-   * @overload query<const T extends readonly EntityId<any>[]>(
-   *   componentTypes: T,
-   *   includeComponents: true,
-   * ): Array<{ entity: EntityId; components: ComponentTuple<T> }>
-   * Returns entities along with their component data.
-   *
    * @param componentTypes - Array of component types to query
-   * @param includeComponents - If true, includes component data in results
-   * @returns Array of entity IDs or objects with entities and components
+   * @returns Array of entity IDs matching the query
    *
    * @example
-   * // Just entity IDs
    * const entities = world.query([Position, Velocity]);
+   */
+  query(componentTypes: EntityId<any>[]): EntityId[];
+  /**
+   * Queries entities with specific components and returns their component data.
    *
-   * // With components
+   * @template T - The tuple of component types
+   * @param componentTypes - Array of component types to query
+   * @param includeComponents - Must be `true` to include component data
+   * @returns Array of objects with entity and component data
+   *
+   * @example
    * const results = world.query([Position, Velocity], true);
    * results.forEach(({ entity, components: [pos, vel] }) => {
    *   pos.x += vel.x;
    * });
    */
-  query(componentTypes: EntityId<any>[]): EntityId[];
   query<const T extends readonly EntityId<any>[]>(
     componentTypes: T,
     includeComponents: true,
