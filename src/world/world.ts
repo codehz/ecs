@@ -52,6 +52,9 @@ import { SingletonHandle } from "./singleton";
  * Manages entities and components
  */
 export class World {
+  private static readonly DEPRECATED_SINGLETON_SET_SHORTHAND_WARNING =
+    "world.set(componentId, value) for singleton components is deprecated; use world.singleton(componentId).set(value) or world.set(componentId, componentId, value) instead.";
+
   // Core data structures for entity and archetype management
   private entityIdManager = new EntityIdManager();
   private entityReferences: EntityReferencesMap = new Map();
@@ -277,6 +280,10 @@ export class World {
    * @overload set(entityId: EntityId, componentType: EntityId<void>): void
    * Marks a void component as present on the entity
    *
+   * @overload set<T>(componentId: ComponentId<T>, component: Exclude<NoInfer<T>, number>): void
+   * @deprecated Use `world.singleton(componentId).set(value)` or `world.set(componentId, componentId, value)` instead.
+   * Compatibility shorthand for singleton component data when the second argument is not a number
+   *
    * @overload set<T>(entityId: EntityId, componentType: EntityId<T>, component: NoInfer<T>): void
    * Adds or updates a component with data on the entity
    *
@@ -287,16 +294,25 @@ export class World {
    * world.set(entity, Position, { x: 10, y: 20 });
    * world.set(entity, Marker); // void component
    * world.singleton(GlobalConfig).set({ debug: true }); // singleton component
+   * world.set(GlobalConfig, { debug: true }); // deprecated singleton compatibility shorthand
    * world.sync(); // Apply changes
    */
   set(entityId: EntityId, componentType: EntityId<void>): void;
+  /** @deprecated Use `world.singleton(componentId).set(value)` or `world.set(componentId, componentId, value)` instead. */
+  set<T>(componentId: ComponentId<T>, component: Exclude<NoInfer<T>, number>): void;
   set<T>(entityId: EntityId, componentType: EntityId<T>, component: NoInfer<T>): void;
   set(entityId: EntityId | ComponentId, componentTypeOrComponent?: EntityId | any, maybeComponent?: any): void {
     const {
       entityId: targetEntityId,
       componentType,
       component,
-    } = resolveSetOperation(entityId, componentTypeOrComponent, maybeComponent, (id) => this.exists(id));
+      deprecatedSingletonShorthand,
+    } = resolveSetOperation(entityId, componentTypeOrComponent, maybeComponent, arguments.length, (id) =>
+      this.exists(id),
+    );
+    if (deprecatedSingletonShorthand) {
+      console.warn(World.DEPRECATED_SINGLETON_SET_SHORTHAND_WARNING);
+    }
     this.commandBuffer.set(targetEntityId, componentType, component);
   }
 

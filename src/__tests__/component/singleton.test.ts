@@ -3,6 +3,8 @@ import { ComponentEntityStore } from "../../component/entity-store";
 import { component, createEntityId, relation, type EntityId } from "../../entity";
 import { World } from "../../world/world";
 
+function expectType<T>(_value: T): void {}
+
 describe("World - Singleton Component", () => {
   type GlobalConfig = { debug: boolean; version: string };
   type GameState = { score: number; level: number };
@@ -26,21 +28,64 @@ describe("World - Singleton Component", () => {
     const world = new World();
     const singleton = world.singleton(GlobalConfigId);
     const Marker = component<void>();
+    const originalWarn = console.warn;
+    const warnings: string[] = [];
 
-    world.set(GlobalConfigId, Marker);
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.join(" "));
+    };
+
+    try {
+      world.set(GlobalConfigId, Marker);
+    } finally {
+      console.warn = originalWarn;
+    }
+
     world.sync();
 
     expect(world.has(GlobalConfigId, Marker)).toBe(true);
     expect(singleton.has()).toBe(false);
+    expect(warnings).toHaveLength(0);
   });
 
-  it("should reject the removed singleton data shorthand at runtime", () => {
+  it("should support the deprecated singleton data shorthand for non-number values", () => {
     const world = new World();
     const config: GlobalConfig = { debug: true, version: "1.0.0" };
+    const originalWarn = console.warn;
+    const warnings: string[] = [];
 
-    expect(() => {
-      world.set(GlobalConfigId as any, config as any);
-    }).toThrow("Invalid component type");
+    if (false) {
+      expectType<void>(world.set(GlobalConfigId, config));
+    }
+
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.join(" "));
+    };
+
+    try {
+      world.set(GlobalConfigId, config);
+    } finally {
+      console.warn = originalWarn;
+    }
+
+    world.sync();
+
+    expect(world.get(GlobalConfigId)).toEqual(config);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("deprecated");
+    expect(warnings[0]).toContain("world.singleton(componentId).set(value)");
+  });
+
+  it("should not expose the deprecated shorthand for numeric singleton types at the type level", () => {
+    const world = new World();
+    const Score = component<number>();
+
+    if (false) {
+      // @ts-expect-error Numeric singleton shorthand is intentionally unsupported.
+      expectType<void>(world.set(Score, 123));
+    }
+
+    expect(true).toBe(true);
   });
 
   it("should manage singleton data through an explicit handle", () => {

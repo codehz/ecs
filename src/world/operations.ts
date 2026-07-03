@@ -1,5 +1,5 @@
 import type { ComponentId, EntityId } from "../entity";
-import { getDetailedIdType } from "../entity";
+import { getDetailedIdType, isComponentId } from "../entity";
 
 /**
  * Validation and overload-resolution helpers extracted from World.
@@ -51,14 +51,26 @@ export function resolveSetOperation(
   entityId: EntityId | ComponentId,
   componentTypeOrComponent?: EntityId | any,
   maybeComponent?: any,
+  argCount = 3,
   exists: (id: EntityId) => boolean = () => true, // default permissive for tests / internal
-): { entityId: EntityId; componentType: EntityId; component: any } {
+): { entityId: EntityId; componentType: EntityId; component: any; deprecatedSingletonShorthand: boolean } {
   const targetEntityId = entityId as EntityId;
+
+  if (argCount === 2 && isComponentId(targetEntityId) && typeof componentTypeOrComponent !== "number") {
+    assertEntityExists(targetEntityId, "Component entity", exists);
+    return {
+      entityId: targetEntityId,
+      componentType: targetEntityId,
+      component: componentTypeOrComponent,
+      deprecatedSingletonShorthand: true,
+    };
+  }
+
   const componentType = componentTypeOrComponent as EntityId;
   assertEntityExists(targetEntityId, "Entity", exists);
   assertSetComponentTypeValid(componentType);
 
-  return { entityId: targetEntityId, componentType, component: maybeComponent };
+  return { entityId: targetEntityId, componentType, component: maybeComponent, deprecatedSingletonShorthand: false };
 }
 
 /**
