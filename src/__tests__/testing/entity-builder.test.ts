@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "bun:test";
+
 import { component, relation, type ComponentId } from "../../entity";
 import { EntityBuilder } from "../../testing/index";
 import { World } from "../../world/world";

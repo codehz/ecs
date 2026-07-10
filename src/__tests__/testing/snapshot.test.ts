@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "bun:test";
+
 import { component, type ComponentId } from "../../entity";
 import { Snapshot, WorldFixture, type WorldSnapshot } from "../../testing/index";
 

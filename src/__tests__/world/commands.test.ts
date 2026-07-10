@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+
 import { Archetype } from "../../archetype/archetype";
 import { SparseStoreImpl } from "../../archetype/store";
 import { ComponentChangeset } from "../../commands/changeset";

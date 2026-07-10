@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+
 import { component, type EntityId } from "../../entity";
 import type { SyncDebugStats } from "../../types";
 import { World } from "../../world/world";

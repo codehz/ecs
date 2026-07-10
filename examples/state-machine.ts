@@ -1,4 +1,5 @@
 import { pipeline } from "@codehz/pipeline";
+
 import { World, component, type Query } from "../src";
 
 // ── Component Type Definitions ───────────────────────────────────────────────

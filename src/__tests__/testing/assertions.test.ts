@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "bun:test";
+
 import { component, type ComponentId } from "../../entity";
 import { AssertionError, Assertions, WorldFixture } from "../../testing/index";
 

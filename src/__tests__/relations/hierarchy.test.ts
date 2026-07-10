@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+
 import { World, component, relation, type EntityId } from "../../index";
 import type { SyncDebugStats } from "../../types";
 

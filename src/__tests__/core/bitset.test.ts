@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+
 import { BitSet } from "../../utils/bit-set";
 
 describe("BitSet word boundary tests", () => {

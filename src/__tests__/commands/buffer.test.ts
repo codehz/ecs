@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+
 import { CommandBuffer, type Command } from "../../commands/buffer";
 import type { EntityId } from "../../entity";
 

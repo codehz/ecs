@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+
 import { ComponentIdAllocator } from "../../entity/manager";
 import { COMPONENT_ID_MAX, createComponentId } from "../../entity/types";
 

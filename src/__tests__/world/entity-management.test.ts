@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+
 import { component, createEntityId, relation } from "../../entity";
 import { World } from "../../world/world";
 

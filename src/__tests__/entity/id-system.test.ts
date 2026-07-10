@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+
 import type { ComponentId, EntityId } from "../../entity";
 import {
   COMPONENT_ID_MAX,

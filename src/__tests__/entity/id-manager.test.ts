@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+
 import { EntityIdManager } from "../../entity/manager";
 import type { EntityId } from "../../testing";
 

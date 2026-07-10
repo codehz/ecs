@@ -1,4 +1,5 @@
 import { pipeline } from "@codehz/pipeline";
+
 import { World, component, relation, type Query } from "../src";
 
 // Define component types
