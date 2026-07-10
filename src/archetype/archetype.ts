@@ -195,8 +195,9 @@ export class Archetype {
   appendSerializedEntities(
     out: SerializedEntity[],
     encode: (id: EntityId<any>) => SerializedEntityId,
-    encodedComponentTypes: SerializedEntityId[],
+    encodedComponentTypes: (SerializedEntityId | null)[],
     sparseByEntity?: Map<EntityId, Array<[EntityId<any>, any]>>,
+    shouldSkip?: (componentType: EntityId<any>) => boolean,
   ): void {
     if (encodedComponentTypes.length !== this.componentTypes.length) {
       throw new Error("encodedComponentTypes length must match archetype componentTypes");
@@ -208,9 +209,12 @@ export class Archetype {
       const components: SerializedComponent[] = [];
       // Regular (non-sparse) components from column arrays
       for (let c = 0; c < this.componentTypes.length; c++) {
+        // null marker: component type is skipSerialize — omit from snapshot
+        const encodedType = encodedComponentTypes[c];
+        if (encodedType === null) continue;
         const data = this.getComponentData(this.componentTypes[c]!)[i];
         components.push({
-          type: encodedComponentTypes[c]!,
+          type: encodedType,
           value: data === MISSING_COMPONENT ? undefined : data,
         });
       }
@@ -218,6 +222,7 @@ export class Archetype {
       // Append any sparse relations for this entity (usually small or zero)
       const sparseTuples = sparseByEntity?.get(entity) ?? this.sparseRelations.getAllForEntity(entity);
       for (const [componentType, data] of sparseTuples) {
+        if (shouldSkip?.(componentType)) continue;
         components.push({
           type: encode(componentType),
           value: data,

@@ -60,7 +60,9 @@ export {
   isExclusiveComponent,
   isExclusiveRelation,
   isExclusiveWildcard,
+  isSkipSerializeComponent,
   isSparseComponent,
   isSparseRelation,
   isSparseWildcard,
+  shouldSkipSerialize,
 } from "../component/registry";

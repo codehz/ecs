@@ -50,7 +50,9 @@ export {
   isSparseComponent as isDontFragmentComponent,
   isSparseRelation as isDontFragmentRelation,
   isSparseWildcard as isDontFragmentWildcard,
+  isSkipSerializeComponent,
   isSparseComponent,
   isSparseRelation,
   isSparseWildcard,
+  shouldSkipSerialize,
 } from "./component/registry";

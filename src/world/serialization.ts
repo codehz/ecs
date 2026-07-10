@@ -1,17 +1,22 @@
 import { MISSING_COMPONENT, type Archetype } from "../archetype/archetype";
 import type { ComponentEntityStore } from "../component/entity-store";
+import { shouldSkipSerialize } from "../component/registry";
 import { getDetailedIdType, type EntityId, type EntityIdManager } from "../entity";
 import {
   decodeSerializedId,
   encodeEntityIdCached,
   type SerializedComponent,
   type SerializedEntity,
+  type SerializedEntityId,
   type SerializedWorld,
 } from "../storage/serialization";
 import { trackEntityReference, type EntityReferencesMap } from "./references";
 
 /**
  * Serializes the full world state to a plain JS object suitable for JSON encoding.
+ *
+ * Components registered with {@link ComponentOptions.skipSerialize} (and relations
+ * whose base component has that flag) are omitted from the snapshot.
  */
 export function serializeWorld(
   archetypes: Archetype[],
@@ -24,12 +29,21 @@ export function serializeWorld(
   const entities: SerializedEntity[] = [];
 
   for (const archetype of archetypes) {
-    // Pre-encode this archetype's component type IDs exactly once (big win when many entities share the archetype)
-    const encodedComponentTypes = archetype.componentTypes.map((t) => encodeEntityIdCached(t, idCache));
+    // Pre-encode this archetype's component type IDs exactly once (big win when many entities share the archetype).
+    // null = skipSerialize component — appendSerializedEntities will omit those columns.
+    const encodedComponentTypes: (SerializedEntityId | null)[] = archetype.componentTypes.map((t) =>
+      shouldSkipSerialize(t) ? null : encodeEntityIdCached(t, idCache),
+    );
 
     // The append method will use the bulk helper internally when a pre-fetched map is supplied.
     // For now we rely on the per-entity fallback inside the archetype (already much cheaper than old dump path).
-    archetype.appendSerializedEntities(entities, (id) => encodeEntityIdCached(id, idCache), encodedComponentTypes);
+    archetype.appendSerializedEntities(
+      entities,
+      (id) => encodeEntityIdCached(id, idCache),
+      encodedComponentTypes,
+      undefined,
+      shouldSkipSerialize,
+    );
   }
 
   const componentEntitiesArr: SerializedEntity[] = [];
@@ -55,6 +69,7 @@ function serializeComponentsFromMap(
 ): SerializedComponent[] {
   const result: SerializedComponent[] = [];
   for (const [rawType, value] of components) {
+    if (shouldSkipSerialize(rawType)) continue;
     result.push({
       type: encodeEntityIdCached(rawType, idCache),
       value: value === MISSING_COMPONENT ? undefined : value,

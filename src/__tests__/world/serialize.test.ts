@@ -97,4 +97,32 @@ describe("World serialization", () => {
     expect(restored.has(e, relAB)).toBe(true);
     expect(restored.get(e, relAB)).toBe("linked-via-comp");
   });
+
+  it("should omit skipSerialize components from snapshots", () => {
+    const Position = component<{ x: number; y: number }>({ name: "SkipSerPosition" });
+    const Scratch = component<{ hits: number }>({ name: "SkipSerScratch", skipSerialize: true });
+    const EphemeralRel = component({ name: "SkipSerEphemeralRel", skipSerialize: true, sparse: true });
+
+    const world = new World();
+    const e = world.new();
+    const target = world.new();
+    world.set(e, Position, { x: 1, y: 2 });
+    world.set(e, Scratch, { hits: 7 });
+    world.set(e, relation(EphemeralRel, target));
+    world.sync();
+
+    expect(world.has(e, Scratch)).toBe(true);
+    expect(world.has(e, relation(EphemeralRel, target))).toBe(true);
+
+    const snapshot = world.serialize();
+    const snapshotText = JSON.stringify(snapshot);
+    expect(snapshotText).toContain("SkipSerPosition");
+    expect(snapshotText).not.toContain("SkipSerScratch");
+    expect(snapshotText).not.toContain("SkipSerEphemeralRel");
+
+    const restored = new World(snapshot);
+    expect(restored.get(e, Position)).toEqual({ x: 1, y: 2 });
+    expect(restored.has(e, Scratch)).toBe(false);
+    expect(restored.has(e, relation(EphemeralRel, target))).toBe(false);
+  });
 });

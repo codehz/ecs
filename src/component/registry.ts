@@ -267,6 +267,40 @@ export interface ComponentOptions<T = any> {
    */
   dontFragment?: boolean;
   /**
+   * If `true`, this component (and relations whose base component is this type)
+   * is **omitted** from `world.serialize()` snapshots.
+   *
+   * Use for ephemeral / derived / session-only data that must not appear in save
+   * games or network dumps (e.g. per-frame scratch buffers, debug overlays,
+   * cached pathfinding results, input state).
+   *
+   * ## Behavior
+   *
+   * - During serialization, entities that only had skip-serialize components still
+   *   appear in the snapshot (entity id + remaining components), but those
+   *   component entries are not written.
+   * - Applies to plain components and to relations whose **base** component has
+   *   `skipSerialize: true` (including sparse relation side-store entries).
+   * - Does **not** affect runtime storage, queries, hooks, or `world.sync()`.
+   * - On deserialize, skipped components simply are not present (same as if they
+   *   were never set). Recompute or re-attach them after restore if needed.
+   *
+   * @example
+   * ```ts
+   * // Runtime-only scratch; never written into save files
+   * const PathCache = component<{ nodes: number[] }>({
+   *   name: "PathCache",
+   *   skipSerialize: true,
+   * });
+   *
+   * world.set(unit, PathCache, { nodes: [1, 2, 3] });
+   * world.sync();
+   * const snapshot = world.serialize();
+   * // snapshot entities have no PathCache entries
+   * ```
+   */
+  skipSerialize?: boolean;
+  /**
    * Custom merge behavior for repeated `set()` of the same component type on the
    * same entity within a single sync batch.
    *
@@ -335,6 +369,7 @@ const componentNames: (string | undefined)[] = new Array(COMPONENT_ID_MAX + 1);
 const exclusiveFlags = new BitSet(COMPONENT_ID_MAX + 1);
 const cascadeDeleteFlags = new BitSet(COMPONENT_ID_MAX + 1);
 const sparseFlags = new BitSet(COMPONENT_ID_MAX + 1);
+const skipSerializeFlags = new BitSet(COMPONENT_ID_MAX + 1);
 const componentMerges: (ComponentMerge<any> | undefined)[] = new Array(COMPONENT_ID_MAX + 1);
 
 /**
@@ -382,6 +417,7 @@ export function component<T = void>(nameOrOptions?: string | ComponentOptions<T>
     if (options.cascadeDelete) cascadeDeleteFlags.set(id);
     // Support both `sparse` (preferred) and the legacy `dontFragment` alias for BC
     if (options.sparse || options.dontFragment) sparseFlags.set(id);
+    if (options.skipSerialize) skipSerializeFlags.set(id);
     if (options.merge) componentMerges[id] = options.merge;
   }
 
@@ -418,6 +454,7 @@ export function getComponentOptions<T = any>(id: ComponentId<T>): ComponentOptio
   const hasExclusive = exclusiveFlags.has(id);
   const hasCascadeDelete = cascadeDeleteFlags.has(id);
   const hasSparse = sparseFlags.has(id);
+  const hasSkipSerialize = skipSerializeFlags.has(id);
   return {
     name: hasName ? componentNames[id] : undefined,
     exclusive: hasExclusive ? true : undefined,
@@ -425,6 +462,7 @@ export function getComponentOptions<T = any>(id: ComponentId<T>): ComponentOptio
     sparse: hasSparse ? true : undefined,
     // For full backward compatibility with code that inspects options.dontFragment
     dontFragment: hasSparse ? true : undefined,
+    skipSerialize: hasSkipSerialize ? true : undefined,
     merge: componentMerges[id] as ComponentMerge<T> | undefined,
   };
 }
@@ -515,6 +553,40 @@ export function isCascadeDeleteComponent(id: ComponentId<any>): boolean {
  */
 export function isSparseComponent(id: ComponentId<any>): boolean {
   return sparseFlags.has(id);
+}
+
+/**
+ * Check if a component was created with `skipSerialize: true`.
+ *
+ * When enabled, `world.serialize()` omits this component (and relations whose
+ * base component is this type) from the snapshot.
+ *
+ * @param id - The component ID to check. Must be a plain component ID (1–1023).
+ * @returns `true` if the component was created with `skipSerialize: true`.
+ *
+ * @see {@link ComponentOptions.skipSerialize}
+ * @see {@link shouldSkipSerialize} for plain components and relation IDs.
+ */
+export function isSkipSerializeComponent(id: ComponentId<any>): boolean {
+  return skipSerializeFlags.has(id);
+}
+
+/**
+ * Whether a component or relation type should be omitted from serialization.
+ *
+ * Resolves relation wrappers to their base component and checks the
+ * `skipSerialize` flag. Plain entity IDs (non-component, non-relation) return
+ * `false`.
+ *
+ * @param componentType - A raw component ID or relation-wrapped type.
+ * @returns `true` if this type must not appear in a serialized snapshot.
+ *
+ * @see {@link ComponentOptions.skipSerialize}
+ */
+export function shouldSkipSerialize(componentType: EntityId<any>): boolean {
+  const baseComponentId = getBaseComponentId(componentType);
+  if (baseComponentId === undefined) return false;
+  return skipSerializeFlags.has(baseComponentId);
 }
 
 /**

@@ -437,6 +437,7 @@ describe("Component Options", () => {
     const exclusiveComp = component({ exclusive: true });
     const cascadeComp = component({ cascadeDelete: true });
     const bothComp = component({ exclusive: true, cascadeDelete: true });
+    const skipSerComp = component({ skipSerialize: true });
     const normalComp = component();
 
     const exclusiveOpts = getComponentOptions(exclusiveComp);
@@ -451,11 +452,15 @@ describe("Component Options", () => {
     expect(bothOpts.exclusive).toBe(true);
     expect(bothOpts.cascadeDelete).toBe(true);
 
+    const skipSerOpts = getComponentOptions(skipSerComp);
+    expect(skipSerOpts.skipSerialize).toBe(true);
+
     const normalOpts = getComponentOptions(normalComp);
     expect(normalOpts.name).toBe(undefined);
     expect(normalOpts.exclusive).toBe(undefined);
     expect(normalOpts.cascadeDelete).toBe(undefined);
     expect(normalOpts.dontFragment).toBe(undefined);
+    expect(normalOpts.skipSerialize).toBe(undefined);
   });
 
   it("should support name in options object", () => {
