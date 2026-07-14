@@ -441,17 +441,46 @@ export class Archetype {
     componentDataSources: (any[] | EntityId<any>[] | undefined)[],
     entityIndex: number,
     entityId: EntityId,
+    out?: any[],
   ): ComponentTuple<T> {
-    return componentDataSources.map((dataSource, i) =>
-      buildSingleComponent(
+    const len = componentTypes.length;
+    const result = out ?? new Array(len);
+    for (let i = 0; i < len; i++) {
+      result[i] = buildSingleComponent(
         componentTypes[i]!,
-        dataSource,
+        componentDataSources[i],
         entityIndex,
         entityId,
         (type) => this.getComponentData(type),
         this.sparseRelations,
-      ),
-    ) as ComponentTuple<T>;
+      );
+    }
+    return result as ComponentTuple<T>;
+  }
+
+  /**
+   * True when every requested component is a plain column (no optional / wildcard / sparse-specific).
+   * Enables the zero-allocation forEach hot path used by typical game systems.
+   */
+  private isSimpleColumnQuery(componentTypes: readonly ComponentType<any>[]): boolean {
+    for (let i = 0; i < componentTypes.length; i++) {
+      const compType = componentTypes[i]!;
+      if (isOptionalEntityId(compType)) return false;
+      if (getIdType(compType) === "wildcard-relation") return false;
+      if (isSparseRelation(compType)) return false;
+    }
+    return true;
+  }
+
+  private readSimpleColumnValue(column: any[] | undefined, entityIndex: number, componentType: EntityId<any>): any {
+    if (column === undefined) {
+      throw new Error(`Component data not found for mandatory component type ${componentType}`);
+    }
+    const data = column[entityIndex];
+    if (data === MISSING_COMPONENT) {
+      throw new Error(`Component type ${componentType} not found at index ${entityIndex}`);
+    }
+    return data;
   }
 
   getEntitiesWithComponents<const T extends readonly ComponentType<any>[]>(
@@ -467,13 +496,15 @@ export class Archetype {
     result: Array<{ entity: EntityId; components: ComponentTuple<T> }>,
     entityFilter?: (entity: EntityId) => boolean,
   ): void {
-    this.forEachWithComponents(
-      componentTypes,
-      (entity, ...components) => {
-        result.push({ entity, components });
-      },
-      entityFilter,
-    );
+    const componentDataSources = this.getCachedComponentDataSources(componentTypes);
+
+    for (let entityIndex = 0; entityIndex < this.entities.length; entityIndex++) {
+      const entity = this.entities[entityIndex]!;
+      if (entityFilter && !entityFilter(entity)) continue;
+      // Fresh array per entity — callers own the returned component tuples.
+      const components = this.buildComponentsForIndex(componentTypes, componentDataSources, entityIndex, entity);
+      result.push({ entity, components });
+    }
   }
 
   *iterateWithComponents<const T extends readonly ComponentType<any>[]>(
@@ -485,6 +516,7 @@ export class Archetype {
     for (let entityIndex = 0; entityIndex < this.entities.length; entityIndex++) {
       const entity = this.entities[entityIndex]!;
       if (entityFilter && !entityFilter(entity)) continue;
+      // Generator yields owned tuples; allocate per entity (cannot reuse across yields).
       const components = this.buildComponentsForIndex(componentTypes, componentDataSources, entityIndex, entity);
       yield [entity, ...components];
     }
@@ -496,12 +528,140 @@ export class Archetype {
     entityFilter?: (entity: EntityId) => boolean,
   ): void {
     const componentDataSources = this.getCachedComponentDataSources(componentTypes);
+    const len = componentTypes.length;
+    const entities = this.entities;
+    const entityCount = entities.length;
+    const cb = callback as (entity: EntityId, ...components: any[]) => void;
 
-    for (let entityIndex = 0; entityIndex < this.entities.length; entityIndex++) {
-      const entity = this.entities[entityIndex]!;
+    // Hot path: plain column components (Position/Velocity style systems).
+    // Avoids per-entity Array allocation and rest-parameter packing.
+    if (this.isSimpleColumnQuery(componentTypes)) {
+      if (len === 1) {
+        const col0 = componentDataSources[0] as any[] | undefined;
+        const t0 = componentTypes[0] as EntityId<any>;
+        for (let i = 0; i < entityCount; i++) {
+          const entity = entities[i]!;
+          if (entityFilter && !entityFilter(entity)) continue;
+          cb(entity, this.readSimpleColumnValue(col0, i, t0));
+        }
+        return;
+      }
+      if (len === 2) {
+        const col0 = componentDataSources[0] as any[] | undefined;
+        const col1 = componentDataSources[1] as any[] | undefined;
+        const t0 = componentTypes[0] as EntityId<any>;
+        const t1 = componentTypes[1] as EntityId<any>;
+        for (let i = 0; i < entityCount; i++) {
+          const entity = entities[i]!;
+          if (entityFilter && !entityFilter(entity)) continue;
+          cb(entity, this.readSimpleColumnValue(col0, i, t0), this.readSimpleColumnValue(col1, i, t1));
+        }
+        return;
+      }
+      if (len === 3) {
+        const col0 = componentDataSources[0] as any[] | undefined;
+        const col1 = componentDataSources[1] as any[] | undefined;
+        const col2 = componentDataSources[2] as any[] | undefined;
+        const t0 = componentTypes[0] as EntityId<any>;
+        const t1 = componentTypes[1] as EntityId<any>;
+        const t2 = componentTypes[2] as EntityId<any>;
+        for (let i = 0; i < entityCount; i++) {
+          const entity = entities[i]!;
+          if (entityFilter && !entityFilter(entity)) continue;
+          cb(
+            entity,
+            this.readSimpleColumnValue(col0, i, t0),
+            this.readSimpleColumnValue(col1, i, t1),
+            this.readSimpleColumnValue(col2, i, t2),
+          );
+        }
+        return;
+      }
+      if (len === 4) {
+        const col0 = componentDataSources[0] as any[] | undefined;
+        const col1 = componentDataSources[1] as any[] | undefined;
+        const col2 = componentDataSources[2] as any[] | undefined;
+        const col3 = componentDataSources[3] as any[] | undefined;
+        const t0 = componentTypes[0] as EntityId<any>;
+        const t1 = componentTypes[1] as EntityId<any>;
+        const t2 = componentTypes[2] as EntityId<any>;
+        const t3 = componentTypes[3] as EntityId<any>;
+        for (let i = 0; i < entityCount; i++) {
+          const entity = entities[i]!;
+          if (entityFilter && !entityFilter(entity)) continue;
+          cb(
+            entity,
+            this.readSimpleColumnValue(col0, i, t0),
+            this.readSimpleColumnValue(col1, i, t1),
+            this.readSimpleColumnValue(col2, i, t2),
+            this.readSimpleColumnValue(col3, i, t3),
+          );
+        }
+        return;
+      }
+    }
+
+    // General path: optional / wildcard / sparse-specific / N>4.
+    // Unroll common arities so we still avoid allocating a temporary components array.
+    const getData = (type: EntityId<any>) => this.getComponentData(type);
+    const sparse = this.sparseRelations;
+
+    if (len === 1) {
+      for (let i = 0; i < entityCount; i++) {
+        const entity = entities[i]!;
+        if (entityFilter && !entityFilter(entity)) continue;
+        cb(entity, buildSingleComponent(componentTypes[0]!, componentDataSources[0], i, entity, getData, sparse));
+      }
+      return;
+    }
+    if (len === 2) {
+      for (let i = 0; i < entityCount; i++) {
+        const entity = entities[i]!;
+        if (entityFilter && !entityFilter(entity)) continue;
+        cb(
+          entity,
+          buildSingleComponent(componentTypes[0]!, componentDataSources[0], i, entity, getData, sparse),
+          buildSingleComponent(componentTypes[1]!, componentDataSources[1], i, entity, getData, sparse),
+        );
+      }
+      return;
+    }
+    if (len === 3) {
+      for (let i = 0; i < entityCount; i++) {
+        const entity = entities[i]!;
+        if (entityFilter && !entityFilter(entity)) continue;
+        cb(
+          entity,
+          buildSingleComponent(componentTypes[0]!, componentDataSources[0], i, entity, getData, sparse),
+          buildSingleComponent(componentTypes[1]!, componentDataSources[1], i, entity, getData, sparse),
+          buildSingleComponent(componentTypes[2]!, componentDataSources[2], i, entity, getData, sparse),
+        );
+      }
+      return;
+    }
+    if (len === 4) {
+      for (let i = 0; i < entityCount; i++) {
+        const entity = entities[i]!;
+        if (entityFilter && !entityFilter(entity)) continue;
+        cb(
+          entity,
+          buildSingleComponent(componentTypes[0]!, componentDataSources[0], i, entity, getData, sparse),
+          buildSingleComponent(componentTypes[1]!, componentDataSources[1], i, entity, getData, sparse),
+          buildSingleComponent(componentTypes[2]!, componentDataSources[2], i, entity, getData, sparse),
+          buildSingleComponent(componentTypes[3]!, componentDataSources[3], i, entity, getData, sparse),
+        );
+      }
+      return;
+    }
+
+    // N>4 fallback: reuse one scratch buffer for the duration of the loop.
+    // Callers must not retain the rest-args array across iterations (same as before).
+    const scratch: any[] = new Array(len);
+    for (let i = 0; i < entityCount; i++) {
+      const entity = entities[i]!;
       if (entityFilter && !entityFilter(entity)) continue;
-      const components = this.buildComponentsForIndex(componentTypes, componentDataSources, entityIndex, entity);
-      callback(entity, ...components);
+      this.buildComponentsForIndex(componentTypes, componentDataSources, i, entity, scratch);
+      cb(entity, ...scratch);
     }
   }
 
