@@ -471,6 +471,24 @@ export class World {
   }
 
   /**
+   * Retrieves all relations of a given wildcard type for an entity.
+   * Returns an array of [target entity, component value] pairs.
+   *
+   * Must be declared before the plain `EntityId` overload: `WildcardRelationId`
+   * is a subtype of `EntityId`, so the more specific signature has to win.
+   *
+   * @template T - The component data type
+   * @param entityId - The entity identifier
+   * @param componentType - The wildcard relation type
+   * @returns Array of [target entity, component value] pairs
+   *
+   * @throws {Error} If the entity does not exist
+   *
+   * @example
+   * const relations = world.get(entity, relation(Parent, "*"));
+   */
+  get<T>(entityId: EntityId, componentType: WildcardRelationId<T>): [EntityId<unknown>, T][];
+  /**
    * Retrieves a component from an entity.
    * Throws an error if the component does not exist; use `has()` to check first or use `getOptional()`.
    *
@@ -485,21 +503,6 @@ export class World {
    * const position = world.get(entity, Position);
    */
   get<T>(entityId: EntityId, componentType: EntityId<T>): T;
-  /**
-   * Retrieves all relations of a given wildcard type for an entity.
-   * Returns an array of [target entity, component value] pairs.
-   *
-   * @template T - The component data type
-   * @param entityId - The entity identifier
-   * @param componentType - The wildcard relation type
-   * @returns Array of [target entity, component value] pairs
-   *
-   * @throws {Error} If the entity does not exist
-   *
-   * @example
-   * const relations = world.get(entity, relation(Parent, "*"));
-   */
-  get<T>(entityId: EntityId, componentType: WildcardRelationId<T>): [EntityId<unknown>, T][];
   /**
    * Retrieves the entity's primary component when called with only an entity ID.
    *
@@ -547,6 +550,24 @@ export class World {
   }
 
   /**
+   * Safely retrieves all matching relation values for a wildcard relation type.
+   * Returns `undefined` if there are no relations.
+   *
+   * Must be declared before the plain `EntityId` overload: `WildcardRelationId`
+   * is a subtype of `EntityId`, so the more specific signature has to win.
+   *
+   * @template T - The component data type
+   * @param entityId - The entity identifier
+   * @param componentType - The wildcard relation type
+   * @returns Array of [target, value] pairs wrapped in `{ value }`, or `undefined` if none
+   *
+   * @throws {Error} If the entity does not exist
+   */
+  getOptional<T>(
+    entityId: EntityId,
+    componentType: WildcardRelationId<T>,
+  ): { value: [EntityId<unknown>, T][] } | undefined;
+  /**
    * Safely retrieves a component from an entity without throwing an error.
    * Returns `undefined` if the component does not exist.
    *
@@ -564,21 +585,6 @@ export class World {
    * }
    */
   getOptional<T>(entityId: EntityId, componentType: EntityId<T>): { value: T } | undefined;
-  /**
-   * Safely retrieves all matching relation values for a wildcard relation type.
-   * Returns `undefined` if there are no relations.
-   *
-   * @template T - The component data type
-   * @param entityId - The entity identifier
-   * @param componentType - The wildcard relation type
-   * @returns Array of [target, value] pairs wrapped in `{ value }`, or `undefined` if none
-   *
-   * @throws {Error} If the entity does not exist
-   */
-  getOptional<T>(
-    entityId: EntityId,
-    componentType: WildcardRelationId<T>,
-  ): { value: [EntityId<unknown>, T][] } | undefined;
   /**
    * Safely retrieves the entity's primary component without throwing an error.
    * Returns `undefined` if the component does not exist.

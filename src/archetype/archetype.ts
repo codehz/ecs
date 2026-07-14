@@ -212,7 +212,7 @@ export class Archetype {
       for (let c = 0; c < this.componentTypes.length; c++) {
         // null marker: component type is skipSerialize — omit from snapshot
         const encodedType = encodedComponentTypes[c];
-        if (encodedType === null) continue;
+        if (encodedType == null) continue;
         const data = this.getComponentData(this.componentTypes[c]!)[i];
         components.push({
           type: encodedType,
