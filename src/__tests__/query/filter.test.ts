@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test";
 import { Archetype } from "../../archetype/archetype";
 import { SparseStoreImpl } from "../../archetype/store";
 import type { ComponentId, EntityId } from "../../entity";
-import { relation } from "../../entity";
+import { component, relation } from "../../entity";
 import { matchesComponentTypes, matchesFilter, type QueryFilter } from "../../query/filter";
 
 // Mock component IDs for testing
@@ -102,6 +102,17 @@ describe("Query Filter Functions", () => {
       const archetype = new Archetype([positionComponent, matchingRelation], createSparseStore());
       const filter: QueryFilter = { negativeComponentTypes: [wildcardRelation] };
       expect(matchesFilter(archetype, filter)).toBe(false);
+    });
+
+    it("should not exclude archetype for specific sparse negative (entity-level only)", () => {
+      // Sparse relations only put a wildcard marker on the archetype signature.
+      // matchesFilter must keep the archetype; Query filters entities later.
+      const SparseRel = component({ sparse: true });
+      const wildcardMarker = relation(SparseRel, "*");
+      const specific = relation(SparseRel, 1025 as EntityId);
+      const archetype = new Archetype([positionComponent, wildcardMarker], createSparseStore());
+      const filter: QueryFilter = { negativeComponentTypes: [specific] };
+      expect(matchesFilter(archetype, filter)).toBe(true);
     });
   });
 });

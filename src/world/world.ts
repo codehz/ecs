@@ -1154,23 +1154,12 @@ export class World {
     componentTypes: EntityId<any>[],
     includeComponents?: boolean,
   ): EntityId[] | Array<{ entity: EntityId; components: any }> {
-    const matchingArchetypes = this.getMatchingArchetypes(componentTypes);
-
+    // Delegate to createQuery so sparse/wildcard entity-level filters stay consistent.
+    using query = this.createQuery(componentTypes);
     if (includeComponents) {
-      const result: Array<{ entity: EntityId; components: any }> = [];
-      for (const archetype of matchingArchetypes) {
-        archetype.appendEntitiesWithComponents(componentTypes as EntityId<any>[], result);
-      }
-      return result;
-    } else {
-      const result: EntityId[] = [];
-      for (const archetype of matchingArchetypes) {
-        for (const entity of archetype.getEntities()) {
-          result.push(entity);
-        }
-      }
-      return result;
+      return query.getEntitiesWithComponents(componentTypes as EntityId<any>[]);
     }
+    return query.getEntities();
   }
 
   // Delegators to the extracted ArchetypeManager (keeps public + internal call sites unchanged).

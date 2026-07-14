@@ -61,8 +61,16 @@ export function matchesFilter(archetype: Archetype, filter: QueryFilter): boolea
         const componentId = getComponentIdFromRelationId(archetypeType);
         return componentId === detailedType.componentId;
       });
+    } else if (
+      (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
+      detailedType.componentId !== undefined &&
+      isSparseComponent(detailedType.componentId)
+    ) {
+      // Specific sparse targets are not part of the archetype signature (only the wildcard marker is).
+      // Do not exclude the whole archetype here; Query applies entity-level negative filtering.
+      return true;
     } else {
-      // For regular components, check direct exclusion
+      // For regular components and non-sparse relations, check direct exclusion
       return !archetype.componentTypeSet.has(type);
     }
   });

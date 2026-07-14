@@ -8,6 +8,7 @@ import {
   isSparseRelation,
   isSparseWildcard,
   isWildcardRelationId,
+  relation,
 } from "../entity";
 import { matchesFilter } from "../query/filter";
 import type { QueryRegistry } from "../query/registry";
@@ -90,13 +91,21 @@ export class ArchetypeManager {
     }
 
     const regularComponents: EntityId<any>[] = [];
-    const wildcardRelations: { componentId: EntityId<any>; relationId: EntityId<any> }[] = [];
+    // Both wildcard and specific sparse relations resolve via the wildcard marker on the archetype.
+    // Specific sparse targets are refined later at the entity level by Query.
+    const markerRelations: { componentId: EntityId<any>; relationId: EntityId<any> }[] = [];
 
     for (const componentType of componentTypes) {
       if (isWildcardRelationId(componentType)) {
         const componentId = getComponentIdFromRelationId(componentType);
         if (componentId !== undefined) {
-          wildcardRelations.push({ componentId, relationId: componentType });
+          markerRelations.push({ componentId, relationId: componentType });
+        }
+      } else if (isSparseRelation(componentType)) {
+        const componentId = getComponentIdFromRelationId(componentType);
+        if (componentId !== undefined) {
+          // Index key is always relation(componentId, "*") for sparse relations
+          markerRelations.push({ componentId, relationId: relation(componentId, "*") });
         }
       } else {
         regularComponents.push(componentType);
@@ -105,7 +114,7 @@ export class ArchetypeManager {
 
     let matchingArchetypes = this.getArchetypesWithComponents(regularComponents);
 
-    for (const { componentId, relationId } of wildcardRelations) {
+    for (const { componentId, relationId } of markerRelations) {
       const markerSet = this.archetypesByComponent.get(relationId);
       const archetypesWithMarker = markerSet ? Array.from(markerSet) : [];
       matchingArchetypes =

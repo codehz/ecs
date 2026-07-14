@@ -7,6 +7,15 @@ import type { World } from "../world/world";
 import { matchesComponentTypes, matchesFilter, type QueryFilter } from "./filter";
 import type { QueryRegistry } from "./registry";
 
+function isSpecificSparseRelation(type: EntityId<any>): boolean {
+  const detailedType = getDetailedIdType(type);
+  return (
+    (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
+    detailedType.componentId !== undefined &&
+    isSparseComponent(detailedType.componentId)
+  );
+}
+
 /**
  * Cached query for efficiently iterating entities with specific components.
  *
@@ -35,6 +44,13 @@ export class Query {
   private wildcardTypes: WildcardRelationId<any>[];
   /** Cached specific sparse relation types that need entity-level filtering */
   private specificSparseRelationTypes: EntityId<any>[];
+  /**
+   * Specific sparse relation types listed in `negativeComponentTypes`.
+   * These cannot be excluded at the archetype layer (signature only has the wildcard marker).
+   */
+  private negativeSpecificSparseRelationTypes: EntityId<any>[];
+  /** True when iteration must filter entities one-by-one (not just archetypes) */
+  private needsEntityFilter: boolean;
 
   /**
    * @internal Queries should be created via {@link World.createQuery}, not instantiated directly.
@@ -48,14 +64,13 @@ export class Query {
       (ct) => getDetailedIdType(ct).type === "wildcard-relation",
     ) as WildcardRelationId<any>[];
     // Pre-compute specific sparse relation types that need entity-level filtering
-    this.specificSparseRelationTypes = this.componentTypes.filter((ct) => {
-      const detailedType = getDetailedIdType(ct);
-      return (
-        (detailedType.type === "entity-relation" || detailedType.type === "component-relation") &&
-        detailedType.componentId !== undefined &&
-        isSparseComponent(detailedType.componentId)
-      );
-    });
+    this.specificSparseRelationTypes = this.componentTypes.filter(isSpecificSparseRelation);
+    // Negative specific sparse targets: archetype signature cannot exclude them
+    this.negativeSpecificSparseRelationTypes = (filter.negativeComponentTypes ?? []).filter(isSpecificSparseRelation);
+    this.needsEntityFilter =
+      this.wildcardTypes.length > 0 ||
+      this.specificSparseRelationTypes.length > 0 ||
+      this.negativeSpecificSparseRelationTypes.length > 0;
     this.updateCache();
     // Register with registry for archetype updates
     if (registry) {
@@ -73,6 +88,59 @@ export class Query {
   }
 
   /**
+   * Check if entity matches all query requirements (wildcards, specific sparse relations, negatives)
+   */
+  private entityMatchesQuery(archetype: Archetype, entity: EntityId): boolean {
+    // Check wildcard relations
+    for (const wildcardType of this.wildcardTypes) {
+      const relations = archetype.get(entity, wildcardType);
+      if (!relations || relations.length === 0) {
+        return false;
+      }
+    }
+
+    // Check positive specific sparse relations
+    for (const specificType of this.specificSparseRelationTypes) {
+      const result = archetype.getOptional(entity, specificType);
+      if (result === undefined) {
+        return false;
+      }
+    }
+
+    // Check negative specific sparse relations (entity-level only)
+    for (const negativeType of this.negativeSpecificSparseRelationTypes) {
+      const result = archetype.getOptional(entity, negativeType);
+      if (result !== undefined) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Iterate matching entities, applying entity-level filters when needed.
+   */
+  private forEachMatchingEntity(callback: (archetype: Archetype, entity: EntityId) => void): void {
+    if (!this.needsEntityFilter) {
+      for (const archetype of this.cachedArchetypes) {
+        for (const entity of archetype.getEntities()) {
+          callback(archetype, entity);
+        }
+      }
+      return;
+    }
+
+    for (const archetype of this.cachedArchetypes) {
+      for (const entity of archetype.getEntities()) {
+        if (this.entityMatchesQuery(archetype, entity)) {
+          callback(archetype, entity);
+        }
+      }
+    }
+  }
+
+  /**
    * Returns all entity IDs that match this query.
    *
    * @returns Array of matching entity IDs
@@ -86,53 +154,11 @@ export class Query {
   getEntities(): EntityId[] {
     this.ensureNotDisposed();
 
-    // Fast path: no wildcard relations and no specific sparse relations
-    if (this.wildcardTypes.length === 0 && this.specificSparseRelationTypes.length === 0) {
-      const result: EntityId[] = [];
-      for (const archetype of this.cachedArchetypes) {
-        for (const entity of archetype.getEntities()) {
-          result.push(entity);
-        }
-      }
-      return result;
-    }
-
-    // Slow path: need to filter entities that actually have the required relations
-    // This is necessary for:
-    // 1. Wildcard relations where an archetype can contain entities with/without the relation
-    // 2. Specific sparse relations where the archetype only has the wildcard marker
     const result: EntityId[] = [];
-    for (const archetype of this.cachedArchetypes) {
-      for (const entity of archetype.getEntities()) {
-        if (this.entityMatchesQuery(archetype, entity)) {
-          result.push(entity);
-        }
-      }
-    }
+    this.forEachMatchingEntity((_archetype, entity) => {
+      result.push(entity);
+    });
     return result;
-  }
-
-  /**
-   * Check if entity matches all query requirements (wildcards and specific sparse relations)
-   */
-  private entityMatchesQuery(archetype: Archetype, entity: EntityId): boolean {
-    // Check wildcard relations
-    for (const wildcardType of this.wildcardTypes) {
-      const relations = archetype.get(entity, wildcardType);
-      if (!relations || relations.length === 0) {
-        return false;
-      }
-    }
-
-    // Check specific sparse relations
-    for (const specificType of this.specificSparseRelationTypes) {
-      const result = archetype.getOptional(entity, specificType);
-      if (result === undefined) {
-        return false;
-      }
-    }
-
-    return true;
   }
 
   /**
@@ -161,9 +187,11 @@ export class Query {
     }> = [];
 
     for (const archetype of this.cachedArchetypes) {
-      archetype.appendEntitiesWithComponents(componentTypes, result);
+      const filter = this.needsEntityFilter
+        ? (entity: EntityId) => this.entityMatchesQuery(archetype, entity)
+        : undefined;
+      archetype.appendEntitiesWithComponents(componentTypes, result, filter);
     }
-
     return result;
   }
 
@@ -187,7 +215,10 @@ export class Query {
     this.ensureNotDisposed();
 
     for (const archetype of this.cachedArchetypes) {
-      archetype.forEachWithComponents(componentTypes, callback);
+      const filter = this.needsEntityFilter
+        ? (entity: EntityId) => this.entityMatchesQuery(archetype, entity)
+        : undefined;
+      archetype.forEachWithComponents(componentTypes, callback, filter);
     }
   }
 
@@ -208,7 +239,10 @@ export class Query {
     this.ensureNotDisposed();
 
     for (const archetype of this.cachedArchetypes) {
-      yield* archetype.iterateWithComponents(componentTypes);
+      const filter = this.needsEntityFilter
+        ? (entity: EntityId) => this.entityMatchesQuery(archetype, entity)
+        : undefined;
+      yield* archetype.iterateWithComponents(componentTypes, filter);
     }
   }
 
@@ -224,12 +258,25 @@ export class Query {
   getComponentData<T>(componentType: EntityId<T>): T[] {
     this.ensureNotDisposed();
 
-    const result: T[] = [];
-    for (const archetype of this.cachedArchetypes) {
-      for (const data of archetype.getComponentData(componentType)) {
-        result.push(data);
+    // Fast path: no entity filter and component is stored as an archetype column
+    if (!this.needsEntityFilter && !isSpecificSparseRelation(componentType)) {
+      const result: T[] = [];
+      for (const archetype of this.cachedArchetypes) {
+        for (const data of archetype.getComponentData(componentType)) {
+          result.push(data);
+        }
       }
+      return result;
     }
+
+    // Slow path: match entities first, then read per-entity (handles sparse + filtered sets)
+    const result: T[] = [];
+    this.forEachMatchingEntity((archetype, entity) => {
+      const optional = archetype.getOptional(entity, componentType);
+      if (optional !== undefined) {
+        result.push(optional.value);
+      }
+    });
     return result;
   }
 

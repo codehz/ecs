@@ -5,6 +5,7 @@ import {
   getDetailedIdType,
   getIdType,
   isSparseComponent,
+  isSparseRelation,
   isWildcardRelationId,
 } from "../entity";
 import type { SerializedComponent, SerializedEntity, SerializedEntityId } from "../storage/serialization";
@@ -426,6 +427,12 @@ export class Archetype {
       return getWildcardRelationDataSource(this.componentTypes, componentId, optional);
     }
 
+    // Specific sparse relations are stored in SparseStore, not archetype columns.
+    // Return undefined as a sentinel; buildSingleComponent reads SparseStore by entity.
+    if (isSparseRelation(actualType)) {
+      return undefined;
+    }
+
     return optional ? this.getOptionalComponentData(actualType) : this.getComponentData(actualType);
   }
 
@@ -458,19 +465,26 @@ export class Archetype {
   appendEntitiesWithComponents<const T extends readonly ComponentType<any>[]>(
     componentTypes: T,
     result: Array<{ entity: EntityId; components: ComponentTuple<T> }>,
+    entityFilter?: (entity: EntityId) => boolean,
   ): void {
-    this.forEachWithComponents(componentTypes, (entity, ...components) => {
-      result.push({ entity, components });
-    });
+    this.forEachWithComponents(
+      componentTypes,
+      (entity, ...components) => {
+        result.push({ entity, components });
+      },
+      entityFilter,
+    );
   }
 
   *iterateWithComponents<const T extends readonly ComponentType<any>[]>(
     componentTypes: T,
+    entityFilter?: (entity: EntityId) => boolean,
   ): IterableIterator<[EntityId, ...ComponentTuple<T>]> {
     const componentDataSources = this.getCachedComponentDataSources(componentTypes);
 
     for (let entityIndex = 0; entityIndex < this.entities.length; entityIndex++) {
       const entity = this.entities[entityIndex]!;
+      if (entityFilter && !entityFilter(entity)) continue;
       const components = this.buildComponentsForIndex(componentTypes, componentDataSources, entityIndex, entity);
       yield [entity, ...components];
     }
@@ -479,11 +493,13 @@ export class Archetype {
   forEachWithComponents<const T extends readonly ComponentType<any>[]>(
     componentTypes: T,
     callback: (entity: EntityId, ...components: ComponentTuple<T>) => void,
+    entityFilter?: (entity: EntityId) => boolean,
   ): void {
     const componentDataSources = this.getCachedComponentDataSources(componentTypes);
 
     for (let entityIndex = 0; entityIndex < this.entities.length; entityIndex++) {
       const entity = this.entities[entityIndex]!;
+      if (entityFilter && !entityFilter(entity)) continue;
       const components = this.buildComponentsForIndex(componentTypes, componentDataSources, entityIndex, entity);
       callback(entity, ...components);
     }

@@ -5,6 +5,7 @@ import {
   getIdType,
   getTargetIdFromRelationId,
   isRelationId,
+  isSparseRelation,
 } from "../entity";
 import { isOptionalEntityId, type ComponentType } from "../types";
 import { MISSING_COMPONENT } from "./archetype";
@@ -143,6 +144,35 @@ export function buildRegularComponentValue(dataSource: any[] | undefined, entity
 }
 
 /**
+ * Build value for a specific-target sparse relation (stored in SparseStore, not columns).
+ * Payload shape matches {@link World.get} / `relation(R, target)` — not the wildcard array form.
+ * Handles void payloads correctly via presence check on target id.
+ */
+export function buildSparseSpecificComponentValue(
+  relationType: EntityId<any>,
+  sparseStore: SparseStore,
+  entityId: EntityId,
+  optional: boolean,
+): any {
+  const componentId = getComponentIdFromRelationId(relationType);
+  const targetId = getTargetIdFromRelationId(relationType);
+  if (componentId === undefined || targetId === undefined) {
+    if (optional) return undefined;
+    throw new Error(`Invalid sparse relation type ${relationType}`);
+  }
+
+  const rels = sparseStore.getRelationsForComponent(entityId, componentId);
+  for (const [target, data] of rels) {
+    if (target === targetId) {
+      return optional ? { value: data } : data;
+    }
+  }
+
+  if (optional) return undefined;
+  throw new Error(`Component type ${relationType} not found for entity ${entityId}`);
+}
+
+/**
  * Build a single component value based on its type
  */
 export function buildSingleComponent(
@@ -165,7 +195,12 @@ export function buildSingleComponent(
       entityId,
       optional,
     );
-  } else {
-    return buildRegularComponentValue(dataSource as any[] | undefined, entityIndex, optional);
   }
+
+  // Specific sparse relations live in SparseStore, not archetype columns
+  if (isSparseRelation(actualType)) {
+    return buildSparseSpecificComponentValue(actualType, sparseRelations, entityId, optional);
+  }
+
+  return buildRegularComponentValue(dataSource as any[] | undefined, entityIndex, optional);
 }
