@@ -272,9 +272,97 @@ export class Archetype {
     }
     this.sparseRelations.deleteEntity(entityId);
 
+    this.swapRemoveAt(index, entityId);
+    return removedData;
+  }
+
+  /**
+   * Hot-path archetype migration: copy columns directly into `target` and apply
+   * the structural changeset without allocating an intermediate per-entity Map.
+   *
+   * Sparse relations live in a shared store, so only removed/added sparse edges
+   * are touched — surviving relations stay in place.
+   *
+   * @param removedOut When non-null, records values of components being removed (for lifecycle hooks).
+   */
+  migrateEntityTo(
+    target: Archetype,
+    entityId: EntityId,
+    adds: ReadonlyMap<EntityId<any>, any>,
+    removes: ReadonlySet<EntityId<any>>,
+    removedOut: Map<EntityId<any>, any> | null,
+  ): void {
+    if (target === this) {
+      throw new Error("migrateEntityTo requires a different target archetype");
+    }
+    if (target.entityToIndex.has(entityId)) {
+      throw new Error(`Entity ${entityId} is already in the target archetype`);
+    }
+
+    const index = this.entityToIndex.get(entityId);
+    if (index === undefined) {
+      throw new Error(`Entity ${entityId} is not in this archetype`);
+    }
+
+    // Capture removed regular-column values for hooks before swap-remove.
+    if (removedOut !== null) {
+      for (const componentType of removes) {
+        if (this.componentTypeSet.has(componentType)) {
+          const data = this.getComponentData(componentType)[index];
+          removedOut.set(componentType, data === MISSING_COMPONENT ? undefined : data);
+        } else if (isSparseRelation(componentType)) {
+          // Presence-safe read: value may legitimately be undefined for void tags.
+          const value = this.sparseRelations.getValue(entityId, componentType);
+          if (value !== undefined) {
+            removedOut.set(componentType, value);
+          } else {
+            // Fall back only when value is undefined — still need to know if it existed.
+            const all = this.sparseRelations.getAllForEntity(entityId);
+            if (all.some(([t]) => t === componentType)) {
+              removedOut.set(componentType, undefined);
+            }
+          }
+        }
+      }
+    }
+
+    // Apply sparse removes / adds on the shared store (do NOT wipe surviving sparse edges).
+    for (const componentType of removes) {
+      if (isSparseRelation(componentType)) {
+        this.sparseRelations.deleteValue(entityId, componentType);
+      }
+    }
+    for (const [componentType, data] of adds) {
+      if (isSparseRelation(componentType)) {
+        this.sparseRelations.setValue(entityId, componentType, data);
+      }
+    }
+
+    // Push entity into target columns: shared columns copy, new columns take add payload.
+    const targetIndex = target.entities.length;
+    target.entities.push(entityId);
+    target.entityToIndex.set(entityId, targetIndex);
+
+    for (const componentType of target.componentTypes) {
+      const column = target.getComponentData(componentType);
+      if (adds.has(componentType) && !isSparseRelation(componentType)) {
+        column.push(adds.get(componentType));
+      } else if (this.componentTypeSet.has(componentType)) {
+        column.push(this.getComponentData(componentType)[index]);
+      } else {
+        // Should not happen for well-formed migrations; keep storage consistent.
+        column.push(MISSING_COMPONENT);
+      }
+    }
+
+    // Drop entity from this archetype (columns only — sparse already handled above).
+    this.swapRemoveAt(index, entityId);
+  }
+
+  /** Swap-and-pop entity at `index` without touching sparse storage. */
+  private swapRemoveAt(index: number, entityId: EntityId): void {
     this.entityToIndex.delete(entityId);
 
-    // Swap-and-pop for O(1) removal
     const lastIndex = this.entities.length - 1;
     if (index !== lastIndex) {
       const lastEntity = this.entities[lastIndex]!;
@@ -291,8 +379,6 @@ export class Archetype {
     for (const componentType of this.componentTypes) {
       this.getComponentData(componentType).pop();
     }
-
-    return removedData;
   }
 
   exists(entityId: EntityId): boolean {

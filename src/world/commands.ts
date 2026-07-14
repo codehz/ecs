@@ -241,15 +241,8 @@ export function applyChangeset(
   if (archetypeChanged) {
     const finalRegularTypes = buildFinalRegularComponentTypes(currentArchetype, changeset);
     const newArchetype = ctx.ensureArchetype(finalRegularTypes);
-    const currentComponents = currentArchetype.removeEntity(entityId)!;
-
-    if (removedComponents !== null) {
-      for (const componentType of changeset.removes) {
-        removedComponents.set(componentType, currentComponents.get(componentType));
-      }
-    }
-
-    newArchetype.addEntity(entityId, changeset.applyTo(currentComponents));
+    // Column-to-column move: no intermediate Map, surviving sparse edges stay put.
+    currentArchetype.migrateEntityTo(newArchetype, entityId, changeset.adds, changeset.removes, removedComponents);
     entityToArchetype.set(entityId, newArchetype);
     return newArchetype;
   }
