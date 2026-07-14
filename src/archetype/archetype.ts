@@ -147,6 +147,7 @@ export class Archetype {
   /**
    * Returns all sparse-stored relations for the given entity.
    * Internal helper used by command processing and tests.
+   * Prefer {@link forEachSparseRelationTypeOfComponent} on hot exclusive paths.
    */
   getEntitySparseRelations(entityId: EntityId): Map<EntityId<any>, any> | undefined {
     const tuples = this.sparseRelations.getAllForEntity(entityId);
@@ -157,6 +158,23 @@ export class Archetype {
       map.set(relType, data);
     }
     return map;
+  }
+
+  /**
+   * Enumerate sparse relation types of a single base component for an entity.
+   * Used by exclusive-relation matching without allocating intermediate Maps.
+   */
+  forEachSparseRelationTypeOfComponent(
+    entityId: EntityId,
+    componentId: EntityId<any>,
+    callback: (relationType: EntityId<any>) => void,
+  ): void {
+    this.sparseRelations.forEachRelationTypeOfComponent(entityId, componentId, callback);
+  }
+
+  /** True if the entity has any sparse relation of the given base component. */
+  hasSparseRelationOfComponent(entityId: EntityId, componentId: EntityId<any>): boolean {
+    return this.sparseRelations.hasRelationOfComponent(entityId, componentId);
   }
 
   dump(): Array<{ entity: EntityId; components: Map<EntityId<any>, any> }> {

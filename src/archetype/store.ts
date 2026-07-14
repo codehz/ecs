@@ -30,6 +30,23 @@ export interface SparseStore {
   hasAnyForComponent(componentId: EntityId<any>): boolean;
   getRelationsForComponent(entityId: EntityId, componentId: EntityId<any>): [target: EntityId, data: any][];
 
+  /**
+   * Enumerate relation *types* for a single (entity, baseComponent) pair.
+   * Prefer this over getAllForEntity when exclusive matching only needs one component kind —
+   * avoids scanning unrelated sparse components and allocating intermediate Maps.
+   */
+  forEachRelationTypeOfComponent(
+    entityId: EntityId,
+    componentId: EntityId<any>,
+    callback: (relationType: EntityId<any>) => void,
+  ): void;
+
+  /**
+   * True if the entity has at least one sparse relation of the given base component.
+   * O(1) for the exclusive (single) case.
+   */
+  hasRelationOfComponent(entityId: EntityId, componentId: EntityId<any>): boolean;
+
   // Entity-wide enumeration paths (used for snapshots, serialization, forEach, and rare presence checks)
   getAllForEntity(entityId: EntityId): Array<[relationType: EntityId<any>, data: any]>;
   deleteEntity(entityId: EntityId): void;
@@ -200,6 +217,33 @@ export class SparseStoreImpl implements SparseStore {
     }
 
     return result;
+  }
+
+  forEachRelationTypeOfComponent(
+    entityId: EntityId,
+    componentId: EntityId<any>,
+    callback: (relationType: EntityId<any>) => void,
+  ): void {
+    const entities = this.byComponent.get(componentId);
+    if (!entities) return;
+
+    const entry = entities.get(entityId);
+    if (!entry) return;
+
+    if (entry.type === "single") {
+      callback(entry.relationType);
+      return;
+    }
+
+    for (const item of entry.targets.values()) {
+      callback(item.relationType);
+    }
+  }
+
+  hasRelationOfComponent(entityId: EntityId, componentId: EntityId<any>): boolean {
+    const entities = this.byComponent.get(componentId);
+    if (!entities) return false;
+    return entities.has(entityId);
   }
 
   getAllForEntity(entityId: EntityId): Array<[relationType: EntityId<any>, data: any]> {

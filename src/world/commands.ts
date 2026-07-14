@@ -101,23 +101,22 @@ export function removeMatchingRelations(
   baseComponentId: ComponentId<any>,
   changeset: ComponentChangeset,
 ): void {
-  // Check archetype components
+  // Sparse exclusive (the common ChildOf path): only touch that component's store entry.
+  // Avoids getAllForEntity + intermediate Map allocation.
+  if (isSparseComponent(baseComponentId)) {
+    archetype.forEachSparseRelationTypeOfComponent(entityId, baseComponentId, (componentType) => {
+      changeset.delete(componentType);
+    });
+    return;
+  }
+
+  // Dense (non-sparse) exclusive relations live in the archetype signature.
   for (const componentType of archetype.componentTypes) {
     // Skip wildcard markers - they should only be removed by maybeRemoveWildcardMarker
     if (isWildcardRelationId(componentType)) continue;
 
     if (getComponentIdFromRelationId(componentType) === baseComponentId) {
       changeset.delete(componentType);
-    }
-  }
-
-  // Check sparse relations stored on entity
-  const sparseData = archetype.getEntitySparseRelations(entityId);
-  if (sparseData) {
-    for (const componentType of sparseData.keys()) {
-      if (getComponentIdFromRelationId(componentType) === baseComponentId) {
-        changeset.delete(componentType);
-      }
     }
   }
 }
@@ -147,41 +146,27 @@ export function maybeRemoveWildcardMarker(
     return;
   }
 
-  const wildcardMarker = relation(componentId, "*");
-
-  // Check if there are any other relations with the same component ID
-  for (const otherComponentType of archetype.componentTypes) {
-    if (otherComponentType === removedComponentType) continue;
-    if (otherComponentType === wildcardMarker) continue;
-    if (changeset.removes.has(otherComponentType)) continue;
-
-    if (getComponentIdFromRelationId(otherComponentType) === componentId) {
-      return; // Found another relation, keep the marker
-    }
-  }
-
-  const sparseData = archetype.getEntitySparseRelations(entityId);
-  if (sparseData) {
-    for (const otherComponentType of sparseData.keys()) {
-      if (otherComponentType === removedComponentType) continue;
-      if (changeset.removes.has(otherComponentType)) continue;
-
-      if (getComponentIdFromRelationId(otherComponentType) === componentId) {
-        return; // Found another relation, keep the marker
-      }
-    }
-  }
-
-  // Also check if this changeset itself is adding another relation of the same kind
-  // (common in exclusive sparse flips: remove old target + add new target in one batch)
+  // Fast path for exclusive sparse flips: if the same batch is adding a replacement
+  // of the same component kind, the marker must stay. Check adds first (tiny Map).
   for (const addedType of changeset.adds.keys()) {
     if (addedType === removedComponentType) continue;
     if (getComponentIdFromRelationId(addedType) === componentId) {
-      return; // Replacement is being added in the same changeset, keep the marker
+      return;
     }
   }
 
-  changeset.delete(wildcardMarker);
+  // Also keep the marker if another sparse relation of this kind remains on the entity
+  // (and is not itself scheduled for removal in this changeset).
+  let keepMarker = false;
+  archetype.forEachSparseRelationTypeOfComponent(entityId, componentId, (otherComponentType) => {
+    if (keepMarker) return;
+    if (otherComponentType === removedComponentType) return;
+    if (changeset.removes.has(otherComponentType)) return;
+    keepMarker = true;
+  });
+  if (keepMarker) return;
+
+  changeset.delete(relation(componentId, "*"));
 }
 
 function hasEntityComponent(archetype: Archetype, entityId: EntityId, componentType: EntityId<any>): boolean {
