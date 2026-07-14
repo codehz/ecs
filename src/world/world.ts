@@ -461,10 +461,7 @@ export class World {
     if (archetype.componentTypeSet.has(componentType)) return true;
 
     if (isSparseRelation(componentType)) {
-      // Use getValue; presence check via getAllForEntity only if value can legitimately be undefined
-      const val = this.sparseStore.getValue(entityId, componentType);
-      if (val !== undefined) return true;
-      return this.sparseStore.getAllForEntity(entityId).some(([t]) => t === componentType);
+      return this.sparseStore.hasValue(entityId, componentType);
     }
 
     return false;
@@ -532,12 +529,8 @@ export class World {
 
     if (componentType >= 0 || componentType % RELATION_SHIFT !== 0) {
       const inArchetype = archetype.componentTypeSet.has(componentType);
-      const hasSparse = isSparseRelation(componentType);
       const hasComponent =
-        inArchetype ||
-        (hasSparse &&
-          (this.sparseStore.getValue(entityId, componentType) !== undefined ||
-            this.sparseStore.getAllForEntity(entityId).some(([t]) => t === componentType)));
+        inArchetype || (isSparseRelation(componentType) && this.sparseStore.hasValue(entityId, componentType));
 
       if (!hasComponent) {
         throw new Error(

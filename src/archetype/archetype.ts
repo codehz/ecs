@@ -311,16 +311,9 @@ export class Archetype {
           const data = this.getComponentData(componentType)[index];
           removedOut.set(componentType, data === MISSING_COMPONENT ? undefined : data);
         } else if (isSparseRelation(componentType)) {
-          // Presence-safe read: value may legitimately be undefined for void tags.
-          const value = this.sparseRelations.getValue(entityId, componentType);
-          if (value !== undefined) {
-            removedOut.set(componentType, value);
-          } else {
-            // Fall back only when value is undefined — still need to know if it existed.
-            const all = this.sparseRelations.getAllForEntity(entityId);
-            if (all.some(([t]) => t === componentType)) {
-              removedOut.set(componentType, undefined);
-            }
+          // Presence is independent of payload (void tags store undefined).
+          if (this.sparseRelations.hasValue(entityId, componentType)) {
+            removedOut.set(componentType, this.sparseRelations.getValue(entityId, componentType));
           }
         }
       }
@@ -438,10 +431,7 @@ export class Archetype {
       return data as T;
     }
 
-    const value = this.sparseRelations.getValue(entityId, componentType);
-    if (value !== undefined || this.sparseRelations.getAllForEntity(entityId).some(([t]) => t === componentType)) {
-      // Note: the extra check above handles the (rare) case where `undefined` is a legitimate stored value.
-      // For the common case we just return whatever getValue gave us.
+    if (this.sparseRelations.hasValue(entityId, componentType)) {
       return this.sparseRelations.getValue(entityId, componentType);
     }
 
@@ -460,13 +450,7 @@ export class Archetype {
       return { value: data as T };
     }
 
-    const value = this.sparseRelations.getValue(entityId, componentType);
-    // We use getAllForEntity only as a presence check when the value itself might be undefined.
-    if (value !== undefined) {
-      return { value };
-    }
-    const all = this.sparseRelations.getAllForEntity(entityId);
-    if (all.some(([t]) => t === componentType)) {
+    if (this.sparseRelations.hasValue(entityId, componentType)) {
       return { value: this.sparseRelations.getValue(entityId, componentType) };
     }
     return undefined;

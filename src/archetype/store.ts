@@ -23,6 +23,12 @@ type RelationEntry =
 export interface SparseStore {
   // High-frequency per-(entity, relation) operations (get/set/has/remove, structural changes)
   getValue(entityId: EntityId, relationType: EntityId<any>): any | undefined;
+  /**
+   * Presence check independent of payload value.
+   * Required because void / tag relations store `undefined` as a legitimate value —
+   * callers must not treat `getValue() === undefined` as "missing".
+   */
+  hasValue(entityId: EntityId, relationType: EntityId<any>): boolean;
   setValue(entityId: EntityId, relationType: EntityId<any>, data: any): void;
   deleteValue(entityId: EntityId, relationType: EntityId<any>): boolean;
 
@@ -103,6 +109,24 @@ export class SparseStoreImpl implements SparseStore {
       const item = entry.targets.get(targetId);
       return item ? item.data : undefined;
     }
+  }
+
+  hasValue(entityId: EntityId, relationType: EntityId<any>): boolean {
+    const componentId = getComponentIdFromRelationId(relationType);
+    if (componentId === undefined) return false;
+
+    const entities = this.byComponent.get(componentId);
+    if (!entities) return false;
+
+    const entry = entities.get(entityId);
+    if (!entry) return false;
+
+    const targetId = getTargetIdFromRelationId(relationType)!;
+
+    if (entry.type === "single") {
+      return entry.target === targetId;
+    }
+    return entry.targets.has(targetId);
   }
 
   setValue(entityId: EntityId, relationType: EntityId<any>, data: any): void {

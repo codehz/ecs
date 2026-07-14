@@ -273,10 +273,9 @@ function applySparseChanges(
 ): void {
   for (const componentType of changeset.removes) {
     if (isSparseRelation(componentType)) {
-      const removedValue = sparseStore.getValue(entityId, componentType);
-      // Record for hooks if we are actually removing something
-      if (removedValue !== undefined || sparseStore.getAllForEntity(entityId).some(([t]) => t === componentType)) {
-        removedComponents.set(componentType, removedValue);
+      // hasValue is independent of payload (void tags store undefined).
+      if (sparseStore.hasValue(entityId, componentType)) {
+        removedComponents.set(componentType, sparseStore.getValue(entityId, componentType));
       }
       sparseStore.deleteValue(entityId, componentType);
     }
