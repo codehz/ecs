@@ -5,9 +5,11 @@ import { ComponentChangeset } from "../commands/changeset";
 import type { ComponentEntityStore } from "../component/entity-store";
 import {
   getComponentIdFromRelationId,
+  getComponentMerge,
   getTargetIdFromRelationId,
   isEntityRelation,
   isExclusiveComponent,
+  isSparseRelation,
   type EntityId,
 } from "../entity";
 import type { LifecycleHookEntry } from "../types";
@@ -129,6 +131,12 @@ export class CommandExecutor {
     const currentArchetype = this.ctx.entityToArchetype.get(entityId);
     if (!currentArchetype) return;
 
+    // Pure in-place payload update: every command is set() of a component already on the entity.
+    // Skips ComponentChangeset / exclusive scans / archetype migration checks.
+    if (this.tryApplyInPlacePayloadUpdates(entityId, currentArchetype, commands)) {
+      return;
+    }
+
     const changeset = this._changeset;
     processCommands(entityId, currentArchetype, commands, changeset, (eid, arch, compId) => {
       if (isExclusiveComponent(compId)) {
@@ -183,6 +191,89 @@ export class CommandExecutor {
       currentArchetype,
       newArchetype,
     );
+  }
+
+  /**
+   * Fast path for the most common game-loop pattern: updating component payloads
+   * that already exist on the entity (no add/remove/relation exclusivity/migration).
+   *
+   * Returns true if the entire command batch was handled.
+   */
+  private tryApplyInPlacePayloadUpdates(entityId: EntityId, archetype: Archetype, commands: Command[]): boolean {
+    // First pass: verify every command is an in-place set on an existing component.
+    for (let i = 0; i < commands.length; i++) {
+      const cmd = commands[i]!;
+      if (cmd.type !== "set") return false;
+
+      const componentType = cmd.componentType;
+      // Relations (exclusive / sparse / dense) need the full changeset path.
+      if (getComponentIdFromRelationId(componentType) !== undefined) return false;
+      // Component-as-entity ids used as components also need full path (references).
+      if (componentType >= 1024) return false;
+
+      if (!archetype.componentTypeSet.has(componentType)) {
+        // Not present as a regular column — not a pure in-place update.
+        if (!isSparseRelation(componentType)) return false;
+        return false;
+      }
+    }
+
+    // Second pass: fold values (honour merge / last-write-wins) then write columns.
+    // Single-set-per-type (the common case) writes immediately without a Map.
+    const needsHooks = this.ctx.hooks.size > 0;
+    const adds: Map<EntityId<any>, any> | null = needsHooks ? new Map() : null;
+    let folded: Map<EntityId<any>, any> | null = null;
+
+    for (let i = 0; i < commands.length; i++) {
+      const cmd = commands[i]!;
+      if (cmd.type !== "set") return false; // defensive; first pass already checked
+      const componentType = cmd.componentType;
+      let value = cmd.component;
+
+      if (folded !== null && folded.has(componentType)) {
+        const merge = getComponentMerge(componentType);
+        folded.set(componentType, merge !== undefined ? merge(folded.get(componentType), value) : value);
+        continue;
+      }
+
+      // First sighting of this type — check if a later command also targets it.
+      let hasLater = false;
+      for (let j = i + 1; j < commands.length; j++) {
+        const later = commands[j]!;
+        if (later.type === "set" && later.componentType === componentType) {
+          hasLater = true;
+          break;
+        }
+      }
+
+      if (hasLater) {
+        if (folded === null) folded = new Map();
+        folded.set(componentType, value);
+      } else {
+        archetype.set(entityId, componentType, value);
+        adds?.set(componentType, value);
+      }
+    }
+
+    if (folded !== null) {
+      for (const [componentType, value] of folded) {
+        archetype.set(entityId, componentType, value);
+        adds?.set(componentType, value);
+      }
+    }
+
+    if (adds !== null && adds.size > 0) {
+      this.ctx.triggerLifecycleHooks(
+        this._hooksCtx,
+        entityId,
+        adds,
+        new Map(), // no removals on pure payload path
+        archetype,
+        archetype,
+      );
+    }
+
+    return true;
   }
 
   /**

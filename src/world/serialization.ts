@@ -117,27 +117,42 @@ export function deserializeWorld(ctx: WorldDeserializationContext, snapshot: Ser
   }
 
   if (Array.isArray(snapshot.entities)) {
+    // Reuse one Map across entities to cut per-entity allocation; cleared between iterations.
+    const componentMap = new Map<EntityId<any>, any>();
+    // Cache ensureArchetype results by a stable signature string (same as ArchetypeManager).
+    // Snapshot entities often share a small set of archetypes, so this avoids repeated
+    // filterRegularComponentTypes + normalize + signature work for every entity.
+    const archetypeCache = new Map<string, Archetype>();
+
     for (const entry of snapshot.entities) {
       const entityId = decodeSerializedId(entry.id);
       const componentsArray: SerializedComponent[] = entry.components || [];
 
-      const componentMap = new Map<EntityId<any>, any>();
-
+      componentMap.clear();
       for (const componentEntry of componentsArray) {
         const componentType = decodeSerializedId(componentEntry.type);
         componentMap.set(componentType, componentEntry.value);
       }
 
-      // Build the list of component types from the map we just populated (no redundant push loop)
-      const componentTypes = Array.from(componentMap.keys());
+      // Signature key from the raw keys (order-independent via sort once for the cache key).
+      // ensureArchetype itself still normalizes; we only use this string for local memoization.
+      const signatureParts: number[] = [];
+      for (const compType of componentMap.keys()) {
+        signatureParts.push(compType as number);
+      }
+      signatureParts.sort((a, b) => a - b);
+      const signature = signatureParts.join(",");
 
-      // ensureArchetype is internally memoized (getOrCompute on signature), so repeated calls
-      // for the same component set are cheap after the first archetype is created.
-      const archetype = ctx.ensureArchetype(componentTypes);
+      let archetype = archetypeCache.get(signature);
+      if (archetype === undefined) {
+        archetype = ctx.ensureArchetype(Array.from(componentMap.keys()));
+        archetypeCache.set(signature, archetype);
+      }
+
       archetype.addEntity(entityId, componentMap);
       ctx.setEntityToArchetype(entityId, archetype);
 
-      for (const compType of componentTypes) {
+      for (const compType of componentMap.keys()) {
         const detailedType = getDetailedIdType(compType);
         if (detailedType.type === "entity-relation") {
           // Safe: targetId guaranteed for entity-relation type

@@ -159,10 +159,14 @@ export class World {
    * world.set(entity, MyComponent, { value: 42 });
    * world.sync();
    */
+  /** Cached empty component map shared by spawn hot path (never mutated). */
+  private static readonly EMPTY_COMPONENT_MAP: Map<EntityId<any>, any> = new Map();
+
   new<T = void>(): EntityId<T> {
     const entityId = this.entityIdManager.allocate();
-    let emptyArchetype = this.ensureArchetype([]);
-    emptyArchetype.addEntity(entityId, new Map());
+    const emptyArchetype = this.ensureArchetype([]);
+    // EMPTY_COMPONENT_MAP is never written; addEntity only reads .get/.has for signature columns.
+    emptyArchetype.addEntity(entityId, World.EMPTY_COMPONENT_MAP);
     this.entityToArchetype.set(entityId, emptyArchetype);
     return entityId as EntityId<T>;
   }
