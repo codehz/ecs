@@ -177,4 +177,78 @@ describe("Wildcard relation edge cases", () => {
     expect(world.has(entity, relation(Relates, target2))).toBe(true);
     expect(world.get(entity, relation(Relates, target2))).toEqual({ value: 20 });
   });
+
+  it("should return void dense relations via wildcard get (undefined is a valid payload)", () => {
+    const world = new World();
+    // Non-sparse void relation lives in archetype columns with payload `undefined`.
+    const ChildOf = component<void>();
+    const parent = world.new();
+    const child = world.new();
+
+    world.set(child, relation(ChildOf, parent));
+    world.sync();
+
+    expect(world.has(child, relation(ChildOf, parent))).toBe(true);
+    expect(world.get(child, relation(ChildOf, parent))).toBeUndefined();
+
+    const results = world.get(child, relation(ChildOf, "*"));
+    expect(results).toEqual([[parent, undefined]]);
+
+    const optional = world.getOptional(child, relation(ChildOf, "*"));
+    expect(optional).toEqual({ value: [[parent, undefined]] });
+
+    expect(world.getRelationTargets(child, ChildOf)).toEqual([[parent, undefined]]);
+  });
+
+  it("should return multiple void dense relations via wildcard get", () => {
+    const world = new World();
+    const Likes = component(); // default void payload
+    const entity = world.new();
+    const a = world.new();
+    const b = world.new();
+
+    world.set(entity, relation(Likes, a));
+    world.set(entity, relation(Likes, b));
+    world.sync();
+
+    const results = world.get(entity, relation(Likes, "*"));
+    expect(results).toHaveLength(2);
+    expect(results.map(([target]) => target).sort()).toEqual([a, b].sort());
+    expect(results.every(([, data]) => data === undefined)).toBe(true);
+  });
+
+  it("should keep void dense wildcard get consistent with query forEach", () => {
+    const world = new World();
+    const ChildOf = component<void>();
+    const parent = world.new();
+    const child = world.new();
+    const rel = relation(ChildOf, parent);
+
+    world.set(child, rel);
+    world.sync();
+
+    using query = world.createQuery([rel]);
+    const fromQuery: unknown[] = [];
+    query.forEach([rel], (_e, data) => {
+      fromQuery.push(data);
+    });
+
+    expect(fromQuery).toEqual([undefined]);
+    expect(world.get(child, relation(ChildOf, "*"))).toEqual([[parent, undefined]]);
+  });
+
+  it("should return explicit undefined payload on dense typed relations via wildcard get", () => {
+    const world = new World();
+    // Payload type includes undefined so presence must not be inferred from value.
+    const Tagged = component<{ note?: string } | undefined>();
+    const entity = world.new();
+    const target = world.new();
+
+    world.set(entity, relation(Tagged, target), undefined);
+    world.sync();
+
+    expect(world.has(entity, relation(Tagged, target))).toBe(true);
+    expect(world.get(entity, relation(Tagged, target))).toBeUndefined();
+    expect(world.get(entity, relation(Tagged, "*"))).toEqual([[target, undefined]]);
+  });
 });

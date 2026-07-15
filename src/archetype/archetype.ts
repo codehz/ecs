@@ -401,15 +401,15 @@ export class Archetype {
     const componentId = getComponentIdFromRelationId(componentType);
     const relations: [EntityId<unknown>, any][] = [];
 
-    // Check regular archetype components
+    // Check regular archetype columns.
+    // Presence is "type is on this archetype", not "payload !== undefined":
+    // void/tag relations store `undefined` as a legitimate value.
+    // Align with buildWildcardRelationValue in helpers.ts.
     for (const relType of this.componentTypes) {
       const relDetailed = getDetailedIdType(relType);
       if (isRelationType(relDetailed) && relDetailed.componentId === componentId) {
-        const dataArray = this.getComponentData(relType);
-        if (dataArray && dataArray[index] !== undefined) {
-          const data = dataArray[index];
-          relations.push([relDetailed.targetId, data === MISSING_COMPONENT ? undefined : data]);
-        }
+        const data = this.getComponentData(relType)[index];
+        relations.push([relDetailed.targetId, data === MISSING_COMPONENT ? undefined : data]);
       }
     }
 
