@@ -81,7 +81,7 @@ describe("World.getOptional", () => {
 
   it("should work with dontFragment relations", () => {
     const world = new World();
-    const DFRel = component<number>({ dontFragment: true });
+    const DFRel = component<number>({ sparse: true });
     const target = world.new();
     const entity = world.new();
     world.set(entity, relation(DFRel, target), 42);

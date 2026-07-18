@@ -310,7 +310,7 @@ describe("Sparse Relations", () => {
     world.sync();
 
     // All children should be in the same archetype (due to sparse)
-    const archetypes = (world as any).archetypes;
+    const archetypes = (world as any).archetypeManager.archetypes;
     const matchingArchetypesBefore = archetypes.filter((arch: any) => {
       return arch.componentTypes.includes(PositionId) && arch.componentTypes.includes(VelocityId);
     });
@@ -373,7 +373,7 @@ describe("Sparse Relations", () => {
     world.sync();
 
     // Count archetypes before deletion
-    const archetypesBefore = (world as any).archetypes.length;
+    const archetypesBefore = (world as any).archetypeManager.archetypes.length;
 
     // Delete parent1 - this should remove relations but not fragment
     world.delete(parent1);
@@ -381,7 +381,7 @@ describe("Sparse Relations", () => {
 
     // Some children (those with parent1) should have lost their ChildOf relation
     // but the archetype structure should be minimal (not fragmented)
-    const archetypesAfter = (world as any).archetypes.length;
+    const archetypesAfter = (world as any).archetypeManager.archetypes.length;
 
     // We expect at most one new archetype (for entities without ChildOf)
     // The key point is we don't create separate archetypes per entity

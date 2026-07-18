@@ -48,12 +48,13 @@ export interface CommandExecutorContext {
   /** Sparse store (needed for CommandProcessorContext) */
   sparseStore: SparseStore;
 
-  /** Factories for the HooksContext (used by triggerLifecycleHooks) */
-  has: (entityId: EntityId, componentType: EntityId<any>) => boolean;
-  get: <T>(entityId: EntityId, componentType: EntityId<T>) => T;
-  getOptional: <T>(entityId: EntityId, componentType: EntityId<T>) => { value: T } | undefined;
+  /**
+   * Shared HooksContext assembled by World (composition root).
+   * Prefer passing this over re-creating has/get/getOptional closures.
+   */
+  hooksContext: HooksContext;
 
-  /** Destroy fast-path delegation (BFS + cascade logic stays in World) */
+  /** Destroy fast-path delegation (BFS + cascade owned by RelationsRuntime) */
   destroyEntityImmediate: (entityId: EntityId) => void;
 
   /** Debug migration counter (now routed through DebugStatsManager) */
@@ -96,12 +97,8 @@ export class CommandExecutor {
       ensureArchetype: ctx.ensureArchetype,
     };
 
-    this._hooksCtx = {
-      multiHooks: ctx.hooks,
-      has: ctx.has,
-      get: ctx.get,
-      getOptional: ctx.getOptional,
-    };
+    // Shared with World — single HooksContext instance for hooks + destroy paths.
+    this._hooksCtx = ctx.hooksContext;
   }
 
   /**
@@ -117,7 +114,7 @@ export class CommandExecutor {
       return;
     }
 
-    // 2. Route: destroy uses fast path (BFS/cascade stays in World)
+    // 2. Route: destroy uses RelationsRuntime cascade path
     if (commands.some((cmd) => cmd.type === "destroy")) {
       this.ctx.destroyEntityImmediate(entityId);
       return;
@@ -278,7 +275,7 @@ export class CommandExecutor {
 
   /**
    * Immediate (non-buffered) component removal used during cascade deletion.
-   * Called from destroy* paths (which remain in World).
+   * Called from RelationsRuntime destroy paths.
    */
   removeComponentImmediate(entityId: EntityId, componentType: EntityId<any>, targetEntityId: EntityId): void {
     const sourceArchetype = this.ctx.entityToArchetype.get(entityId);

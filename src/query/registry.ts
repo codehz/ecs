@@ -98,4 +98,15 @@ export class QueryRegistry {
       query.removeArchetype(archetype);
     }
   }
+
+  /**
+   * Snapshot of cache/registration sizes for debug stats.
+   * Prefer this over reaching into private maps.
+   */
+  getDebugCounts(): { cached: number; registered: number } {
+    return {
+      cached: this.cache.size,
+      registered: this.queries.size,
+    };
+  }
 }

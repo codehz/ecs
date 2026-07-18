@@ -73,13 +73,13 @@ const ChildOf = component({ exclusive: true, name: "ChildOf" });
 
 **`ComponentOptions` 选项：**
 
-| 选项            | 类型                | 说明                                                                                                                           |
-| --------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `name`          | `string`            | 组件名称，用于序列化/调试                                                                                                      |
-| `exclusive`     | `boolean`           | 仅关系组件：同一实体对同一基础组件最多只能有一个关系                                                                           |
-| `cascadeDelete` | `boolean`           | 仅实体关系：删除目标实体时，持有该关系的**整个实体**也会被删除。区别于默认行为（默认仅清理关系组件，实体保留）。支持传递级联。 |
-| `sparse`        | `boolean`           | 仅关系组件：不同目标实体的关系存放在同一 Archetype，防止因目标不同而过度碎片化（旧别名 `dontFragment` 仍完全兼容）             |
-| `merge`         | `(prev, next) => T` | 在同一 sync 批次中对同一组件反复 `set()` 时的合并策略                                                                          |
+| 选项            | 类型                | 说明                                                                                                                                |
+| --------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `name`          | `string`            | 组件名称，用于序列化/调试                                                                                                           |
+| `exclusive`     | `boolean`           | 仅关系组件：同一实体对同一基础组件最多只能有一个关系                                                                                |
+| `cascadeDelete` | `boolean`           | 仅实体关系：删除目标实体时，持有该关系的**整个实体**也会被删除。区别于默认行为（默认仅清理关系组件，实体保留）。支持传递级联。      |
+| `sparse`        | `boolean`           | 仅关系组件：不同目标实体的关系存放在同一 Archetype，防止因目标不同而过度碎片化（旧别名 `dontFragment` **已弃用**，下一 major 删除） |
+| `merge`         | `(prev, next) => T` | 在同一 sync 批次中对同一组件反复 `set()` 时的合并策略                                                                               |
 
 ### 生命周期钩子
 
@@ -286,8 +286,18 @@ component<T>();
 // 指定名称
 component<T>("Name");
 // 带选项
-component<T>({ name?: string, exclusive?: boolean, cascadeDelete?: boolean, sparse?: boolean, dontFragment?: boolean /* 旧别名，完全兼容 */, merge?: (prev, next) => T });
+component<T>({ name?: string, exclusive?: boolean, cascadeDelete?: boolean, sparse?: boolean, dontFragment?: boolean /* @deprecated，下一 major 删除 */, merge?: (prev, next) => T });
 ```
+
+### 计划删除（下一 major）
+
+以下符号/行为在当前 major **仍可用**，但已弃用，将在 **下一 major** 移除：
+
+| 项目                                                                            | 替代                                                                                      |
+| ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `component({ dontFragment: true })`                                             | `component({ sparse: true })`                                                             |
+| `isDontFragmentComponent` / `isDontFragmentRelation` / `isDontFragmentWildcard` | `isSparseComponent` / `isSparseRelation` / `isSparseWildcard`                             |
+| `world.set(componentId, value)` singleton 简写                                  | `world.singleton(componentId).set(value)` 或 `world.set(componentId, componentId, value)` |
 
 ### relation()
 

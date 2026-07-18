@@ -78,7 +78,7 @@ const ChildOf = component({ exclusive: true, name: "ChildOf" });
 | `name`          | `string`            | Component name, used for serialization/debugging                                                                                                                                                                                           |
 | `exclusive`     | `boolean`           | Relation components only: an entity can have at most one relation of the same base component                                                                                                                                               |
 | `cascadeDelete` | `boolean`           | Entity relations only: when the target entity is deleted, the **entire referencing entity** is deleted. Differs from default behavior (default only cleans up the relation component, the entity survives). Supports transitive cascading. |
-| `sparse`        | `boolean`           | Relation components only: relations with different target entities are stored in the same Archetype, preventing excessive fragmentation (legacy `dontFragment` alias remains fully supported)                                              |
+| `sparse`        | `boolean`           | Relation components only: relations with different target entities are stored in the same Archetype, preventing excessive fragmentation (legacy `dontFragment` is **deprecated**, removed in next major)                                   |
 | `merge`         | `(prev, next) => T` | Merge strategy when `set()` is called multiple times on the same component within a single sync batch                                                                                                                                      |
 
 ### Lifecycle Hooks
@@ -274,8 +274,18 @@ component<T>();
 // With a name
 component<T>("Name");
 // With options
-component<T>({ name?: string, exclusive?: boolean, cascadeDelete?: boolean, sparse?: boolean, dontFragment?: boolean /* legacy alias, fully compatible */, merge?: (prev, next) => T });
+component<T>({ name?: string, exclusive?: boolean, cascadeDelete?: boolean, sparse?: boolean, dontFragment?: boolean /* @deprecated, removed in next major */, merge?: (prev, next) => T });
 ```
+
+### Planned removals (next major)
+
+Still available in the current major, but **deprecated** and scheduled for removal:
+
+| Item                                                                            | Replacement                                                                               |
+| ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `component({ dontFragment: true })`                                             | `component({ sparse: true })`                                                             |
+| `isDontFragmentComponent` / `isDontFragmentRelation` / `isDontFragmentWildcard` | `isSparseComponent` / `isSparseRelation` / `isSparseWildcard`                             |
+| `world.set(componentId, value)` singleton shorthand                             | `world.singleton(componentId).set(value)` or `world.set(componentId, componentId, value)` |
 
 ### relation()
 

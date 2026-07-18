@@ -7,17 +7,38 @@
 
 ## Key Directories
 
-- Core implementation: `src/core` (world, archetype, entity, query, command-buffer).
+- Source is a **flat domain layout** under `src/` (there is **no** `src/core` package):
+  - `src/world/` — Facade (`world.ts`) + Core pieces (`archetype-manager`, `entity-access`, `command-executor`, …) + Relations (`relations-runtime`)
+  - `src/archetype/` — Archetype columns + sparse store + helpers
+  - `src/commands/` — CommandBuffer / Changeset
+  - `src/entity/` — IDs, relations encoding, managers
+  - `src/component/` — `component()` registry, component-entity store
+  - `src/query/` — Query + QueryRegistry + filters
+  - `src/storage/` — serialization ID helpers
+  - `src/testing/` — test utilities (exported as `@codehz/ecs/testing`)
 - Entry exports: `src/index.ts` unified external API.
-- Examples: `examples/simple/demo.ts` and `examples/advanced-scheduling/demo.ts`.
-- Build/Release: `scripts/build.ts`, `scripts/release.ts`.
+- Examples: `examples/simple.ts`, `examples/advanced-scheduling.ts`, `examples/parent-child-hierarchy.ts`, etc.
+- Build: `scripts/build.ts` (`bun run scripts/build.ts` / `bun run release`).
+- Usage skill for app code: `skills/ecs/SKILL.md`.
+
+## Internal Layering (Core / Relations / Facade)
+
+When changing world internals, keep ownership clear:
+
+| Layer         | Owner modules                                                 | Responsibilities                                     |
+| ------------- | ------------------------------------------------------------- | ---------------------------------------------------- |
+| **Core**      | `ArchetypeManager`, `EntityAccess`, `CommandExecutor`, stores | Structure, storage, command apply, dual-path has/get |
+| **Relations** | `RelationsRuntime`, `references.ts`                           | Reverse refs, cascade destroy, hierarchy helpers     |
+| **Facade**    | `World`                                                       | Public API, overloads, composition root only         |
+
+Do **not** reintroduce algorithm bodies (destroy BFS, hierarchy DFS, has/get dispatch) into `World`.
 
 ## Running & Verification (Bun)
 
 - Install: `bun install`
-- Test: `bun test` (`*.test.ts`, performance with `*.perf.test.ts`)
+- Test: `bun test` (`src/__tests__/**/*.test.ts`, performance with `*.perf.test.ts`)
 - Type check: `bunx tsc --noEmit`
-- Example: `bun run examples/simple/demo.ts`
+- Example: `bun run examples/simple.ts`
 - Build: `bun run scripts/build.ts`
 
 ## Design & Data Flow (Must Understand)
@@ -32,19 +53,21 @@
 - Serialization is an "in-memory snapshot": `world.serialize()` returns an object, `new World(snapshot)` restores it; for persistence, custom encode/decode is needed.
 - Relation components: `relation(componentId, targetId)`; wildcard relations use `relation(componentId, "*")` to listen to all targets.
 - Exclusive relations: declare `exclusive: true` in the component definition; same-type relations automatically exclude each other.
+- Prefer `sparse: true` for high-cardinality relations. Legacy `dontFragment` / `isDontFragment*` are **deprecated** (removed in next major).
 
 ## Example Patterns (from the codebase)
 
-- Unified `world.sync()` at the end of a Pipeline: see `examples/simple/demo.ts`.
+- Unified `world.sync()` at the end of a Pipeline: see `examples/simple.ts` / `examples/advanced-scheduling.ts`.
 - Multi-component/optional component hooks: see README.md "Multi-Component Lifecycle Hooks".
 - EntityBuilder: `world.spawn().with(...).build(); world.sync();`.
-- **New relation/hierarchy helpers on World** (recommended, avoids hand-written child maps + recursion):
+- Relation/hierarchy helpers on World (recommended):
   `world.getChildren(parent, ChildOf)`, `world.traverseDescendants(...)`, `world.getRelationSources(...)` etc.
-  See updated `examples/parent-child-hierarchy.ts`. Standalone function forms have been removed to simplify the API surface.
+  See `examples/parent-child-hierarchy.ts`. Standalone function forms were removed.
 
 ## Notes for Modifications
 
-- Keep the public API: `World`, `component`, `relation`, etc. exports should not be renamed or removed.
+- Keep the public API: `World`, `component`, `relation`, etc. exports should not be renamed or removed in the current major.
 - Entry is ESM; `.ts` extension imports are allowed.
-- Prioritize adding core logic in `src/core`, and expose new APIs in `src/index.ts`.
-- New relation/hierarchy tools are available only as methods on `World` (e.g. `world.getChildren`, `world.getParent`, `world.iterateDescendants`). The previous standalone function forms (`getChildren(world, ...)`) have been removed to keep the public API surface small and consistent.
+- Prefer adding domain logic under the correct layer (`src/world/*`, `src/archetype/*`, …) and only expose new public APIs via `src/index.ts`.
+- Hierarchy/relation tools stay as methods on `World` (facade); implement in `RelationsRuntime`.
+- New tests: place under `src/__tests__/<domain>/` matching the source domain when practical (`relations/`, `world/`, `query/`, …). `src/__tests__/core/` historically holds archetype/bitset/changeset unit tests.

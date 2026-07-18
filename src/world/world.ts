@@ -4,15 +4,7 @@ import { CommandBuffer } from "../commands/buffer";
 import { ComponentEntityStore } from "../component/entity-store";
 import { normalizeComponentTypes } from "../component/type-utils";
 import type { ComponentId, EntityId, WildcardRelationId } from "../entity";
-import {
-  EntityIdManager,
-  RELATION_SHIFT,
-  getComponentIdFromRelationId,
-  isCascadeDeleteRelation,
-  isSparseRelation,
-  isWildcardRelationId,
-  relation,
-} from "../entity";
+import { EntityIdManager } from "../entity";
 import { serializeQueryFilter, type QueryFilter } from "../query/filter";
 import type { Query } from "../query/query";
 import { QueryRegistry } from "../query/registry";
@@ -26,13 +18,13 @@ import type {
   LifecycleHookEntry,
   SyncDebugStats,
 } from "../types";
-import { isOptionalEntityId } from "../types";
 import { ArchetypeManager } from "./archetype-manager";
 import { EntityBuilder } from "./builder";
 import { CommandExecutor, type CommandExecutorContext } from "./command-executor";
 import { DebugStatsManager } from "./debug-stats";
+import { EntityAccess } from "./entity-access";
 import {
-  collectMultiHookComponents,
+  registerLifecycleHook,
   triggerLifecycleHooks,
   triggerRemoveHooksForEntityDeletion,
   type HooksContext,
@@ -43,13 +35,17 @@ import {
   resolveRemoveOperation,
   resolveSetOperation,
 } from "./operations";
-import { getEntityReferences, type EntityReferencesMap } from "./references";
+import { RelationsRuntime } from "./relations-runtime";
 import { deserializeWorld, serializeWorld } from "./serialization";
 import { SingletonHandle } from "./singleton";
 
 /**
- * World class for ECS architecture
- * Manages entities and components
+ * World — public Facade / composition root for the ECS runtime.
+ *
+ * Layering (maintainability target):
+ * - **Core**: ArchetypeManager, EntityAccess, CommandBuffer/CommandExecutor, stores
+ * - **Relations**: RelationsRuntime (reverse refs, cascade destroy, hierarchy)
+ * - **Facade**: this class — public API, overload resolution, wiring only
  */
 export class World {
   private static readonly DEPRECATED_SINGLETON_SET_SHORTHAND_WARNING =
@@ -57,37 +53,28 @@ export class World {
 
   // Core data structures for entity and archetype management
   private entityIdManager = new EntityIdManager();
-  private entityReferences: EntityReferencesMap = new Map();
   /** Sparse relation storage (for components created with `sparse: true`), shared with all Archetype instances */
   private readonly sparseStore = new SparseStoreImpl();
   /** Component entity (singleton) storage */
   private readonly componentEntities = new ComponentEntityStore();
 
-  // Archetype storage, indexes, creation/removal, and referencing are now encapsulated
-  // in ArchetypeManager (extracted to reduce World line count and improve cohesion).
+  // Archetype storage, indexes, creation/removal, and referencing (Core).
   private archetypeManager!: ArchetypeManager;
 
-  // Temporary forwarding accessors so the rest of World (and its internal collaborators)
-  // can continue using the familiar names with almost zero call-site changes.
-  // These can be removed in a follow-up cleanup pass if desired.
-  private get archetypes() {
-    return this.archetypeManager.archetypes;
-  }
-  private get entityToArchetype() {
-    return this.archetypeManager.entityToArchetype;
-  }
-  private get archetypesByComponent() {
-    return this.archetypeManager.archetypesByComponent;
-  }
-  private get entityToReferencingArchetypes() {
-    return this.archetypeManager.entityToReferencingArchetypes;
-  }
+  /** Dual-path entity/component reads (Core). */
+  private access!: EntityAccess;
+
+  /** Relations: reverse refs, cascade destroy, hierarchy (Relations domain). */
+  private relations!: RelationsRuntime;
 
   // Query registry – manages caching, ref counts, and archetype notifications
   private readonly queryRegistry = new QueryRegistry();
 
   // Lifecycle hooks (declared before cached contexts that reference them)
   private hooks: Set<LifecycleHookEntry> = new Set();
+
+  /** Shared HooksContext (composition root owns it; CommandExecutor reuses same instance). */
+  private hooksContext!: HooksContext;
 
   // Debug observability (extracted to DebugStatsManager to reduce World line count)
   private readonly debugStats = new DebugStatsManager();
@@ -98,8 +85,7 @@ export class World {
 
   constructor(snapshot?: SerializedWorld) {
     // Must create the manager before any code that may invoke ensureArchetype
-    // (including the snapshot deserialization path below, and the closures
-    // captured in the field-initialized _commandCtx).
+    // (including the snapshot deserialization path below).
     this.archetypeManager = new ArchetypeManager(
       {
         queryRegistry: this.queryRegistry,
@@ -110,12 +96,28 @@ export class World {
       this.sparseStore,
     );
 
+    // EntityAccess is the single source of truth for exists/has/get/getOptional.
+    this.access = new EntityAccess(this.componentEntities, this.archetypeManager.entityToArchetype, this.sparseStore);
+
+    // RelationsRuntime owns entityReferences. Closures capture `this` so late-bound
+    // commandExecutor methods are safe once construction finishes.
+    this.relations = new RelationsRuntime({
+      entityToArchetype: this.archetypeManager.entityToArchetype,
+      entityIdManager: this.entityIdManager,
+      componentEntities: this.componentEntities,
+      removeComponentImmediate: (eid, ct, tid) => this.commandExecutor.removeComponentImmediate(eid, ct, tid),
+      cleanupArchetypesReferencingEntity: (eid) => this.cleanupArchetypesReferencingEntity(eid),
+      exists: (eid) => this.access.exists(eid),
+      has: (eid, ct) => this.access.has(eid, ct),
+      get: (eid, ct) => this.access.get(eid, ct),
+    });
+
     if (snapshot && typeof snapshot === "object") {
       deserializeWorld(
         {
           entityIdManager: this.entityIdManager,
           componentEntities: this.componentEntities,
-          entityReferences: this.entityReferences,
+          entityReferences: this.relations.entityReferences,
           ensureArchetype: (ct) => this.ensureArchetype(ct),
           setEntityToArchetype: (eid, arch) => this.archetypeManager.entityToArchetype.set(eid, arch),
         },
@@ -123,19 +125,24 @@ export class World {
       );
     }
 
-    // CommandExecutor must be created after archetypeManager (and debugStats) because its context
-    // closes over several pieces and the destroy fast path.
+    // Shared HooksContext — World + CommandExecutor both hold the same object.
+    this.hooksContext = {
+      multiHooks: this.hooks,
+      has: (eid, ct) => this.access.has(eid, ct),
+      get: (eid, ct) => this.access.get(eid, ct) as any,
+      getOptional: (eid, ct) => this.access.getOptional(eid, ct) as any,
+    };
+
+    // CommandExecutor must be created after RelationsRuntime (destroy + entityReferences).
     const execCtx: CommandExecutorContext = {
       componentEntities: this.componentEntities,
-      entityReferences: this.entityReferences,
+      entityReferences: this.relations.entityReferences,
       hooks: this.hooks,
-      entityToArchetype: this.entityToArchetype,
+      entityToArchetype: this.archetypeManager.entityToArchetype,
       ensureArchetype: (ct) => this.ensureArchetype(ct),
       sparseStore: this.sparseStore,
-      has: (eid, ct) => this.has(eid, ct),
-      get: (eid, ct) => this.get(eid, ct),
-      getOptional: (eid, ct) => this.getOptional(eid, ct),
-      destroyEntityImmediate: (eid) => this.destroyEntityImmediate(eid),
+      hooksContext: this.hooksContext,
+      destroyEntityImmediate: (eid) => this.relations.destroyEntityImmediate(eid),
       incrementMigrations: () => this.debugStats.incrementMigrations(),
       triggerLifecycleHooks,
       triggerRemoveHooksForEntityDeletion,
@@ -167,7 +174,7 @@ export class World {
     const emptyArchetype = this.ensureArchetype([]);
     // EMPTY_COMPONENT_MAP is never written; addEntity only reads .get/.has for signature columns.
     emptyArchetype.addEntity(entityId, World.EMPTY_COMPONENT_MAP);
-    this.entityToArchetype.set(entityId, emptyArchetype);
+    this.archetypeManager.entityToArchetype.set(entityId, emptyArchetype);
     return entityId as EntityId<T>;
   }
 
@@ -180,76 +187,6 @@ export class World {
    */
   create<T = void>(): EntityId<T> {
     return this.new<T>();
-  }
-
-  /** Fast path: destroy an entity that is not referenced by any other entity, skipping BFS */
-  private destroySingleEntity(entityId: EntityId): void {
-    const archetype = this.entityToArchetype.get(entityId);
-    if (!archetype) return;
-
-    // Handle entity references (this entity references other entities)
-    for (const [sourceEntityId, componentType] of getEntityReferences(this.entityReferences, entityId)) {
-      if (this.entityToArchetype.has(sourceEntityId)) {
-        this.removeComponentImmediate(sourceEntityId, componentType, entityId);
-      }
-    }
-
-    this.entityReferences.delete(entityId);
-    const removedComponents = archetype.removeEntity(entityId)!;
-    this.entityToArchetype.delete(entityId);
-
-    triggerRemoveHooksForEntityDeletion(entityId, removedComponents, archetype);
-
-    this.cleanupArchetypesReferencingEntity(entityId);
-    this.entityIdManager.deallocate(entityId);
-    this.componentEntities.cleanupReferencesTo(entityId);
-  }
-
-  private destroyEntityImmediate(entityId: EntityId): void {
-    // Fast path: no other entity references this one, delete directly
-    if (!this.entityReferences.has(entityId)) {
-      this.destroySingleEntity(entityId);
-      return;
-    }
-
-    const queue: EntityId[] = [entityId];
-    const visited = new Set<EntityId>();
-    let queueIndex = 0;
-
-    while (queueIndex < queue.length) {
-      const cur = queue[queueIndex++]!;
-      if (visited.has(cur)) continue;
-      visited.add(cur);
-
-      const archetype = this.entityToArchetype.get(cur);
-      if (!archetype) continue;
-
-      // Process entity references before removal
-      for (const [sourceEntityId, componentType] of getEntityReferences(this.entityReferences, cur)) {
-        if (!this.entityToArchetype.has(sourceEntityId)) continue;
-
-        if (isCascadeDeleteRelation(componentType)) {
-          if (!visited.has(sourceEntityId)) {
-            queue.push(sourceEntityId);
-          }
-        } else {
-          this.removeComponentImmediate(sourceEntityId, componentType, cur);
-        }
-      }
-
-      // Remove entity from archetype - this also cleans up sparse relations
-      // and returns all removed component data
-      this.entityReferences.delete(cur);
-      const removedComponents = archetype.removeEntity(cur)!;
-      this.entityToArchetype.delete(cur);
-
-      // Trigger lifecycle hooks for removed components (fast path for entity deletion)
-      triggerRemoveHooksForEntityDeletion(cur, removedComponents, archetype);
-
-      this.cleanupArchetypesReferencingEntity(cur);
-      this.entityIdManager.deallocate(cur);
-      this.componentEntities.cleanupReferencesTo(cur);
-    }
   }
 
   /**
@@ -272,8 +209,7 @@ export class World {
    * if (world.has(entity, Position)) { ... }
    */
   exists(entityId: EntityId): boolean {
-    if (this.componentEntities.exists(entityId)) return true;
-    return this.entityToArchetype.has(entityId);
+    return this.access.exists(entityId);
   }
 
   /**
@@ -444,31 +380,7 @@ export class World {
    */
   has<T>(componentId: ComponentId<T>): boolean;
   has<T>(entityId: EntityId | ComponentId, componentType?: EntityId<T>): boolean {
-    // Handle singleton component overload: has(componentId)
-    if (componentType === undefined) {
-      const componentId = entityId as ComponentId<T>;
-      return this.componentEntities.hasSingleton(componentId);
-    }
-
-    if (this.componentEntities.exists(entityId)) {
-      if (isWildcardRelationId(componentType)) {
-        const componentId = getComponentIdFromRelationId(componentType);
-        if (componentId === undefined) return false;
-        return this.componentEntities.hasWildcard(entityId, componentId);
-      }
-      return this.componentEntities.has(entityId, componentType);
-    }
-
-    const archetype = this.entityToArchetype.get(entityId);
-    if (!archetype) return false;
-
-    if (archetype.componentTypeSet.has(componentType)) return true;
-
-    if (isSparseRelation(componentType)) {
-      return this.sparseStore.hasValue(entityId, componentType);
-    }
-
-    return false;
+    return this.access.has(entityId, componentType);
   }
 
   /**
@@ -519,31 +431,7 @@ export class World {
     entityId: EntityId,
     componentType: EntityId<T> | WildcardRelationId<T> = entityId as EntityId<T>,
   ): T | [EntityId<unknown>, any][] {
-    if (this.componentEntities.exists(entityId)) {
-      if (isWildcardRelationId(componentType as EntityId<any>)) {
-        return this.componentEntities.getWildcard(entityId, componentType as WildcardRelationId<T>);
-      }
-      return this.componentEntities.get(entityId, componentType as EntityId<T>);
-    }
-
-    const archetype = this.entityToArchetype.get(entityId);
-    if (!archetype) {
-      throw new Error(`Entity ${entityId} does not exist`);
-    }
-
-    if (componentType >= 0 || componentType % RELATION_SHIFT !== 0) {
-      const inArchetype = archetype.componentTypeSet.has(componentType);
-      const hasComponent =
-        inArchetype || (isSparseRelation(componentType) && this.sparseStore.hasValue(entityId, componentType));
-
-      if (!hasComponent) {
-        throw new Error(
-          `Entity ${entityId} does not have component ${componentType}. Use has() to check component existence before calling get().`,
-        );
-      }
-    }
-
-    return archetype.get(entityId, componentType) as T | [EntityId<unknown>, any][];
+    return this.access.get(entityId, componentType);
   }
 
   /**
@@ -597,30 +485,7 @@ export class World {
     entityId: EntityId,
     componentType: EntityId<T> | WildcardRelationId<T> = entityId as EntityId<T>,
   ): { value: T } | { value: [EntityId<unknown>, T][] } | undefined {
-    if (this.componentEntities.exists(entityId)) {
-      if (isWildcardRelationId(componentType)) {
-        const relations = this.componentEntities.getWildcard(entityId, componentType);
-        if (relations.length === 0) return undefined;
-        return { value: relations };
-      }
-      return this.componentEntities.getOptional(entityId, componentType);
-    }
-
-    const archetype = this.entityToArchetype.get(entityId);
-    if (!archetype) {
-      throw new Error(`Entity ${entityId} does not exist`);
-    }
-
-    if (isWildcardRelationId(componentType)) {
-      // For wildcard relations, get the data and wrap in optional if non-empty
-      const wildcardData = archetype.get(entityId, componentType) as [EntityId<unknown>, T][];
-      if (Array.isArray(wildcardData) && wildcardData.length > 0) {
-        return { value: wildcardData };
-      }
-      return undefined;
-    }
-
-    return archetype.getOptional(entityId, componentType);
+    return this.access.getOptional(entityId, componentType);
   }
 
   // ==========================================================================
@@ -646,19 +511,7 @@ export class World {
     entityId: EntityId,
     relationComp: ComponentId<T>,
   ): [target: EntityId<unknown>, data: T | undefined][] {
-    assertEntityExists(entityId, "Entity", (id) => this.exists(id));
-
-    const wildcard = relation(relationComp, "*") as WildcardRelationId<T>;
-
-    // For component entities (singletons) the path is different; they rarely host relations
-    if (this.componentEntities.exists(entityId)) {
-      return this.componentEntities.getWildcard(entityId, wildcard);
-    }
-
-    // Regular entity path — archetype.get for wildcard always materializes the array
-    // (even if empty for a sparse relation that only has the marker)
-    const data = this.get(entityId, wildcard);
-    return data as [EntityId<unknown>, T | undefined][];
+    return this.relations.getRelationTargets(entityId, relationComp);
   }
 
   /**
@@ -673,19 +526,7 @@ export class World {
    * const directChildren = world.getRelationSources(ship, ChildOf);
    */
   getRelationSources(targetId: EntityId, relationComp: ComponentId<any>): EntityId[] {
-    const refs = getEntityReferences(this.entityReferences, targetId);
-    const result: EntityId[] = [];
-
-    for (const [source, relType] of refs) {
-      // Only consider still-living sources
-      if (!this.entityToArchetype.has(source) && !this.componentEntities.exists(source)) continue;
-
-      const decodedComp = getComponentIdFromRelationId(relType);
-      if (decodedComp === relationComp) {
-        result.push(source);
-      }
-    }
-    return result;
+    return this.relations.getRelationSources(targetId, relationComp);
   }
 
   /**
@@ -693,25 +534,14 @@ export class World {
    * given base component.
    */
   hasRelation(entityId: EntityId, relationComp: ComponentId<any>, targetId?: EntityId): boolean {
-    assertEntityExists(entityId, "Entity", (id) => this.exists(id));
-
-    if (targetId !== undefined) {
-      const specific = relation(relationComp, targetId);
-      return this.has(entityId, specific);
-    }
-
-    // Any target of this relation kind?
-    const targets = this.getRelationTargets(entityId, relationComp);
-    return targets.length > 0;
+    return this.relations.hasRelation(entityId, relationComp, targetId);
   }
 
   /**
    * Returns the number of relations of the given base component held by the entity.
    */
   countRelations(entityId: EntityId, relationComp: ComponentId<any>): number {
-    assertEntityExists(entityId, "Entity", (id) => this.exists(id));
-    const targets = this.getRelationTargets(entityId, relationComp);
-    return targets.length;
+    return this.relations.countRelations(entityId, relationComp);
   }
 
   /**
@@ -722,12 +552,11 @@ export class World {
    * accessor (clearer intent than array destructuring).
    */
   getSingleRelationTarget<T = void>(entityId: EntityId, relationComp: ComponentId<T>): EntityId | undefined {
-    const targets = this.getRelationTargets(entityId, relationComp);
-    return targets.length > 0 ? (targets[0]![0] as EntityId) : undefined;
+    return this.relations.getSingleRelationTarget(entityId, relationComp);
   }
 
   // --------------------------------------------------------------------------
-  // High-level hierarchy helpers (convenience methods on World)
+  // High-level hierarchy helpers (facade → RelationsRuntime)
   // --------------------------------------------------------------------------
 
   /**
@@ -742,7 +571,7 @@ export class World {
    * const kids = world.getChildren(ship, ChildOf);
    */
   getChildren(parent: EntityId, childOf: ComponentId<any>): EntityId[] {
-    return this.getRelationSources(parent, childOf);
+    return this.relations.getChildren(parent, childOf);
   }
 
   /**
@@ -754,7 +583,7 @@ export class World {
    * const parent = world.getParent(turret, ChildOf);
    */
   getParent(child: EntityId, childOf: ComponentId<any>): EntityId | undefined {
-    return this.getSingleRelationTarget(child, childOf);
+    return this.relations.getParent(child, childOf);
   }
 
   /**
@@ -766,13 +595,7 @@ export class World {
    * const ancestors = world.getAncestors(muzzle, ChildOf); // [turret, ship]
    */
   getAncestors(entity: EntityId, childOf: ComponentId<any>): EntityId[] {
-    const ancestors: EntityId[] = [];
-    let cur = this.getParent(entity, childOf);
-    while (cur !== undefined) {
-      ancestors.push(cur);
-      cur = this.getParent(cur, childOf);
-    }
-    return ancestors;
+    return this.relations.getAncestors(entity, childOf);
   }
 
   /**
@@ -784,34 +607,12 @@ export class World {
    *   console.log(depth, entity);
    * }
    */
-  *iterateDescendants(
+  iterateDescendants(
     root: EntityId,
     childOf: ComponentId<any>,
     opts: { includeSelf?: boolean; maxDepth?: number } = {},
   ): IterableIterator<{ entity: EntityId; depth: number; parent: EntityId | null }> {
-    const { includeSelf = false, maxDepth } = opts;
-    const stack: Array<{ entity: EntityId; depth: number; parent: EntityId | null }> = [];
-
-    if (includeSelf) {
-      stack.push({ entity: root, depth: 0, parent: null });
-    } else {
-      for (const child of this.getChildren(root, childOf)) {
-        stack.push({ entity: child, depth: 1, parent: root });
-      }
-    }
-
-    while (stack.length > 0) {
-      const current = stack.pop()!;
-      if (maxDepth !== undefined && current.depth > maxDepth) continue;
-
-      yield current;
-
-      const kids = this.getChildren(current.entity, childOf);
-      for (let i = kids.length - 1; i >= 0; i--) {
-        const k = kids[i]!;
-        stack.push({ entity: k, depth: current.depth + 1, parent: current.entity });
-      }
-    }
+    return this.relations.iterateDescendants(root, childOf, opts);
   }
 
   /**
@@ -824,10 +625,7 @@ export class World {
     visitor: (entity: EntityId, depth: number, parent: EntityId | null) => void | boolean,
     opts: { includeSelf?: boolean; maxDepth?: number } = {},
   ): void {
-    for (const { entity, depth, parent } of this.iterateDescendants(root, childOf, opts)) {
-      const res = visitor(entity, depth, parent);
-      if (res === false) return;
-    }
+    this.relations.traverseDescendants(root, childOf, visitor, opts);
   }
 
   /**
@@ -874,67 +672,17 @@ export class World {
     hook: LifecycleHook<any> | LifecycleCallback<any>,
     filter?: QueryFilter,
   ): () => void {
-    const isCallback = typeof hook === "function";
-    const callback = isCallback ? (hook as LifecycleCallback<any>) : undefined;
-
-    const requiredComponents: EntityId<any>[] = [];
-    const optionalComponents: EntityId<any>[] = [];
-    for (const ct of componentTypes) {
-      if (!isOptionalEntityId(ct)) {
-        requiredComponents.push(ct as EntityId<any>);
-      } else {
-        optionalComponents.push(ct.optional);
-      }
-    }
-
-    if (requiredComponents.length === 0) {
-      throw new Error("Hook must have at least one required component");
-    }
-
-    const entry: LifecycleHookEntry = {
+    return registerLifecycleHook(
+      {
+        hooks: this.hooks,
+        archetypes: this.archetypeManager.archetypes,
+        hooksContext: this.hooksContext,
+        archetypeMatchesHook: (arch, entry) => this.archetypeManager.archetypeMatchesHook(arch, entry),
+      },
       componentTypes,
-      requiredComponents,
-      optionalComponents,
-      filter: filter || {},
-      hook: isCallback ? ({} as LifecycleHook<any>) : (hook as LifecycleHook<any>),
-      callback,
-      matchedArchetypes: new Set(),
-    };
-    this.hooks.add(entry);
-
-    // Single pass: collect matching archetypes
-    const matchedArchetypes: Archetype[] = [];
-    for (const archetype of this.archetypes) {
-      if (this.archetypeMatchesHook(archetype, entry)) {
-        archetype.matchingMultiHooks.add(entry);
-        entry.matchedArchetypes!.add(archetype);
-        matchedArchetypes.push(archetype);
-      }
-    }
-
-    // Callback style: invoke callback("init", ...); hook style: invoke hook.on_init(...)
-    const shouldFireInit = isCallback || (hook as LifecycleHook<any>).on_init !== undefined;
-    if (shouldFireInit) {
-      for (const archetype of matchedArchetypes) {
-        for (const entityId of archetype.getEntities()) {
-          const components = collectMultiHookComponents(this.createHooksContext(), entityId, componentTypes);
-          if (isCallback) {
-            (callback as LifecycleCallback<any>)("init", entityId, ...components);
-          } else {
-            (hook as LifecycleHook<any>).on_init!(entityId, ...components);
-          }
-        }
-      }
-    }
-
-    return () => {
-      this.hooks.delete(entry);
-      if (entry.matchedArchetypes) {
-        for (const archetype of entry.matchedArchetypes) {
-          archetype.matchingMultiHooks.delete(entry);
-        }
-      }
-    };
+      hook,
+      filter,
+    );
   }
 
   /**
@@ -981,14 +729,14 @@ export class World {
     const syncEnd = performance.now();
 
     // Build the data bag for the extracted manager (keeps it decoupled from internal maps)
-    const entityCount = this.entityToArchetype.size;
+    const entityCount = this.archetypeManager.entityToArchetype.size;
     let emptyArchetypes = 0;
-    for (const arch of this.archetypes) {
+    for (const arch of this.archetypeManager.archetypes) {
       if (arch.size === 0) emptyArchetypes++;
     }
 
     let archetypesByComponentSize = 0;
-    for (const set of this.archetypesByComponent.values()) {
+    for (const set of this.archetypeManager.archetypesByComponent.values()) {
       archetypesByComponentSize += set.size;
     }
 
@@ -1004,14 +752,14 @@ export class World {
         entityCount,
         freelistSize: this.entityIdManager.getFreelistSize(),
         nextId: this.entityIdManager.getNextId(),
-        archetypeCount: this.archetypes.length,
+        archetypeCount: this.archetypeManager.archetypes.length,
         emptyArchetypes,
         archetypesByComponentSize,
-        cachedQueryCount: (this.queryRegistry as any).cache?.size ?? 0,
-        registeredQueryCount: (this.queryRegistry as any).queries?.size ?? 0,
+        cachedQueryCount: this.queryRegistry.getDebugCounts().cached,
+        registeredQueryCount: this.queryRegistry.getDebugCounts().registered,
         hookCount: this.hooks.size,
-        entityReferencesSize: this.entityReferences.size,
-        entityToReferencingArchetypesSize: this.entityToReferencingArchetypes.size,
+        entityReferencesSize: this.relations.size,
+        entityToReferencingArchetypesSize: this.archetypeManager.entityToReferencingArchetypes.size,
       },
     );
   }
@@ -1165,17 +913,12 @@ export class World {
     return query.getEntities();
   }
 
-  // Delegators to the extracted ArchetypeManager (keeps public + internal call sites unchanged).
   private ensureArchetype(componentTypes: Iterable<EntityId<any>>): Archetype {
     return this.archetypeManager.ensureArchetype(componentTypes);
   }
 
   private cleanupArchetypesReferencingEntity(entityId: EntityId): void {
     this.archetypeManager.cleanupArchetypesReferencingEntity(entityId);
-  }
-
-  private archetypeMatchesHook(archetype: Archetype, entry: LifecycleHookEntry): boolean {
-    return this.archetypeManager.archetypeMatchesHook(archetype, entry);
   }
 
   /**
@@ -1199,23 +942,6 @@ export class World {
    * const savedData = JSON.parse(localStorage.getItem('save'));
    * const newWorld = new World(savedData);
    */
-  // Thin delegator to the extracted CommandExecutor for cascade paths (destroy* methods).
-  private removeComponentImmediate(entityId: EntityId, componentType: EntityId<any>, targetEntityId: EntityId): void {
-    this.commandExecutor.removeComponentImmediate(entityId, componentType, targetEntityId);
-  }
-
-  private createHooksContext(): HooksContext {
-    // The executor owns the current HooksContext; expose for any remaining internal use.
-    return (
-      (this.commandExecutor as any).getHooksContext?.() ?? {
-        multiHooks: this.hooks,
-        has: (eid, ct) => this.has(eid, ct),
-        get: (eid, ct) => this.get(eid, ct),
-        getOptional: (eid, ct) => this.getOptional(eid, ct),
-      }
-    );
-  }
-
   serialize(): SerializedWorld {
     return serializeWorld(
       this.archetypeManager.archetypes as Archetype[],

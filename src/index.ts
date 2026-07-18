@@ -45,10 +45,13 @@ export type { ComponentTuple, ComponentType, LifecycleCallback, LifecycleHook } 
 // Debug / observability types
 export type { DebugStatsCollector, SyncDebugStats } from "./types";
 
-// Sparse / dontFragment flag checks (preferred + legacy aliases for BC)
+// Sparse flag checks (preferred) + legacy dontFragment aliases (deprecated — remove in next major)
 export {
+  /** @deprecated Use {@link isSparseComponent}. Removed in next major. */
   isSparseComponent as isDontFragmentComponent,
+  /** @deprecated Use {@link isSparseRelation}. Removed in next major. */
   isSparseRelation as isDontFragmentRelation,
+  /** @deprecated Use {@link isSparseWildcard}. Removed in next major. */
   isSparseWildcard as isDontFragmentWildcard,
   isSkipSerializeComponent,
   isSparseComponent,

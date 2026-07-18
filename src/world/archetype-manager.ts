@@ -1,4 +1,5 @@
 import { Archetype } from "../archetype/archetype";
+import { filterRegularComponentTypes } from "../archetype/helpers";
 import type { SparseStore } from "../archetype/store";
 import { normalizeComponentTypes } from "../component/type-utils";
 import type { EntityId } from "../entity";
@@ -14,7 +15,6 @@ import { matchesFilter } from "../query/filter";
 import type { QueryRegistry } from "../query/registry";
 import type { LifecycleHookEntry } from "../types";
 import { getOrCompute } from "../utils/utils";
-import { filterRegularComponentTypes } from "./commands";
 
 /**
  * Context provided to ArchetypeManager for notifying dependent systems

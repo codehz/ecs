@@ -311,7 +311,7 @@ describe("World - Component Management", () => {
     const target2 = world.new();
 
     // Create Follows component with dontFragment option
-    const Follows = component<{ strength: number }>({ dontFragment: true });
+    const Follows = component<{ strength: number }>({ sparse: true });
 
     const followsTarget1 = relation(Follows, target1);
     const followsTarget2 = relation(Follows, target2);
@@ -327,8 +327,8 @@ describe("World - Component Management", () => {
 
     // They should be in the same archetype despite having different relation targets
     // (this is the key behavior of dontFragment)
-    const archetype1 = (world as any).entityToArchetype.get(entity1);
-    const archetype2 = (world as any).entityToArchetype.get(entity2);
+    const archetype1 = (world as any).archetypeManager.entityToArchetype.get(entity1);
+    const archetype2 = (world as any).archetypeManager.entityToArchetype.get(entity2);
     expect(archetype1).toBe(archetype2);
 
     // Verify the wildcard marker is present
@@ -343,7 +343,7 @@ describe("World - Component Management", () => {
     const child2 = world.new();
 
     // Create ChildOf component with both cascadeDelete and dontFragment options
-    const ChildOf = component<{ priority: number }>({ cascadeDelete: true, dontFragment: true });
+    const ChildOf = component<{ priority: number }>({ cascadeDelete: true, sparse: true });
 
     const childOfParent1 = relation(ChildOf, parent);
     const childOfParent2 = relation(ChildOf, parent);
@@ -358,8 +358,8 @@ describe("World - Component Management", () => {
     expect(world.has(child2, childOfParent2)).toBe(true);
 
     // Both children should be in the same archetype (dontFragment behavior)
-    const archetype1 = (world as any).entityToArchetype.get(child1);
-    const archetype2 = (world as any).entityToArchetype.get(child2);
+    const archetype1 = (world as any).archetypeManager.entityToArchetype.get(child1);
+    const archetype2 = (world as any).archetypeManager.entityToArchetype.get(child2);
     expect(archetype1).toBe(archetype2);
 
     // Delete parent - should cascade delete both children (cascadeDelete behavior)

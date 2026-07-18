@@ -25,7 +25,7 @@ describe("Sparse Query Notification Issue", () => {
 
     // Verify entity is found and archetype has wildcard marker
     expect(query.getEntities()).toContain(child1);
-    const arch1 = (world as any).entityToArchetype.get(child1);
+    const arch1 = (world as any).archetypeManager.entityToArchetype.get(child1);
     expect(arch1.componentTypes).toContain(WildcardChildOf);
 
     // Verify archetype separation: entity without relation shouldn't match
@@ -33,7 +33,7 @@ describe("Sparse Query Notification Issue", () => {
     world.set(entityWithout, Position);
     world.sync();
     expect(query.getEntities()).not.toContain(entityWithout);
-    expect((world as any).entityToArchetype.get(entityWithout)).not.toBe(arch1);
+    expect((world as any).archetypeManager.entityToArchetype.get(entityWithout)).not.toBe(arch1);
 
     // Add relation to existing entity
     const parent2 = world.new();
@@ -45,7 +45,7 @@ describe("Sparse Query Notification Issue", () => {
     world.remove(child1, relation(ChildOf, parent1));
     world.sync();
     expect(query.getEntities()).not.toContain(child1);
-    expect((world as any).entityToArchetype.get(child1).componentTypes).not.toContain(WildcardChildOf);
+    expect((world as any).archetypeManager.entityToArchetype.get(child1).componentTypes).not.toContain(WildcardChildOf);
 
     // Debug stats should reflect archetype lifecycle changes from the wildcard marker add/remove
     const lastStats = collected[collected.length - 1]!;

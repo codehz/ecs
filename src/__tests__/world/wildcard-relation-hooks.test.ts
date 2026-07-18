@@ -337,9 +337,9 @@ describe("Wildcard-Relation Hooks", () => {
   it("should NOT report target=0 in on_remove when using wildcard remove (relation(Comp, '*'))", () => {
     const world = new World();
 
-    // Use dontFragment:true so that removeWildcardRelations adds the wildcard
+    // Use sparse: true so that removeWildcardRelations adds the wildcard
     // marker to removedComponents, triggering the bug path.
-    const RelData = component<{ value: string }>({ dontFragment: true });
+    const RelData = component<{ value: string }>({ sparse: true });
     const target = world.new();
     const wildcardRel = relation(RelData, "*");
     const concreteRel = relation(RelData, target);

@@ -1,3 +1,4 @@
+import { normalizeComponentTypes } from "../component/type-utils";
 import type { ComponentId, EntityId, WildcardRelationId } from "../entity";
 import {
   getComponentIdFromRelationId,
@@ -6,6 +7,7 @@ import {
   getTargetIdFromRelationId,
   isRelationId,
   isSparseRelation,
+  isSparseWildcard,
 } from "../entity";
 import { isOptionalEntityId, type ComponentType } from "../types";
 import { MISSING_COMPONENT } from "./archetype";
@@ -203,4 +205,38 @@ export function buildSingleComponent(
   }
 
   return buildRegularComponentValue(dataSource as any[] | undefined, entityIndex, optional);
+}
+
+/**
+ * Filter component types that belong on an archetype signature.
+ * - Keeps sparse wildcard markers (they mark the archetype)
+ * - Drops specific sparse relations (payload lives in SparseStore)
+ */
+export function filterRegularComponentTypes(componentTypes: Iterable<EntityId<any>>): EntityId<any>[] {
+  const regularTypes: EntityId<any>[] = [];
+
+  for (const componentType of componentTypes) {
+    if (isSparseWildcard(componentType)) {
+      regularTypes.push(componentType);
+      continue;
+    }
+
+    if (isSparseRelation(componentType)) {
+      continue;
+    }
+
+    regularTypes.push(componentType);
+  }
+
+  return regularTypes;
+}
+
+/**
+ * Compare two component-type lists for equality after normalization (order-insensitive).
+ */
+export function areComponentTypesEqual(types1: EntityId<any>[], types2: EntityId<any>[]): boolean {
+  if (types1.length !== types2.length) return false;
+  const sorted1 = normalizeComponentTypes(types1);
+  const sorted2 = normalizeComponentTypes(types2);
+  return sorted1.every((v, i) => v === sorted2[i]);
 }

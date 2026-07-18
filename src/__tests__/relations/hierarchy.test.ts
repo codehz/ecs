@@ -16,8 +16,8 @@ describe("Relation & Hierarchy Companion Tools", () => {
     world = new World();
     // IMPORTANT: do not use .name here — the component name registry is global
     // across the test process and previous tests may have used similar names.
-    ChildOf = component<void>({ exclusive: true, dontFragment: true });
-    InInventory = component<void>({ dontFragment: true });
+    ChildOf = component<void>({ exclusive: true, sparse: true });
+    InInventory = component<void>({ sparse: true });
     ItemData = component<{ name: string }>();
 
     collectedStats = [];
@@ -161,7 +161,7 @@ describe("Relation & Hierarchy Companion Tools", () => {
     const item = world.new();
     world.set(item, ItemData, { name: "Magic Sword" });
 
-    const Owns = component<{ slot: string }>({ dontFragment: true });
+    const Owns = component<{ slot: string }>({ sparse: true });
     world.set(owner, relation(Owns, item), { slot: "hand" });
     world.sync();
 

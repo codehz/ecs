@@ -5,7 +5,14 @@ import {
   isWildcardRelationId,
   type EntityId,
 } from "../entity";
-import { isOptionalEntityId, type ComponentType, type LifecycleHookEntry } from "../types";
+import type { QueryFilter } from "../query/filter";
+import {
+  isOptionalEntityId,
+  type ComponentType,
+  type LifecycleCallback,
+  type LifecycleHook,
+  type LifecycleHookEntry,
+} from "../types";
 
 /**
  * Debug-only counter incremented on every invokeHook call when armed.
@@ -368,4 +375,85 @@ function collectWildcardFromRemoved(
   }
 
   return result;
+}
+
+/**
+ * Dependencies for lifecycle hook registration (owned by World composition root).
+ */
+export interface RegisterHookDeps {
+  hooks: Set<LifecycleHookEntry>;
+  archetypes: Iterable<Archetype>;
+  hooksContext: HooksContext;
+  archetypeMatchesHook: (archetype: Archetype, entry: LifecycleHookEntry) => boolean;
+}
+
+/**
+ * Register a multi-component lifecycle hook, wire matching archetypes, and fire on_init.
+ * Returns an unsubscribe function.
+ */
+export function registerLifecycleHook(
+  deps: RegisterHookDeps,
+  componentTypes: readonly ComponentType<any>[],
+  hook: LifecycleHook<any> | LifecycleCallback<any>,
+  filter?: QueryFilter,
+): () => void {
+  const isCallback = typeof hook === "function";
+  const callback = isCallback ? (hook as LifecycleCallback<any>) : undefined;
+
+  const requiredComponents: EntityId<any>[] = [];
+  const optionalComponents: EntityId<any>[] = [];
+  for (const ct of componentTypes) {
+    if (!isOptionalEntityId(ct)) {
+      requiredComponents.push(ct as EntityId<any>);
+    } else {
+      optionalComponents.push(ct.optional);
+    }
+  }
+
+  if (requiredComponents.length === 0) {
+    throw new Error("Hook must have at least one required component");
+  }
+
+  const entry: LifecycleHookEntry = {
+    componentTypes,
+    requiredComponents,
+    optionalComponents,
+    filter: filter || {},
+    hook: isCallback ? ({} as LifecycleHook<any>) : (hook as LifecycleHook<any>),
+    callback,
+    matchedArchetypes: new Set(),
+  };
+  deps.hooks.add(entry);
+
+  const matchedArchetypes: Archetype[] = [];
+  for (const archetype of deps.archetypes) {
+    if (deps.archetypeMatchesHook(archetype, entry)) {
+      archetype.matchingMultiHooks.add(entry);
+      entry.matchedArchetypes!.add(archetype);
+      matchedArchetypes.push(archetype);
+    }
+  }
+
+  const shouldFireInit = isCallback || (hook as LifecycleHook<any>).on_init !== undefined;
+  if (shouldFireInit) {
+    for (const archetype of matchedArchetypes) {
+      for (const entityId of archetype.getEntities()) {
+        const components = collectMultiHookComponents(deps.hooksContext, entityId, componentTypes);
+        if (isCallback) {
+          (callback as LifecycleCallback<any>)("init", entityId, ...components);
+        } else {
+          (hook as LifecycleHook<any>).on_init!(entityId, ...components);
+        }
+      }
+    }
+  }
+
+  return () => {
+    deps.hooks.delete(entry);
+    if (entry.matchedArchetypes) {
+      for (const archetype of entry.matchedArchetypes) {
+        archetype.matchingMultiHooks.delete(entry);
+      }
+    }
+  };
 }

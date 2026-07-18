@@ -2,18 +2,19 @@ import type { Archetype } from "../archetype/archetype";
 import type { SparseStore } from "../archetype/store";
 import type { Command } from "../commands/buffer";
 import type { ComponentChangeset } from "../commands/changeset";
-import { normalizeComponentTypes } from "../component/type-utils";
 import {
   getComponentIdFromRelationId,
   getComponentMerge,
   isSparseComponent,
   isSparseRelation,
-  isSparseWildcard,
   isWildcardRelationId,
   relation,
   type ComponentId,
   type EntityId,
 } from "../entity";
+
+// Re-export signature helpers from archetype domain for existing importers.
+export { areComponentTypesEqual, filterRegularComponentTypes } from "../archetype/helpers";
 
 export interface CommandProcessorContext {
   sparseStore: SparseStore;
@@ -300,32 +301,4 @@ function applySparseChangesNoHooks(sparseStore: SparseStore, entityId: EntityId,
       sparseStore.setValue(entityId, componentType, component);
     }
   }
-}
-
-export function filterRegularComponentTypes(componentTypes: Iterable<EntityId<any>>): EntityId<any>[] {
-  const regularTypes: EntityId<any>[] = [];
-
-  for (const componentType of componentTypes) {
-    // Keep wildcard markers for sparse components (they mark the archetype)
-    if (isSparseWildcard(componentType)) {
-      regularTypes.push(componentType);
-      continue;
-    }
-
-    // Skip specific sparse relations from archetype signature
-    if (isSparseRelation(componentType)) {
-      continue;
-    }
-
-    regularTypes.push(componentType);
-  }
-
-  return regularTypes;
-}
-
-export function areComponentTypesEqual(types1: EntityId<any>[], types2: EntityId<any>[]): boolean {
-  if (types1.length !== types2.length) return false;
-  const sorted1 = normalizeComponentTypes(types1);
-  const sorted2 = normalizeComponentTypes(types2);
-  return sorted1.every((v, i) => v === sorted2[i]);
 }

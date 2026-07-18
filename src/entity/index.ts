@@ -54,8 +54,11 @@ export {
   getComponentOptions,
   isCascadeDeleteComponent,
   isCascadeDeleteRelation,
+  /** @deprecated Use isSparseComponent. Removed in next major. */
   isSparseComponent as isDontFragmentComponent,
+  /** @deprecated Use isSparseRelation. Removed in next major. */
   isSparseRelation as isDontFragmentRelation,
+  /** @deprecated Use isSparseWildcard. Removed in next major. */
   isSparseWildcard as isDontFragmentWildcard,
   isExclusiveComponent,
   isExclusiveRelation,

@@ -32,9 +32,9 @@ function makeCtx(): CommandProcessorContext {
 describe("world/commands internal coverage", () => {
   const A = component<number>();
   const B = component<string>();
-  const Tag = component({ dontFragment: true });
-  const Data = component<{ v: number }>({ dontFragment: true });
-  const ExclusiveTag = component({ dontFragment: true, exclusive: true });
+  const Tag = component({ sparse: true });
+  const Data = component<{ v: number }>({ sparse: true });
+  const ExclusiveTag = component({ sparse: true, exclusive: true });
 
   describe("areComponentTypesEqual", () => {
     it("returns true for equal arrays (same order)", () => {
@@ -269,7 +269,7 @@ describe("world/commands internal coverage", () => {
   describe("public API paths for remaining branch coverage (processDeleteCommand etc.)", () => {
     it("non-exclusive dontFragment: removing one target keeps wildcard marker (via World commands)", () => {
       const world = new World();
-      const ParentTag = component({ dontFragment: true }); // non-exclusive
+      const ParentTag = component({ sparse: true }); // non-exclusive
       const p1 = world.new();
       const p2 = world.new();
       const child = world.new();
@@ -297,7 +297,7 @@ describe("world/commands internal coverage", () => {
 
     it("exclusive dontFragment replacement via set (normal path) retains marker and cleans old target", () => {
       const world = new World();
-      const ChildOf = component({ dontFragment: true, exclusive: true });
+      const ChildOf = component({ sparse: true, exclusive: true });
       const parentA = world.new();
       const parentB = world.new();
       const child = world.new();

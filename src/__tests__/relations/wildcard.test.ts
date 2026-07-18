@@ -108,7 +108,7 @@ describe("Wildcard relation edge cases", () => {
 
   it("should handle dontFragment wildcard relations", () => {
     const world = new World();
-    const Follows = component<{ data: number }>({ dontFragment: true });
+    const Follows = component<{ data: number }>({ sparse: true });
     const entity1 = world.new();
     const entity2 = world.new();
     const target1 = world.new();
@@ -127,8 +127,8 @@ describe("Wildcard relation edge cases", () => {
     expect(results2).toHaveLength(1);
 
     // Both entities should be in the same archetype (dontFragment behavior)
-    const archetype1 = (world as any).entityToArchetype.get(entity1);
-    const archetype2 = (world as any).entityToArchetype.get(entity2);
+    const archetype1 = (world as any).archetypeManager.entityToArchetype.get(entity1);
+    const archetype2 = (world as any).archetypeManager.entityToArchetype.get(entity2);
     expect(archetype1).toBe(archetype2);
   });
 

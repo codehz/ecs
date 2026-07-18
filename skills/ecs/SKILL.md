@@ -205,10 +205,12 @@ Use `relation(Component, target)` to create entity-to-entity references.
 - When the target entity is deleted, **the entire referencing entity is deleted**.
 - This is transitive and powerful. Use deliberately.
 
-**`sparse: true`** (preferred; legacy key `dontFragment` is fully equivalent and supported)
+**`sparse: true`** (preferred)
 
 - Prevents archetype fragmentation when many different targets exist.
 - **Required** for relations with high cardinality or frequent target changes (e.g. `ChildOf` with thousands of children, AI targeting, inventory).
+- Legacy key `dontFragment` still works but is **deprecated** and will be removed in the next major. Always write `sparse` in new code.
+- Legacy helpers `isDontFragmentComponent` / `isDontFragmentRelation` / `isDontFragmentWildcard` are deprecated aliases of `isSparse*`.
 
 **Correct definition patterns**:
 

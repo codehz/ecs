@@ -29,7 +29,7 @@ describe("World sync hot-path performance", () => {
   it("should keep stable sync throughput for frequent set/remove patterns", () => {
     const world = new World();
     const Position = component<{ x: number; y: number }>();
-    const ChildOf = component({ dontFragment: true, exclusive: true });
+    const ChildOf = component({ sparse: true, exclusive: true });
 
     const parentA = world.new();
     const parentB = world.new();
