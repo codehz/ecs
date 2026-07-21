@@ -268,7 +268,9 @@ export interface ComponentOptions<T = any> {
   dontFragment?: boolean;
   /**
    * If `true`, this component (and relations whose base component is this type)
-   * is **omitted** from `world.serialize()` snapshots.
+   * is **omitted** from `world.serialize()` snapshots and **silently dropped**
+   * when restoring via `new World(snapshot)` / {@link deserializeWorld}, even if
+   * a dirty or hand-written snapshot still contains entries for it.
    *
    * Use for ephemeral / derived / session-only data that must not appear in save
    * games or network dumps (e.g. per-frame scratch buffers, debug overlays,
@@ -279,11 +281,14 @@ export interface ComponentOptions<T = any> {
    * - During serialization, entities that only had skip-serialize components still
    *   appear in the snapshot (entity id + remaining components), but those
    *   component entries are not written.
+   * - During deserialization, matching entries in `entities` and
+   *   `componentEntities` are skipped using the **current process registry** flag
+   *   (not a flag embedded in the snapshot).
    * - Applies to plain components and to relations whose **base** component has
    *   `skipSerialize: true` (including sparse relation side-store entries).
    * - Does **not** affect runtime storage, queries, hooks, or `world.sync()`.
-   * - On deserialize, skipped components simply are not present (same as if they
-   *   were never set). Recompute or re-attach them after restore if needed.
+   * - After restore, skipped components are absent (same as if they were never
+   *   set). Recompute or re-attach them after restore if needed.
    *
    * @example
    * ```ts
@@ -559,7 +564,8 @@ export function isSparseComponent(id: ComponentId<any>): boolean {
  * Check if a component was created with `skipSerialize: true`.
  *
  * When enabled, `world.serialize()` omits this component (and relations whose
- * base component is this type) from the snapshot.
+ * base component is this type) from the snapshot, and restore paths drop any
+ * matching entries present in a snapshot.
  *
  * @param id - The component ID to check. Must be a plain component ID (1–1023).
  * @returns `true` if the component was created with `skipSerialize: true`.
@@ -572,14 +578,15 @@ export function isSkipSerializeComponent(id: ComponentId<any>): boolean {
 }
 
 /**
- * Whether a component or relation type should be omitted from serialization.
+ * Whether a component or relation type should be omitted from serialization
+ * and skipped on deserialization.
  *
  * Resolves relation wrappers to their base component and checks the
  * `skipSerialize` flag. Plain entity IDs (non-component, non-relation) return
- * `false`.
+ * `false`. Used by both {@link serializeWorld} and {@link deserializeWorld}.
  *
  * @param componentType - A raw component ID or relation-wrapped type.
- * @returns `true` if this type must not appear in a serialized snapshot.
+ * @returns `true` if this type must not appear in (or be restored from) a snapshot.
  *
  * @see {@link ComponentOptions.skipSerialize}
  */

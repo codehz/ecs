@@ -16,7 +16,9 @@ import { trackEntityReference, type EntityReferencesMap } from "./references";
  * Serializes the full world state to a plain JS object suitable for JSON encoding.
  *
  * Components registered with {@link ComponentOptions.skipSerialize} (and relations
- * whose base component has that flag) are omitted from the snapshot.
+ * whose base component has that flag) are omitted from the snapshot. The same flag
+ * is consulted on deserialize ({@link deserializeWorld}) so dirty or hand-written
+ * snapshots cannot reintroduce those types.
  */
 export function serializeWorld(
   archetypes: Archetype[],
@@ -93,6 +95,12 @@ export interface WorldDeserializationContext {
 /**
  * Restores world state from a snapshot into the provided context.
  * Intended to be called from `World`'s constructor.
+ *
+ * Entries whose component type has {@link ComponentOptions.skipSerialize} in the
+ * **current process registry** (via {@link shouldSkipSerialize}) are silently
+ * dropped for both regular entities and component-entities, matching
+ * {@link serializeWorld}. Entity existence is preserved even if every component
+ * on that entity was skipped.
  */
 export function deserializeWorld(ctx: WorldDeserializationContext, snapshot: SerializedWorld): void {
   if (snapshot.entityManager) {
@@ -109,6 +117,7 @@ export function deserializeWorld(ctx: WorldDeserializationContext, snapshot: Ser
 
       for (const componentEntry of componentsArray) {
         const componentType = decodeSerializedId(componentEntry.type);
+        if (shouldSkipSerialize(componentType)) continue;
         componentMap.set(componentType, componentEntry.value);
       }
 
@@ -131,6 +140,7 @@ export function deserializeWorld(ctx: WorldDeserializationContext, snapshot: Ser
       componentMap.clear();
       for (const componentEntry of componentsArray) {
         const componentType = decodeSerializedId(componentEntry.type);
+        if (shouldSkipSerialize(componentType)) continue;
         componentMap.set(componentType, componentEntry.value);
       }
 

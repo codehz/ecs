@@ -126,4 +126,65 @@ describe("World serialization", () => {
     expect(restored.has(e, Scratch)).toBe(false);
     expect(restored.has(e, relation(EphemeralRel, target))).toBe(false);
   });
+
+  it("should drop skipSerialize components present in a dirty entity snapshot", () => {
+    const Position = component<{ x: number; y: number }>({ name: "SkipSerRestorePos" });
+    const Scratch = component<{ hits: number }>({ name: "SkipSerRestoreScratch", skipSerialize: true });
+    const EphemeralRel = component({ name: "SkipSerRestoreEphemeralRel", skipSerialize: true, sparse: true });
+
+    const e = 1024 as EntityId;
+    const target = 1025 as EntityId;
+
+    // Hand-written snapshot still contains skipSerialize entries (legacy/dirty data).
+    const snapshot = {
+      version: 1,
+      entityManager: { nextId: 1026 },
+      entities: [
+        {
+          id: e,
+          components: [
+            { type: "SkipSerRestorePos", value: { x: 1, y: 2 } },
+            { type: "SkipSerRestoreScratch", value: { hits: 7 } },
+            { type: { component: "SkipSerRestoreEphemeralRel", target }, value: undefined },
+          ],
+        },
+        {
+          id: target,
+          components: [],
+        },
+      ],
+    };
+
+    const restored = new World(snapshot);
+    expect(restored.exists(e)).toBe(true);
+    expect(restored.exists(target)).toBe(true);
+    expect(restored.get(e, Position)).toEqual({ x: 1, y: 2 });
+    expect(restored.has(e, Scratch)).toBe(false);
+    expect(restored.has(e, relation(EphemeralRel, target))).toBe(false);
+    expect(restored.getRelationSources(target, EphemeralRel)).toEqual([]);
+  });
+
+  it("should drop skipSerialize components present in dirty componentEntities", () => {
+    const Host = component<{ v: number }>({ name: "SkipSerRestoreHost" });
+    const Scratch = component<{ hits: number }>({ name: "SkipSerRestoreScratchCE", skipSerialize: true });
+
+    const snapshot = {
+      version: 1,
+      entityManager: { nextId: 1024 },
+      entities: [],
+      componentEntities: [
+        {
+          id: "SkipSerRestoreHost",
+          components: [
+            { type: "SkipSerRestoreHost", value: { v: 42 } },
+            { type: "SkipSerRestoreScratchCE", value: { hits: 3 } },
+          ],
+        },
+      ],
+    };
+
+    const restored = new World(snapshot);
+    expect(restored.singleton(Host).get()).toEqual({ v: 42 });
+    expect(restored.has(Host, Scratch)).toBe(false);
+  });
 });
