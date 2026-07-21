@@ -12,19 +12,34 @@ import {
 } from "../storage/serialization";
 import { trackEntityReference, type EntityReferencesMap } from "./references";
 
+/** Options for {@link serializeWorld}. */
+export interface SerializeWorldOptions {
+  /**
+   * When `true`, include components marked {@link ComponentOptions.skipSerialize}
+   * (and relations whose base has that flag). Intended for debug dumps only
+   * ({@link World.dump}); restore paths still drop these types via
+   * {@link deserializeWorld}. Default `false` (save-game / network snapshot).
+   */
+  includeSkipSerialize?: boolean;
+}
+
 /**
  * Serializes the full world state to a plain JS object suitable for JSON encoding.
  *
- * Components registered with {@link ComponentOptions.skipSerialize} (and relations
- * whose base component has that flag) are omitted from the snapshot. The same flag
- * is consulted on deserialize ({@link deserializeWorld}) so dirty or hand-written
- * snapshots cannot reintroduce those types.
+ * By default, components registered with {@link ComponentOptions.skipSerialize}
+ * (and relations whose base component has that flag) are omitted from the snapshot.
+ * Pass `{ includeSkipSerialize: true }` for a debug dump that includes those types
+ * (see {@link World.dump}). The same flag is consulted on deserialize
+ * ({@link deserializeWorld}) so dirty or hand-written snapshots cannot reintroduce
+ * skip-serialize types into a restored world.
  */
 export function serializeWorld(
   archetypes: Archetype[],
   componentEntities: ComponentEntityStore,
   entityIdManager: EntityIdManager,
+  options?: SerializeWorldOptions,
 ): SerializedWorld {
+  const includeSkipSerialize = options?.includeSkipSerialize === true;
   // ID cache turns repeated encode work (especially component type IDs) into O(#unique IDs)
   const idCache = new Map<any, any>();
 
@@ -32,9 +47,9 @@ export function serializeWorld(
 
   for (const archetype of archetypes) {
     // Pre-encode this archetype's component type IDs exactly once (big win when many entities share the archetype).
-    // null = skipSerialize component — appendSerializedEntities will omit those columns.
+    // null = skipSerialize component — appendSerializedEntities will omit those columns (save path only).
     const encodedComponentTypes: (SerializedEntityId | null)[] = archetype.componentTypes.map((t) =>
-      shouldSkipSerialize(t) ? null : encodeEntityIdCached(t, idCache),
+      !includeSkipSerialize && shouldSkipSerialize(t) ? null : encodeEntityIdCached(t, idCache),
     );
 
     // The append method will use the bulk helper internally when a pre-fetched map is supplied.
@@ -44,7 +59,7 @@ export function serializeWorld(
       (id) => encodeEntityIdCached(id, idCache),
       encodedComponentTypes,
       undefined,
-      shouldSkipSerialize,
+      includeSkipSerialize ? undefined : shouldSkipSerialize,
     );
   }
 
@@ -52,7 +67,7 @@ export function serializeWorld(
   for (const [entityId, components] of componentEntities.entries()) {
     componentEntitiesArr.push({
       id: encodeEntityIdCached(entityId, idCache),
-      components: serializeComponentsFromMap(components, idCache),
+      components: serializeComponentsFromMap(components, idCache, includeSkipSerialize),
     });
   }
 
@@ -68,10 +83,11 @@ export function serializeWorld(
 function serializeComponentsFromMap(
   components: Map<EntityId<any>, any>,
   idCache: Map<any, any>,
+  includeSkipSerialize = false,
 ): SerializedComponent[] {
   const result: SerializedComponent[] = [];
   for (const [rawType, value] of components) {
-    if (shouldSkipSerialize(rawType)) continue;
+    if (!includeSkipSerialize && shouldSkipSerialize(rawType)) continue;
     result.push({
       type: encodeEntityIdCached(rawType, idCache),
       value: value === MISSING_COMPONENT ? undefined : value,

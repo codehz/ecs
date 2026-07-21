@@ -263,13 +263,14 @@ This is useful for global configuration, time, resources, etc.
 
 ### 10. Serialization
 
-- `world.serialize()` produces an **in-memory snapshot**.
-- `new World(snapshot)` restores entities and component data.
+- `world.serialize()` produces an **in-memory snapshot** (omits `skipSerialize` components).
+- `world.dump()` produces the same shape but **includes** `skipSerialize` components — debug only, not for restore.
+- `new World(snapshot)` restores entities and component data from a `serialize()` snapshot.
 - **Not restored**: cached queries, lifecycle hooks, command buffer state.
 - `undefined` is a valid component value and is preserved.
 - For real persistence you must implement custom encode/decode.
 
-**Rule**: Treat serialization as "save the current world state for later in this process or for network transfer", not as a general-purpose save file format.
+**Rule**: Treat serialization as "save the current world state for later in this process or for network transfer", not as a general-purpose save file format. Use `dump()` only for debugging.
 
 ### 11. Entity / Component ID Rules (Quick Reference)
 

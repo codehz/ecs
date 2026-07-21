@@ -233,7 +233,8 @@ bun run examples/inventory-system-relations.ts
 | `createQuery(componentIds, filter?)`  | 创建可重用的缓存查询                                                                |
 | `releaseQuery(query)`                 | 释放查询（可选清理）                                                                |
 | `hook(componentTypes, hook, filter?)` | 注册生命周期钩子，返回卸载函数                                                      |
-| `serialize()`                         | 序列化世界状态为快照对象                                                            |
+| `serialize()`                         | 序列化世界状态为快照对象（省略 `skipSerialize` 组件）                               |
+| `dump()`                              | 调试导出完整世界状态（包含 `skipSerialize` 组件；不可用于恢复）                     |
 | `sync()`                              | 执行所有延迟命令                                                                    |
 
 单例组件推荐写法：
@@ -341,22 +342,31 @@ const owners = world.getRelationSources(sword, InInventory);
 - 实体 ID：`1024+`
 - 关系 ID：负数编码 `-(componentId * 2^42 + targetId)`
 
-## 序列化（快照）
+## 序列化（快照）与调试 dump
 
-库提供对世界状态的「内存快照」序列化接口，用于保存/恢复实体与组件数据。
+库提供对世界状态的「内存快照」序列化接口，用于保存/恢复实体与组件数据；另有调试用的完整导出。
 
 ```typescript
-// 创建快照（内存对象）
+// 创建快照（内存对象）—— 省略 skipSerialize 组件
 const snapshot = world.serialize();
 
 // 在同一进程内直接恢复
 const restored = new World(snapshot);
+
+// 调试导出（形状相同，但包含 skipSerialize 组件；不要用于 new World(...)）
+const debug = world.dump();
 ```
+
+| API                   | 用途                      | `skipSerialize` 组件         |
+| --------------------- | ------------------------- | ---------------------------- |
+| `world.serialize()`   | 存档 / 网络快照           | **省略**                     |
+| `world.dump()`        | 调试 / 日志 / 观测        | **包含**                     |
+| `new World(snapshot)` | 从 `serialize()` 快照恢复 | 脏数据中的 skip 条目仍会丢弃 |
 
 **设计要点：**
 
-- `world.serialize()` 返回内存快照对象，**不会**对组件值执行 `JSON.stringify`，也不会尝试将组件值转换为可序列化格式。
-- `new World(snapshot)` 是反序列化的唯一入口（没有 `World.deserialize()` 静态方法）。
+- `world.serialize()` / `world.dump()` 均返回内存对象，**不会**对组件值执行 `JSON.stringify`，也不会 deep clone；组件值为浅引用。
+- `new World(snapshot)` 是反序列化的唯一入口（没有 `World.deserialize()` 静态方法）。**不要**用 `dump()` 的结果恢复世界。
 - 快照包含实体、组件以及 `EntityIdManager` 分配器状态（保留下一次分配的 ID）；**不会**自动恢复查询缓存或生命周期钩子。
 
 **持久化示例（组件值为 JSON 友好时）：**

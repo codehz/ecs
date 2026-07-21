@@ -926,6 +926,10 @@ export class World {
    * This creates a "memory snapshot" that can be stored or transmitted.
    * The snapshot can be restored using `new World(snapshot)`.
    *
+   * Components registered with {@link ComponentOptions.skipSerialize} (and
+   * relations whose base has that flag) are **omitted**. For a full debug export
+   * that includes those types, use {@link dump} instead.
+   *
    * **Note:** This is NOT automatically persistent storage. To persist data,
    * you must serialize the returned object to JSON or another format yourself.
    *
@@ -947,6 +951,42 @@ export class World {
       this.archetypeManager.archetypes as Archetype[],
       this.componentEntities,
       this.entityIdManager,
+    );
+  }
+
+  /**
+   * Full world dump for debugging / observability / logging.
+   *
+   * Same shape as {@link serialize} (`SerializedWorld`) and same shallow
+   * value semantics (no deep clone, no `JSON.stringify` of component values),
+   * but **includes** components marked {@link ComponentOptions.skipSerialize}
+   * (plain components, relations, sparse side-store entries, and component-entities).
+   *
+   * **Not a save format.** Do not restore with `new World(dump)`. If misused,
+   * {@link deserializeWorld} still drops `skipSerialize` entries using the
+   * current process registry. Distinct from internal {@link Archetype.dump}
+   * (Map-based, per-archetype).
+   *
+   * @returns A plain object with the full runtime component picture
+   *
+   * @example
+   * const PathCache = component<{ nodes: number[] }>({
+   *   name: "PathCache",
+   *   skipSerialize: true,
+   * });
+   * world.set(unit, PathCache, { nodes: [1, 2, 3] });
+   * world.sync();
+   *
+   * const debug = world.dump();
+   * // debug entities include PathCache; world.serialize() would not
+   * console.log(JSON.stringify(debug, null, 2));
+   */
+  dump(): SerializedWorld {
+    return serializeWorld(
+      this.archetypeManager.archetypes as Archetype[],
+      this.componentEntities,
+      this.entityIdManager,
+      { includeSkipSerialize: true },
     );
   }
 }

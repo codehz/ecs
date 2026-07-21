@@ -50,7 +50,7 @@ Do **not** reintroduce algorithm bodies (destroy BFS, hierarchy DFS, has/get dis
 ## Common Pitfalls & Conventions
 
 - `world.get()` throws an error if the component does not exist; `undefined` is a valid value. Always use `has()` first or use `getOptional()`.
-- Serialization is an "in-memory snapshot": `world.serialize()` returns an object, `new World(snapshot)` restores it; for persistence, custom encode/decode is needed.
+- Serialization is an "in-memory snapshot": `world.serialize()` returns an object (omits `skipSerialize`), `new World(snapshot)` restores it; for persistence, custom encode/decode is needed. Use `world.dump()` for debug exports that include `skipSerialize` components (not for restore).
 - Relation components: `relation(componentId, targetId)`; wildcard relations use `relation(componentId, "*")` to listen to all targets.
 - Exclusive relations: declare `exclusive: true` in the component definition; same-type relations automatically exclude each other.
 - Prefer `sparse: true` for high-cardinality relations. Legacy `dontFragment` / `isDontFragment*` are **deprecated** (removed in next major).

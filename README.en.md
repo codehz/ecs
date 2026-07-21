@@ -233,7 +233,8 @@ bun run examples/inventory-system-relations.ts
 | `createQuery(componentIds, filter?)`  | Create a reusable, cached query                                                                              |
 | `releaseQuery(query)`                 | Release a query (optional cleanup)                                                                           |
 | `hook(componentTypes, hook, filter?)` | Register a lifecycle hook, returns an unlisten function                                                      |
-| `serialize()`                         | Serialize world state as a snapshot object                                                                   |
+| `serialize()`                         | Serialize world state as a snapshot object (omits `skipSerialize` components)                                |
+| `dump()`                              | Debug export of full world state (includes `skipSerialize`; not for restore)                                 |
 | `sync()`                              | Execute all deferred commands                                                                                |
 
 ### Query
@@ -327,22 +328,31 @@ See `src/relations/hierarchy.ts` and the new test suite for details.
 - Entity ID: `1024+`
 - Relation ID: negative encoded as `-(componentId * 2^42 + targetId)`
 
-## Serialization (Snapshot)
+## Serialization (Snapshot) and Debug Dump
 
-The library provides an "in-memory snapshot" serialization interface for saving/restoring entity and component data.
+The library provides an "in-memory snapshot" serialization interface for saving/restoring entity and component data, plus a full debug export.
 
 ```typescript
-// Create a snapshot (in-memory object)
+// Create a snapshot (in-memory object) — omits skipSerialize components
 const snapshot = world.serialize();
 
 // Restore directly within the same process
 const restored = new World(snapshot);
+
+// Debug export (same shape, but includes skipSerialize; do not pass to new World(...))
+const debug = world.dump();
 ```
+
+| API                   | Purpose                               | `skipSerialize` components                   |
+| --------------------- | ------------------------------------- | -------------------------------------------- |
+| `world.serialize()`   | Save / network snapshot               | **Omitted**                                  |
+| `world.dump()`        | Debug / logging / observability       | **Included**                                 |
+| `new World(snapshot)` | Restore from a `serialize()` snapshot | Skip entries in dirty data are still dropped |
 
 **Design notes:**
 
-- `world.serialize()` returns an in-memory snapshot object. It does **not** call `JSON.stringify` on component values, nor does it attempt to convert component values to a serializable format.
-- `new World(snapshot)` is the sole entry point for deserialization (there is no `World.deserialize()` static method).
+- Both `world.serialize()` and `world.dump()` return in-memory objects. They do **not** call `JSON.stringify` on component values and do **not** deep-clone them (shallow references).
+- `new World(snapshot)` is the sole entry point for deserialization (there is no `World.deserialize()` static method). **Do not** restore from a `dump()` result.
 - The snapshot includes entities, components, and the `EntityIdManager` allocator state (preserving the next ID to assign). It does **not** automatically restore query caches or lifecycle hooks.
 
 **Persistence example (when component values are JSON-friendly):**

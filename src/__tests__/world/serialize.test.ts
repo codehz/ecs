@@ -187,4 +187,69 @@ describe("World serialization", () => {
     expect(restored.singleton(Host).get()).toEqual({ v: 42 });
     expect(restored.has(Host, Scratch)).toBe(false);
   });
+
+  it("dump should include skipSerialize components while serialize still omits them", () => {
+    const Position = component<{ x: number; y: number }>({ name: "DumpSkipSerPosition" });
+    const Scratch = component<{ hits: number }>({ name: "DumpSkipSerScratch", skipSerialize: true });
+    const EphemeralRel = component({ name: "DumpSkipSerEphemeralRel", skipSerialize: true, sparse: true });
+
+    const world = new World();
+    const e = world.new();
+    const target = world.new();
+    const scratchValue = { hits: 7 };
+    world.set(e, Position, { x: 1, y: 2 });
+    world.set(e, Scratch, scratchValue);
+    world.set(e, relation(EphemeralRel, target));
+    world.sync();
+
+    const save = world.serialize();
+    const saveText = JSON.stringify(save);
+    expect(saveText).toContain("DumpSkipSerPosition");
+    expect(saveText).not.toContain("DumpSkipSerScratch");
+    expect(saveText).not.toContain("DumpSkipSerEphemeralRel");
+
+    const dump = world.dump();
+    const dumpText = JSON.stringify(dump);
+    expect(dumpText).toContain("DumpSkipSerPosition");
+    expect(dumpText).toContain("DumpSkipSerScratch");
+    expect(dumpText).toContain("DumpSkipSerEphemeralRel");
+
+    const dumpedEntity = dump.entities.find((entry) => entry.id === e);
+    expect(dumpedEntity).toBeDefined();
+    const scratchEntry = dumpedEntity!.components.find((c) => c.type === "DumpSkipSerScratch");
+    expect(scratchEntry?.value).toEqual({ hits: 7 });
+    // Shallow reference semantics (same as serialize)
+    expect(scratchEntry?.value).toBe(scratchValue);
+
+    // Sparse relations appear as a concrete pair; the archetype may also list a wildcard column.
+    const relEntry = dumpedEntity!.components.find((c) => {
+      if (typeof c.type !== "object" || c.type === null) return false;
+      const t = c.type as { component: string; target: number | string };
+      return t.component === "DumpSkipSerEphemeralRel" && t.target === target;
+    });
+    expect(relEntry).toBeDefined();
+  });
+
+  it("dump should include skipSerialize components on component-entities", () => {
+    const Host = component<{ v: number }>({ name: "DumpSkipSerHost" });
+    const Scratch = component<{ hits: number }>({ name: "DumpSkipSerScratchCE", skipSerialize: true });
+
+    const world = new World();
+    world.singleton(Host).set({ v: 42 });
+    world.set(Host, Scratch, { hits: 3 });
+    world.sync();
+
+    const saveText = JSON.stringify(world.serialize());
+    expect(saveText).toContain("DumpSkipSerHost");
+    expect(saveText).not.toContain("DumpSkipSerScratchCE");
+
+    const dump = world.dump();
+    const dumpText = JSON.stringify(dump);
+    expect(dumpText).toContain("DumpSkipSerScratchCE");
+
+    const hostEntry = dump.componentEntities?.find((entry) => entry.id === "DumpSkipSerHost");
+    expect(hostEntry).toBeDefined();
+    const scratchEntry = hostEntry!.components.find((c) => c.type === "DumpSkipSerScratchCE");
+    expect(scratchEntry?.value).toEqual({ hits: 3 });
+  });
 });
