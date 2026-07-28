@@ -38,6 +38,7 @@ export { World } from "./world/world";
 
 // Query class
 export { Query } from "./query/query";
+export type { EntityView } from "./query/entity-view";
 
 // Type utilities
 export type { ComponentTuple, ComponentType, LifecycleCallback, LifecycleHook } from "./types";

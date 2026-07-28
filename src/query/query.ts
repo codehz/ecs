@@ -4,6 +4,7 @@ import type { EntityId, WildcardRelationId } from "../entity";
 import { getDetailedIdType, isSparseComponent } from "../entity";
 import type { ComponentTuple, ComponentType } from "../types";
 import type { World } from "../world/world";
+import { EntityViewImpl, type EntityView } from "./entity-view";
 import { matchesComponentTypes, matchesFilter, type QueryFilter } from "./filter";
 import type { QueryRegistry } from "./registry";
 
@@ -219,6 +220,88 @@ export class Query {
         ? (entity: EntityId) => this.entityMatchesQuery(archetype, entity)
         : undefined;
       archetype.forEachWithComponents(componentTypes, callback, filter);
+    }
+  }
+
+  /**
+   * Iterate matching entities with an entity-scoped {@link EntityView}.
+   *
+   * Prefer this over calling `world.get` / `world.has` inside a query loop: the view is
+   * already bound to the entity's archetype, so plain component reads hit cached columns
+   * without a world-level entity→archetype lookup.
+   *
+   * Writes (`view.set` / `view.remove` / `view.delete`) forward to the world's command buffer.
+   *
+   * **View lifetime**: the same view instance is rebound for each entity. Only use it inside
+   * the callback; do not store it for later.
+   *
+   * Entity-level filters (wildcard / specific sparse / negative sparse) are applied by the query.
+   *
+   * @example
+   * query.forEachView((entity, view) => {
+   *   const pos = view.get(Position);
+   *   if (view.has(Stun)) return;
+   *   pos.x += view.get(Velocity).x;
+   * });
+   */
+  forEachView(callback: (entity: EntityId, view: EntityView) => void): void {
+    this.ensureNotDisposed();
+
+    const view = new EntityViewImpl(this.world);
+    for (const archetype of this.cachedArchetypes) {
+      view.bindArchetype(archetype);
+      const entities = archetype.getEntities();
+      const count = entities.length;
+      if (!this.needsEntityFilter) {
+        for (let i = 0; i < count; i++) {
+          const entity = entities[i]!;
+          view.bindEntity(entity, i);
+          callback(entity, view);
+        }
+        continue;
+      }
+      for (let i = 0; i < count; i++) {
+        const entity = entities[i]!;
+        if (!this.entityMatchesQuery(archetype, entity)) continue;
+        view.bindEntity(entity, i);
+        callback(entity, view);
+      }
+    }
+  }
+
+  /**
+   * Generator form of {@link forEachView}.
+   *
+   * Yields `[entity, view]` for each matching entity. The **same** view instance is rebound
+   * on every step — do not collect views (`[...query.iterateView()]` is incorrect).
+   *
+   * @example
+   * for (const [entity, view] of query.iterateView()) {
+   *   if (!view.has(Stun)) view.get(Position).x += 1;
+   * }
+   */
+  *iterateView(): IterableIterator<[EntityId, EntityView]> {
+    this.ensureNotDisposed();
+
+    const view = new EntityViewImpl(this.world);
+    for (const archetype of this.cachedArchetypes) {
+      view.bindArchetype(archetype);
+      const entities = archetype.getEntities();
+      const count = entities.length;
+      if (!this.needsEntityFilter) {
+        for (let i = 0; i < count; i++) {
+          const entity = entities[i]!;
+          view.bindEntity(entity, i);
+          yield [entity, view];
+        }
+        continue;
+      }
+      for (let i = 0; i < count; i++) {
+        const entity = entities[i]!;
+        if (!this.entityMatchesQuery(archetype, entity)) continue;
+        view.bindEntity(entity, i);
+        yield [entity, view];
+      }
     }
   }
 
