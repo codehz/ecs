@@ -181,4 +181,26 @@ describe("BitSet word boundary tests", () => {
     bitset.clear(10);
     expect(bitset.has(0)).toBe(false);
   });
+
+  it("setRange out-of-bounds is a no-op (clamp to empty)", () => {
+    const bitset = new BitSet(32);
+    // lo past end
+    bitset.setRange(32, 100);
+    for (let i = 0; i < 32; i++) {
+      expect(bitset.has(i)).toBe(false);
+    }
+    // hi before start
+    bitset.setRange(-10, -1);
+    for (let i = 0; i < 32; i++) {
+      expect(bitset.has(i)).toBe(false);
+    }
+  });
+
+  it("anyClearInRange out-of-bounds is false (clamp to empty)", () => {
+    const bitset = new BitSet(32);
+    bitset.setRange(0, 31);
+    expect(bitset.anyClearInRange(32, 100)).toBe(false);
+    expect(bitset.anyClearInRange(-10, -1)).toBe(false);
+    expect(bitset.anyClearInRange(-2, -2)).toBe(false);
+  });
 });

@@ -38,6 +38,8 @@ export class BitSet {
     if (lo > hi) return;
     if (lo < 0) lo = 0;
     if (hi >= this._length) hi = this._length - 1;
+    // After clamping, the range may be empty (e.g. lo >= length or hi < 0).
+    if (lo > hi) return;
 
     const firstWord = lo >>> 5;
     const lastWord = hi >>> 5;
@@ -77,6 +79,8 @@ export class BitSet {
     if (lo > hi) return false;
     if (lo < 0) lo = 0;
     if (hi >= this._length) hi = this._length - 1;
+    // After clamping, the range may be empty (e.g. lo >= length or hi < 0).
+    if (lo > hi) return false;
 
     const firstWord = lo >>> 5;
     const lastWord = hi >>> 5;
