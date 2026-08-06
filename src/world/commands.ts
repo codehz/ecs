@@ -102,6 +102,18 @@ export function removeMatchingRelations(
   baseComponentId: ComponentId<any>,
   changeset: ComponentChangeset,
 ): void {
+  // Same-frame exclusive flips: earlier set(rA) may only live in changeset.adds
+  // (not yet on the archetype / sparse store). Drop those staged matches first so
+  // set(rA); set(rB); sync() cannot leave both relations.
+  if (changeset.adds.size > 0) {
+    for (const componentType of [...changeset.adds.keys()]) {
+      if (isWildcardRelationId(componentType)) continue;
+      if (getComponentIdFromRelationId(componentType) === baseComponentId) {
+        changeset.delete(componentType);
+      }
+    }
+  }
+
   // Sparse exclusive (the common ChildOf path): only touch that component's store entry.
   // Avoids getAllForEntity + intermediate Map allocation.
   if (isSparseComponent(baseComponentId)) {

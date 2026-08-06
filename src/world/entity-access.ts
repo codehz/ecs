@@ -42,6 +42,14 @@ export class EntityAccess {
     const archetype = this.entityToArchetype.get(entityId);
     if (!archetype) return false;
 
+    // Wildcard presence = at least one matching relation edge on this entity.
+    // Dense relations have no archetype marker; sparse markers only prove the
+    // archetype *can* hold edges, not that this entity has any. Match get/getOptional.
+    if (isWildcardRelationId(componentType)) {
+      const relations = archetype.get(entityId, componentType as WildcardRelationId<T>);
+      return relations.length > 0;
+    }
+
     if (archetype.componentTypeSet.has(componentType)) return true;
 
     if (isSparseRelation(componentType)) {

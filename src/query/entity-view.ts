@@ -103,6 +103,11 @@ export class EntityViewImpl implements EntityView {
 
   has<T>(componentType: EntityId<T>): boolean {
     const archetype = this.archetype!;
+    // Wildcard: presence means ≥1 matching edge (align with World.has / getOptional).
+    if (isWildcardRelationId(componentType as EntityId<any>)) {
+      const relations = archetype.get(this._entity, componentType as WildcardRelationId<T>);
+      return relations.length > 0;
+    }
     if (archetype.componentTypeSet.has(componentType)) return true;
     if (isSparseRelation(componentType)) {
       return archetype.getOptional(this._entity, componentType) !== undefined;

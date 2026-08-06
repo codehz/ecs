@@ -103,10 +103,21 @@ export class CommandBuffer {
       currentCommands.length = 0;
       this.swapBuffer = currentCommands;
 
-      // Process each entity's commands, then recycle the per-entity arrays.
-      // Arrays are cleared on re-acquire (not here) so a synchronous executor
-      // that inspects `commands` after return still sees valid contents for this tick.
+      // Two-phase flush within each iteration:
+      // 1) structural set/remove so reverse-ref edges exist before destroy walks them
+      // 2) destroy/cascade after — fixes same-frame `delete(target); set(child, rel→target)`
+      //    (otherwise destroy runs with an empty reverse index and the later set orphans a
+      //    reverse ref onto a freelist-reused ID).
+      const destroyBatches: Array<{ entityId: EntityId; commands: Command[] }> = [];
       for (const [entityId, commands] of entityCommands) {
+        if (commands.some((cmd) => cmd.type === "destroy")) {
+          destroyBatches.push({ entityId, commands });
+        } else {
+          this.executeEntityCommands(entityId, commands);
+          pool.push(commands);
+        }
+      }
+      for (const { entityId, commands } of destroyBatches) {
         this.executeEntityCommands(entityId, commands);
         pool.push(commands);
       }
