@@ -1,10 +1,10 @@
 import type { Archetype } from "../archetype/archetype";
 import type { ComponentEntityStore } from "../component/entity-store";
-import type { ComponentId, EntityId, WildcardRelationId , EntityIdManager} from "../entity";
+import type { ComponentId, EntityId, WildcardRelationId, EntityIdManager } from "../entity";
 import { getComponentIdFromRelationId, isCascadeDeleteRelation, relation } from "../entity";
 import { triggerRemoveHooksForEntityDeletion } from "./hooks";
 import { assertEntityExists } from "./operations";
-import { getEntityReferences, type EntityReferencesMap } from "./references";
+import { getEntityReferences, untrackOutgoingReferences, type EntityReferencesMap } from "./references";
 
 /**
  * Narrow dependencies for RelationsRuntime (destroy + reverse refs + hierarchy).
@@ -48,8 +48,11 @@ export class RelationsRuntime {
       }
     }
 
+    // Wipe incoming MultiMap first, then drop this entity's outgoing reverse edges
+    // (held under *other* targets) before freelist can reuse the ID.
     this.entityReferences.delete(entityId);
     const removedComponents = archetype.removeEntity(entityId)!;
+    untrackOutgoingReferences(this.entityReferences, entityId, removedComponents.keys());
     this.ctx.entityToArchetype.delete(entityId);
 
     triggerRemoveHooksForEntityDeletion(entityId, removedComponents, archetype);
@@ -95,10 +98,11 @@ export class RelationsRuntime {
         }
       }
 
-      // Remove entity from archetype - this also cleans up sparse relations
-      // and returns all removed component data
+      // Wipe incoming MultiMap first, then drop this entity's outgoing reverse edges
+      // (held under *other* targets) before freelist can reuse the ID.
       this.entityReferences.delete(cur);
       const removedComponents = archetype.removeEntity(cur)!;
+      untrackOutgoingReferences(this.entityReferences, cur, removedComponents.keys());
       this.ctx.entityToArchetype.delete(cur);
 
       // Trigger lifecycle hooks for removed components (fast path for entity deletion)

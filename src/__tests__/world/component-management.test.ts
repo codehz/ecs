@@ -371,6 +371,73 @@ describe("World - Component Management", () => {
     expect(world.exists(child2)).toBe(false);
   });
 
+  it("clears outgoing reverse refs on destroy so freelist reuse is safe (sparse)", () => {
+    const world = new World();
+    const Link = component({ sparse: true });
+
+    const target = world.new();
+    const source = world.new();
+    world.set(source, relation(Link, target));
+    world.sync();
+
+    // Destroy source first: previously left a stale reverse edge under `target`.
+    world.delete(source);
+    world.sync();
+
+    const reused = world.new();
+    expect(reused).toBe(source);
+    expect(world.has(reused, relation(Link, target))).toBe(false);
+
+    // Destroying target must not try to strip a relation the reused entity never had.
+    world.delete(target);
+    world.sync();
+
+    expect(world.exists(target)).toBe(false);
+    expect(world.exists(reused)).toBe(true);
+  });
+
+  it("clears outgoing reverse refs on destroy so freelist reuse is safe (dense)", () => {
+    const world = new World();
+    const Link = component();
+
+    const target = world.new();
+    const source = world.new();
+    world.set(source, relation(Link, target));
+    world.sync();
+
+    world.delete(source);
+    world.sync();
+
+    const reused = world.new();
+    expect(reused).toBe(source);
+
+    world.delete(target);
+    world.sync();
+
+    expect(world.exists(target)).toBe(false);
+    expect(world.exists(reused)).toBe(true);
+  });
+
+  it("clears entity-as-component reverse refs on destroy so freelist reuse is safe", () => {
+    const world = new World();
+    const target = world.new();
+    const holder = world.new();
+    world.set(holder, target);
+    world.sync();
+
+    world.delete(holder);
+    world.sync();
+
+    const reused = world.new();
+    expect(reused).toBe(holder);
+
+    world.delete(target);
+    world.sync();
+
+    expect(world.exists(target)).toBe(false);
+    expect(world.exists(reused)).toBe(true);
+  });
+
   it("should handle multiple components", () => {
     const world = new World();
     const entity = world.new();

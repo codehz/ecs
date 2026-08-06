@@ -279,7 +279,18 @@ export class CommandExecutor {
    */
   removeComponentImmediate(entityId: EntityId, componentType: EntityId<any>, targetEntityId: EntityId): void {
     const sourceArchetype = this.ctx.entityToArchetype.get(entityId);
-    if (!sourceArchetype) return;
+    if (!sourceArchetype) {
+      // Source already gone (or never held the edge) — still drop a stale reverse entry.
+      untrackEntityReference(this.ctx.entityReferences, entityId, componentType, targetEntityId);
+      return;
+    }
+
+    // Reverse index can lag after destroy + entity-ID reuse. Never throw mid-cascade.
+    const existing = sourceArchetype.getOptional(entityId, componentType);
+    if (existing === undefined) {
+      untrackEntityReference(this.ctx.entityReferences, entityId, componentType, targetEntityId);
+      return;
+    }
 
     const changeset = this._removeChangeset;
     changeset.clear();
@@ -292,7 +303,7 @@ export class CommandExecutor {
       changeset,
     );
 
-    const removedComponent = sourceArchetype.get(entityId, componentType);
+    const removedComponent = existing.value;
     const newArchetype = applyChangeset(
       this._commandCtx,
       entityId,

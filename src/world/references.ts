@@ -1,4 +1,4 @@
-import type { EntityId } from "../entity";
+import { getTargetIdFromRelationId, isEntityId, isEntityRelation, type EntityId } from "../entity";
 import { MultiMap } from "../utils/multi-map";
 
 /**
@@ -72,6 +72,36 @@ export function untrackEntityReference(
     references.remove(sourceEntityId, componentType);
     if (references.keyCount === 0) {
       entityReferences.delete(targetEntityId);
+    }
+  }
+}
+
+/**
+ * Drop reverse-index entries for every entity-relation / entity-as-component
+ * that `sourceEntityId` still owned at destruction time.
+ *
+ * Destroy previously only deleted the target-side MultiMap for the dying entity
+ * (`entityReferences.delete(source)`). Outgoing edges stayed under other targets,
+ * so after freelist ID reuse those stale pairs made target destroy call
+ * `removeComponentImmediate` on a living entity that never held the component.
+ *
+ * @internal
+ */
+export function untrackOutgoingReferences(
+  entityReferences: EntityReferencesMap,
+  sourceEntityId: EntityId,
+  componentTypes: Iterable<EntityId<any>>,
+): void {
+  for (const componentType of componentTypes) {
+    if (isEntityRelation(componentType)) {
+      untrackEntityReference(
+        entityReferences,
+        sourceEntityId,
+        componentType,
+        getTargetIdFromRelationId(componentType)!,
+      );
+    } else if (isEntityId(componentType)) {
+      untrackEntityReference(entityReferences, sourceEntityId, componentType, componentType);
     }
   }
 }
