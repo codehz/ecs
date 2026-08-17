@@ -1,6 +1,6 @@
 {
   "name": "@codehz/ecs",
-  "version": "0.12.2",
+  "version": "0.13.0",
   "license": "MIT",
   "module": "src/index.ts",
   "type": "module",
