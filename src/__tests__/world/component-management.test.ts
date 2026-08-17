@@ -55,7 +55,7 @@ describe("World - Component Management", () => {
     expect(world.get(entity, positionComponent)).toEqual(position2);
   });
 
-  it("should merge repeated sets in one sync for merge-enabled components", () => {
+  it("should fold merge-enabled component sets in command order across syncs", () => {
     const world = new World();
     const entity = world.new();
     const Mailbox = component<string[]>({
@@ -65,24 +65,34 @@ describe("World - Component Management", () => {
     world.set(entity, Mailbox, ["A"]);
     world.set(entity, Mailbox, ["B", "C"]);
     world.sync();
-
     expect(world.get(entity, Mailbox)).toEqual(["A", "B", "C"]);
+
+    world.set(entity, Mailbox, ["D"]);
+    world.sync();
+    expect(world.get(entity, Mailbox)).toEqual(["A", "B", "C", "D"]);
   });
 
-  it("should reset merge accumulation after remove in one sync", () => {
+  it("should use remove as a merge reset boundary", () => {
     const world = new World();
     const entity = world.new();
     const Mailbox = component<string[]>({
       merge: (prev, next) => [...prev, ...next],
     });
 
+    world.set(entity, Mailbox, ["stored"]);
+    world.sync();
+
+    world.remove(entity, Mailbox);
     world.set(entity, Mailbox, ["A1"]);
     world.set(entity, Mailbox, ["A2"]);
+    world.sync();
+    expect(world.get(entity, Mailbox)).toEqual(["A1", "A2"]);
+
+    world.set(entity, Mailbox, ["discarded"]);
     world.remove(entity, Mailbox);
     world.set(entity, Mailbox, ["B1"]);
     world.set(entity, Mailbox, ["B2"]);
     world.sync();
-
     expect(world.get(entity, Mailbox)).toEqual(["B1", "B2"]);
   });
 
@@ -105,6 +115,17 @@ describe("World - Component Management", () => {
 
     expect(world.get(entity, rel1)).toEqual(["T1-A", "T1-B"]);
     expect(world.get(entity, rel2)).toEqual(["T2-A", "T2-B"]);
+
+    world.set(entity, rel1, ["T1-C"]);
+    world.set(entity, rel2, ["T2-C"]);
+    world.sync();
+    expect(world.get(entity, rel1)).toEqual(["T1-A", "T1-B", "T1-C"]);
+    expect(world.get(entity, rel2)).toEqual(["T2-A", "T2-B", "T2-C"]);
+
+    world.remove(entity, rel1);
+    world.set(entity, rel1, ["T1-reset"]);
+    world.sync();
+    expect(world.get(entity, rel1)).toEqual(["T1-reset"]);
   });
 
   it("should apply merge for singleton(component entity) sets", () => {
@@ -119,11 +140,15 @@ describe("World - Component Management", () => {
     world.sync();
     expect(world.get(Inbox)).toEqual(["A", "B"]);
 
-    inbox.remove();
     inbox.set(["C"]);
-    inbox.set(["D"]);
     world.sync();
-    expect(world.get(Inbox)).toEqual(["C", "D"]);
+    expect(world.get(Inbox)).toEqual(["A", "B", "C"]);
+
+    inbox.remove();
+    inbox.set(["D"]);
+    inbox.set(["E"]);
+    world.sync();
+    expect(world.get(Inbox)).toEqual(["D", "E"]);
   });
 
   it("should remove components from entities", () => {

@@ -215,8 +215,7 @@ export class CommandExecutor {
       }
     }
 
-    // Second pass: fold values (honour merge / last-write-wins) then write columns.
-    // Single-set-per-type (the common case) writes immediately without a Map.
+    // Fold values in command order, seeding merge-enabled types from stored state.
     const needsHooks = this.ctx.hooks.size > 0;
     const adds: Map<EntityId<any>, any> | null = needsHooks ? new Map() : null;
     let folded: Map<EntityId<any>, any> | null = null;
@@ -226,14 +225,26 @@ export class CommandExecutor {
       if (cmd.type !== "set") return false; // defensive; first pass already checked
       const componentType = cmd.componentType;
       let value = cmd.component;
+      const merge = getComponentMerge(componentType);
 
-      if (folded !== null && folded.has(componentType)) {
-        const merge = getComponentMerge(componentType);
-        folded.set(componentType, merge !== undefined ? merge(folded.get(componentType), value) : value);
+      if (merge !== undefined) {
+        if (folded === null) folded = new Map();
+        if (folded.has(componentType)) {
+          value = merge(folded.get(componentType), value);
+        } else {
+          const existing = archetype.getOptional(entityId, componentType);
+          if (existing !== undefined) value = merge(existing.value, value);
+        }
+        folded.set(componentType, value);
         continue;
       }
 
-      // First sighting of this type — check if a later command also targets it.
+      if (folded !== null && folded.has(componentType)) {
+        folded.set(componentType, value);
+        continue;
+      }
+
+      // First sighting of a non-merge type — check if a later command also targets it.
       let hasLater = false;
       for (let j = i + 1; j < commands.length; j++) {
         const later = commands[j]!;

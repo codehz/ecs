@@ -79,7 +79,9 @@ const ChildOf = component({ exclusive: true, name: "ChildOf" });
 | `exclusive`     | `boolean`           | Relation components only: an entity can have at most one relation of the same base component                                                                                                                                               |
 | `cascadeDelete` | `boolean`           | Entity relations only: when the target entity is deleted, the **entire referencing entity** is deleted. Differs from default behavior (default only cleans up the relation component, the entity survives). Supports transitive cascading. |
 | `sparse`        | `boolean`           | Relation components only: relations with different target entities are stored in the same Archetype, preventing excessive fragmentation (legacy `dontFragment` is **deprecated**, removed in next major)                                   |
-| `merge`         | `(prev, next) => T` | Merge strategy when `set()` is called multiple times on the same component within a single sync batch                                                                                                                                      |
+| `merge`         | `(prev, next) => T` | Folds each `set()` into the component's current value in command order across `sync()` calls; use `remove()` before `set()` to reset                                                                                                       |
+
+`merge` runs as `merge(current, next)` when the component is present. The first `set(next)` on an absent component uses `next` directly. The runtime neither reorders nor repeats calls, and `remove()` creates an immediate reset boundary within the same command stream.
 
 ### Lifecycle Hooks
 

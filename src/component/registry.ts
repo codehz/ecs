@@ -15,31 +15,31 @@ const globalComponentIdAllocator = new ComponentIdAllocator();
 const ComponentIdForNames: Map<string, ComponentId<any>> = new Map();
 
 /**
- * Merge function type for combining repeated `set()` values within a single sync batch.
+ * Merge function type for folding `set()` values in command order.
  *
- * When `world.set(entity, componentType, value)` is called **multiple times** for the
- * same entity and same component type **before** the next `world.sync()`, the merge
- * callback is invoked to combine the values instead of simply overwriting. This allows
- * additive or custom composition of component data in a single frame.
+ * When `world.set(entity, componentType, value)` is called for a component with a
+ * merge callback, the value is folded with the component's current value instead of
+ * simply overwriting it. Repeated sets are processed in command order, including sets
+ * that occur after previous `world.sync()` calls.
  *
  * @typeParam T - The component's value type.
  *
- * @param prev - The value from the **previous** `set()` call (or the merged result of
- *   earlier calls) for this entity/componentType pair within the current sync batch.
- * @param next - The value from the **current** `set()` call being processed.
+ * @param prev - The currently stored value, or the merged result of earlier commands
+ *   for this entity/componentType pair.
+ * @param next - The value from the current `set()` call being processed.
  *
- * @returns The merged value to be stored. This becomes `prev` if another `set()` for
- *   the same entity and componentType is encountered later in the same batch.
+ * @returns The folded value to be stored. This becomes `prev` for the next `set()`
+ *   of the same entity and component type.
  *
  * @remarks
- * **Idempotency**: Merge functions **must be idempotent**. The ECS does not guarantee
- * that `world.sync()` won't be called multiple times in edge cases (e.g., intermediate
- * syncs during pipeline execution), so the merge result should not depend on call
- * count or non-deterministic state.
+ * **Ordered folding**: The ECS calls `merge(prev, next)` once for each ordered `set()`
+ * after the component is present. The runtime does not reorder or repeat these calls.
+ * A merge function should be deterministic and should avoid depending on external
+ * mutable state.
  *
- * **Single-batch scope**: Merging only applies to `set()` calls within the **same sync
- * batch** (i.e., between two `world.sync()` calls). After `world.sync()`, the component
- * value is committed to storage, and the next `set()` starts with a fresh `prev` value.
+ * **Reset**: Calling `remove()` makes the component absent. A subsequent `set()` starts
+ * a new fold from its own value. This works both across sync boundaries and within the
+ * same ordered command batch.
  *
  * @example
  * ```ts
@@ -313,13 +313,11 @@ export interface ComponentOptions<T = any> {
    */
   skipSerialize?: boolean;
   /**
-   * Custom merge behavior for repeated `set()` of the same component type on the
-   * same entity within a single sync batch.
+   * Custom ordered-fold behavior for `set()` of the same component type on the same
+   * entity. The callback combines each new value with the currently stored value.
    *
-   * By default, calling `world.set(entity, comp, value)` multiple times for the same
-   * entity and component before `world.sync()` simply overwrites the previous value —
-   * the last `set()` wins. When `merge` is provided, the values are combined using
-   * your function instead.
+   * By default, `world.set(entity, comp, value)` uses last-write-wins. When `merge` is
+   * provided, each `set()` folds into the current value using your function instead.
    *
    * @remarks
    * **Use cases**:
@@ -330,18 +328,18 @@ export interface ComponentOptions<T = any> {
    * - **Conflict resolution**: Choosing the max/min/latest value when multiple
    *   systems want to set the same component.
    *
-   * **Scope**: This only affects `set()` calls on the **same entity** with the **same
-   * component type** within **one sync batch** (i.e., between `world.sync()` calls).
-   * It does NOT merge values across different entities or across sync boundaries.
+   * **Scope**: This affects `set()` calls on the **same entity** with the **same
+   * component type. Values fold across sync boundaries, but never across different
+   * entities or different relation targets.
    *
    * **Relation support**: If the component is used as a relation (via
    * `relation(componentId, target)`), the merge function also applies per-target.
    * `set(entity, relation(Comp, A), v1)` and `set(entity, relation(Comp, A), v2)`
    * will be merged, but `set(entity, relation(Comp, B), v)` is independent.
    *
-   * **Idempotency required**: Your merge function should be idempotent — calling it
-   * multiple times with the same inputs must produce the same result. The ECS
-   * runtime does not guarantee exactly-once `sync()` execution in all scenarios.
+   * **Ordered folding**: Your merge function receives values in command order. It is
+   * called once per `set()` that updates an already-present component. The function
+   * should be deterministic and should not rely on call-count-dependent external state.
    *
    * **Return value**: The function **must return** the merged value. It should not
    * mutate `prev` or `next` in place unless you intentionally want shared mutable

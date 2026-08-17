@@ -28,20 +28,33 @@ export function processCommands(
   changeset: ComponentChangeset,
   handleExclusiveRelation: (entityId: EntityId, archetype: Archetype, componentId: ComponentId<any>) => void,
 ): void {
+  // Track logical presence in command order. A delete creates a reset boundary even
+  // when a later set makes the final changeset structurally present again.
+  const present = new Map<EntityId<any>, boolean>();
   for (const command of commands) {
     if (command.type === "set") {
-      // TypeScript knows command.componentType and command.component exist
-      processSetCommand(
-        entityId,
-        currentArchetype,
-        command.componentType,
-        command.component,
-        changeset,
-        handleExclusiveRelation,
-      );
+      const componentType = command.componentType;
+      let component = command.component;
+      if (!present.has(componentType)) {
+        const existing = changeset.removes.has(componentType)
+          ? undefined
+          : currentArchetype.getOptional(entityId, componentType);
+        present.set(componentType, existing !== undefined);
+        if (existing !== undefined) {
+          const merge = getComponentMerge(componentType);
+          if (merge !== undefined) component = merge(existing.value, component);
+        }
+      } else if (present.get(componentType) === true) {
+        const merge = getComponentMerge(componentType);
+        if (merge !== undefined && changeset.adds.has(componentType)) {
+          component = merge(changeset.adds.get(componentType), component);
+        }
+      }
+      processSetCommand(entityId, currentArchetype, componentType, component, changeset, handleExclusiveRelation);
+      present.set(componentType, true);
     } else if (command.type === "delete") {
-      // TypeScript knows command.componentType exists
       processDeleteCommand(entityId, currentArchetype, command.componentType, changeset);
+      present.set(command.componentType, false);
     }
   }
 }
@@ -68,13 +81,6 @@ function processSetCommand(
         changeset.set(wildcardMarker, undefined);
       }
     }
-  }
-
-  const merge = getComponentMerge(componentType);
-  if (merge !== undefined && changeset.adds.has(componentType)) {
-    const prev = changeset.adds.get(componentType);
-    changeset.set(componentType, merge(prev, component));
-    return;
   }
 
   changeset.set(componentType, component);

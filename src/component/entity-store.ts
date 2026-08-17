@@ -133,13 +133,19 @@ export class ComponentEntityStore {
 
     for (const command of commands) {
       if (command.type === "set" && command.componentType) {
-        const merge = getComponentMerge(command.componentType);
+        const componentType = command.componentType;
+        const merge = getComponentMerge(componentType);
         let nextValue = command.component;
-        if (merge !== undefined && pendingSetValues.has(command.componentType)) {
-          const prevValue = pendingSetValues.get(command.componentType);
-          nextValue = merge(prevValue, command.component);
+        if (pendingSetValues.has(componentType)) {
+          const prevValue = pendingSetValues.get(componentType);
+          nextValue = merge !== undefined ? merge(prevValue, command.component) : command.component;
+        } else if (merge !== undefined) {
+          const existing = this.componentEntityComponents.get(entityId);
+          if (existing?.has(componentType)) {
+            nextValue = merge(existing.get(componentType), command.component);
+          }
         }
-        pendingSetValues.set(command.componentType, nextValue);
+        pendingSetValues.set(componentType, nextValue);
 
         let data = this.componentEntityComponents.get(entityId);
         if (!data) {
@@ -147,7 +153,7 @@ export class ComponentEntityStore {
           this.componentEntityComponents.set(entityId, data);
           this.registerRelationEntityId(entityId);
         }
-        data.set(command.componentType, nextValue);
+        data.set(componentType, nextValue);
       } else if (command.type === "delete" && command.componentType) {
         const data = this.componentEntityComponents.get(entityId);
 
