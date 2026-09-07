@@ -15,12 +15,54 @@ export interface SerializedEntityIdManager {
   freelist?: number[];
 }
 
-export type SerializedWorld = {
+export type SerializedWorldV1 = {
   version: number;
   entityManager: SerializedEntityIdManager;
   entities: SerializedEntity[];
   componentEntities?: SerializedEntity[];
 };
+
+/**
+ * Packed column for {@link SerializedWorldV2}.
+ *
+ * - `unknown[]` — no `undefined` slots (JSON-safe as-is)
+ * - `null` — every slot is `undefined` (wildcard markers, void tags)
+ * - `{ v, u }` — mixed; `u` is indices whose values are `undefined`
+ *   (`v[i]` is a JSON placeholder `null` at those indices)
+ *
+ * Needed because `JSON.stringify` turns `undefined` array slots into `null`,
+ * colliding with legitimate `null` component values. v1 avoided this by
+ * omitting the `value` key on `{ type, value }` objects.
+ */
+export type SerializedColumn = unknown[] | null | { v: unknown[]; u: number[] };
+
+export type SerializedArchetype = {
+  types: SerializedEntityId[];
+  entities: SerializedEntityId[];
+  columns: SerializedColumn[];
+};
+
+export type SerializedSparseRelationTable = {
+  component: SerializedEntityId;
+  sources: SerializedEntityId[];
+  targets: SerializedEntityId[];
+  values?: SerializedColumn;
+};
+
+export type SerializedWorldV2 = {
+  version: number;
+  entityManager: SerializedEntityIdManager;
+  archetypes: SerializedArchetype[];
+  sparseRelations?: SerializedSparseRelationTable[];
+  componentEntities?: SerializedEntity[];
+};
+
+/**
+ * In-memory world snapshot. `world.serialize()` / `world.dump()` emit
+ * {@link SerializedWorldV2} (columnar). {@link World} still restores
+ * {@link SerializedWorldV1} (entity-oriented) snapshots.
+ */
+export type SerializedWorld = SerializedWorldV1 | SerializedWorldV2;
 
 export type SerializedEntity = {
   id: SerializedEntityId;
@@ -31,6 +73,10 @@ export type SerializedComponent = {
   type: SerializedEntityId;
   value: any;
 };
+
+export function isSerializedWorldV2(snapshot: SerializedWorld): snapshot is SerializedWorldV2 {
+  return "archetypes" in snapshot;
+}
 
 /**
  * Core encoding logic (no cache). Extracted so cached wrapper can reuse it without duplication.

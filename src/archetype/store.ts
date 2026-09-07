@@ -63,6 +63,20 @@ export interface SparseStore {
    * implementations can provide a more efficient fused walk.
    */
   getAllForEntities(entityIds: readonly EntityId[]): Map<EntityId, Array<[EntityId<any>, any]>>;
+
+  /**
+   * @internal Walk every stored sparse edge once (fused, no per-entity arrays).
+   * Used by columnar serialization.
+   */
+  forEachEdge(
+    callback: (
+      componentId: EntityId<any>,
+      entityId: EntityId,
+      relationType: EntityId<any>,
+      target: EntityId,
+      data: unknown,
+    ) => void,
+  ): void;
 }
 
 /**
@@ -319,5 +333,27 @@ export class SparseStoreImpl implements SparseStore {
       }
     }
     return result;
+  }
+
+  forEachEdge(
+    callback: (
+      componentId: EntityId<any>,
+      entityId: EntityId,
+      relationType: EntityId<any>,
+      target: EntityId,
+      data: unknown,
+    ) => void,
+  ): void {
+    for (const [componentId, entities] of this.byComponent) {
+      for (const [entityId, entry] of entities) {
+        if (entry.type === "single") {
+          callback(componentId, entityId, entry.relationType, entry.target, entry.data);
+        } else {
+          for (const [target, item] of entry.targets) {
+            callback(componentId, entityId, item.relationType, target, item.data);
+          }
+        }
+      }
+    }
   }
 }

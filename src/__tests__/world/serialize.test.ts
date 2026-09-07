@@ -1,8 +1,23 @@
 import { describe, expect, it } from "bun:test";
 
 import { component, relation, type EntityId } from "../../entity";
+import { isSerializedWorldV2, type SerializedWorld } from "../../storage/serialization";
 import { World } from "../../world/world";
 
+function columnValue(snapshot: SerializedWorld, entityId: EntityId, typeName: string): unknown {
+  if (!isSerializedWorldV2(snapshot)) return undefined;
+  for (const arch of snapshot.archetypes) {
+    const idx = arch.entities.indexOf(entityId);
+    if (idx < 0) continue;
+    const typeIndex = arch.types.indexOf(typeName);
+    if (typeIndex < 0) continue;
+    const col = arch.columns[typeIndex];
+    if (col == null) return undefined;
+    if (Array.isArray(col)) return col[idx];
+    return col.u.includes(idx) ? undefined : col.v[idx];
+  }
+  return undefined;
+}
 describe("World serialization", () => {
   it("should serialize and deserialize a world with components and relations", () => {
     type Position = { x: number; y: number };
@@ -214,20 +229,15 @@ describe("World serialization", () => {
     expect(dumpText).toContain("DumpSkipSerScratch");
     expect(dumpText).toContain("DumpSkipSerEphemeralRel");
 
-    const dumpedEntity = dump.entities.find((entry) => entry.id === e);
-    expect(dumpedEntity).toBeDefined();
-    const scratchEntry = dumpedEntity!.components.find((c) => c.type === "DumpSkipSerScratch");
-    expect(scratchEntry?.value).toEqual({ hits: 7 });
-    // Shallow reference semantics (same as serialize)
-    expect(scratchEntry?.value).toBe(scratchValue);
+    expect(isSerializedWorldV2(dump)).toBe(true);
+    expect(columnValue(dump, e, "DumpSkipSerScratch")).toBe(scratchValue);
 
-    // Sparse relations appear as a concrete pair; the archetype may also list a wildcard column.
-    const relEntry = dumpedEntity!.components.find((c) => {
-      if (typeof c.type !== "object" || c.type === null) return false;
-      const t = c.type as { component: string; target: number | string };
-      return t.component === "DumpSkipSerEphemeralRel" && t.target === target;
-    });
-    expect(relEntry).toBeDefined();
+    if (isSerializedWorldV2(dump)) {
+      const relTable = dump.sparseRelations?.find((table) => table.component === "DumpSkipSerEphemeralRel");
+      expect(relTable).toBeDefined();
+      expect(relTable!.sources).toContain(e);
+      expect(relTable!.targets).toContain(target);
+    }
   });
 
   it("dump should include skipSerialize components on component-entities", () => {
@@ -251,5 +261,69 @@ describe("World serialization", () => {
     expect(hostEntry).toBeDefined();
     const scratchEntry = hostEntry!.components.find((c) => c.type === "DumpSkipSerScratchCE");
     expect(scratchEntry?.value).toEqual({ hits: 3 });
+  });
+
+  it("emits columnar version 2 and still restores legacy version 1", () => {
+    const Position = component<{ x: number; y: number }>({ name: "ColPos" });
+    const ChildOf = component<void>({ name: "ColChildOf", sparse: true, exclusive: true });
+
+    const world = new World();
+    const parent = world.new();
+    const child = world.new();
+    world.set(parent, Position, { x: 1, y: 2 });
+    world.set(child, Position, { x: 3, y: 4 });
+    world.set(child, relation(ChildOf, parent));
+    world.sync();
+
+    const v2 = world.serialize();
+    expect(v2.version).toBe(2);
+    expect(isSerializedWorldV2(v2)).toBe(true);
+    if (isSerializedWorldV2(v2)) {
+      expect("entities" in v2).toBe(false);
+      expect(v2.archetypes.length).toBeGreaterThan(0);
+      expect(v2.sparseRelations?.some((table) => table.component === "ColChildOf")).toBe(true);
+    }
+
+    const fromV2 = new World(v2);
+    expect(fromV2.get(parent, Position)).toEqual({ x: 1, y: 2 });
+    expect(fromV2.get(child, Position)).toEqual({ x: 3, y: 4 });
+    expect(fromV2.has(child, relation(ChildOf, parent))).toBe(true);
+    expect(fromV2.getRelationSources(parent, ChildOf)).toEqual([child]);
+
+    const v1 = world.serialize({ format: "entities" });
+    expect(v1.version).toBe(1);
+    expect(isSerializedWorldV2(v1)).toBe(false);
+    if (!isSerializedWorldV2(v1)) {
+      expect(v1.entities.length).toBe(2);
+    }
+    const fromV1 = new World(v1);
+    expect(fromV1.get(parent, Position)).toEqual({ x: 1, y: 2 });
+    expect(fromV1.has(child, relation(ChildOf, parent))).toBe(true);
+  });
+
+  it("JSON round-trips undefined and null column values", () => {
+    const Optional = component<{ n: number } | undefined>({ name: "ColOptional" });
+    const Nullable = component<string | null>({ name: "ColNullable" });
+    const Tag = component<void>({ name: "ColTag" });
+
+    const world = new World();
+    const a = world.new();
+    const b = world.new();
+    world.set(a, Optional, undefined);
+    world.set(a, Nullable, null);
+    world.set(a, Tag);
+    world.set(b, Optional, { n: 1 });
+    world.set(b, Nullable, "ok");
+    world.set(b, Tag);
+    world.sync();
+
+    const parsed = JSON.parse(JSON.stringify(world.serialize())) as SerializedWorld;
+    const restored = new World(parsed);
+    expect(restored.has(a, Optional)).toBe(true);
+    expect(restored.get(a, Optional)).toBeUndefined();
+    expect(restored.get(a, Nullable)).toBeNull();
+    expect(restored.has(a, Tag)).toBe(true);
+    expect(restored.get(b, Optional)).toEqual({ n: 1 });
+    expect(restored.get(b, Nullable)).toBe("ok");
   });
 });

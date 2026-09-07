@@ -1,5 +1,5 @@
 import type { EntityId, SerializedWorld } from "../src";
-import { World, component } from "../src";
+import { World, component, isSerializedWorldV2 } from "../src";
 
 // Define component types
 type Position = { x: number; y: number };
@@ -238,12 +238,17 @@ function main() {
   console.log("\n=== Snapshot Structure ===");
   console.log(`  version: ${snapshot.version}`);
   console.log(`  entityManager.nextId: ${snapshot.entityManager.nextId}`);
-  console.log(`  entities count: ${snapshot.entities.length}`);
-  console.log("  entity IDs:", snapshot.entities.map((e) => e.id).join(", "));
-  console.log(
-    "  components per entity:",
-    snapshot.entities.map((e) => `${e.id}: [${e.components.map((c) => c.type).join(", ")}]`).join(" | "),
-  );
+  if (isSerializedWorldV2(snapshot)) {
+    const entityCount = snapshot.archetypes.reduce((n, arch) => n + arch.entities.length, 0);
+    console.log(`  archetypes: ${snapshot.archetypes.length}`);
+    console.log(`  entities count: ${entityCount}`);
+    console.log(
+      "  per-archetype types:",
+      snapshot.archetypes.map((arch) => `[${arch.types.join(", ")}] x${arch.entities.length}`).join(" | "),
+    );
+  } else {
+    console.log(`  entities count: ${snapshot.entities.length}`);
+  }
 
   // =========================================================================
   // Part 3: JSON roundtrip

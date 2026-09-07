@@ -36,7 +36,7 @@ import {
   resolveSetOperation,
 } from "./operations";
 import { RelationsRuntime } from "./relations-runtime";
-import { deserializeWorld, serializeWorld } from "./serialization";
+import { deserializeWorld, serializeWorld, type SerializeWorldOptions } from "./serialization";
 import { SingletonHandle } from "./singleton";
 
 /**
@@ -118,6 +118,7 @@ export class World {
           entityIdManager: this.entityIdManager,
           componentEntities: this.componentEntities,
           entityReferences: this.relations.entityReferences,
+          sparseStore: this.sparseStore,
           ensureArchetype: (ct) => this.ensureArchetype(ct),
           setEntityToArchetype: (eid, arch) => this.archetypeManager.entityToArchetype.set(eid, arch),
         },
@@ -925,6 +926,9 @@ export class World {
    * Serializes the entire world state to a plain JavaScript object.
    * This creates a "memory snapshot" that can be stored or transmitted.
    * The snapshot can be restored using `new World(snapshot)`.
+   * Current snapshots use a columnar layout (`version: 2`). `new World` also
+   * accepts legacy entity-oriented snapshots (`version: 1`). Pass
+   * `{ format: "entities" }` only to emit that legacy layout (benchmarks / migration).
    *
    * Components registered with {@link ComponentOptions.skipSerialize} (and
    * relations whose base has that flag) are **omitted**. For a full debug export
@@ -946,11 +950,15 @@ export class World {
    * const savedData = JSON.parse(localStorage.getItem('save'));
    * const newWorld = new World(savedData);
    */
-  serialize(): SerializedWorld {
+  serialize(options?: Pick<SerializeWorldOptions, "format">): SerializedWorld {
     return serializeWorld(
       this.archetypeManager.archetypes as Archetype[],
       this.componentEntities,
       this.entityIdManager,
+      {
+        format: options?.format,
+        sparseStore: this.sparseStore,
+      },
     );
   }
 
@@ -986,7 +994,10 @@ export class World {
       this.archetypeManager.archetypes as Archetype[],
       this.componentEntities,
       this.entityIdManager,
-      { includeSkipSerialize: true },
+      {
+        includeSkipSerialize: true,
+        sparseStore: this.sparseStore,
+      },
     );
   }
 }

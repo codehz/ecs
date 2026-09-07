@@ -308,6 +308,13 @@ describe("Archetype", () => {
     expect(bulk.has(e1)).toBe(true);
     expect(bulk.get(e1)).toHaveLength(2);
 
+    const edges: Array<[EntityId, EntityId]> = [];
+    store.forEachEdge((_componentId, entityId, _relationType, target, _data) => {
+      edges.push([entityId, target]);
+    });
+    expect(edges).toHaveLength(2);
+    expect(edges.map((edge) => edge[0])).toEqual([e1, e1]);
+
     // getAllForEntity on one without
     expect(store.getAllForEntity(e2)).toEqual([]);
 

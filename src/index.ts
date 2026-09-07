@@ -25,11 +25,17 @@ export {
 
 // World class
 export type {
+  SerializedArchetype,
+  SerializedColumn,
   SerializedComponent,
   SerializedEntity,
   SerializedEntityId,
+  SerializedSparseRelationTable,
   SerializedWorld,
+  SerializedWorldV1,
+  SerializedWorldV2,
 } from "./storage/serialization";
+export { isSerializedWorldV2 } from "./storage/serialization";
 export { EntityBuilder } from "./world/builder";
 export type { ComponentDef } from "./world/builder";
 export { SingletonHandle } from "./world/singleton";

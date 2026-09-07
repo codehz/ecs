@@ -349,7 +349,7 @@ const owners = world.getRelationSources(sword, InInventory);
 库提供对世界状态的「内存快照」序列化接口，用于保存/恢复实体与组件数据；另有调试用的完整导出。
 
 ```typescript
-// 创建快照（内存对象）—— 省略 skipSerialize 组件
+// 创建快照（内存对象，columnar / version: 2）—— 省略 skipSerialize 组件
 const snapshot = world.serialize();
 
 // 在同一进程内直接恢复
@@ -367,9 +367,11 @@ const debug = world.dump();
 
 **设计要点：**
 
-- `world.serialize()` / `world.dump()` 均返回内存对象，**不会**对组件值执行 `JSON.stringify`，也不会 deep clone；组件值为浅引用。
+- 当前 `serialize()` / `dump()` 产出 **列式快照**（`version: 2`）：按 archetype 写 `types` + `entities` + `columns`，sparse 关系单独成表。`new World` **仍接受** 旧的实体列表快照（`version: 1`）。
+- 二者均返回内存对象，**不会**对组件值执行 `JSON.stringify`，也不会 deep clone；组件值为浅引用。列数组是拷贝，不会 alias 运行时存储。
 - `new World(snapshot)` 是反序列化的唯一入口（没有 `World.deserialize()` 静态方法）。**不要**用 `dump()` 的结果恢复世界。
 - 快照包含实体、组件以及 `EntityIdManager` 分配器状态（保留下一次分配的 ID）；**不会**自动恢复查询缓存或生命周期钩子。
+- 列里的 `undefined` 会打包成 `null` 列或 `{ v, u }`（`u` 为 undefined 下标），以便 `JSON.stringify` 往返后仍能和合法的 `null` 组件值区分。
 
 **持久化示例（组件值为 JSON 友好时）：**
 
@@ -385,22 +387,25 @@ const restored = new World(parsed);
 **自定义编码示例：**
 
 ```typescript
+import { isSerializedWorldV2 } from "@codehz/ecs";
+
 const snapshot = world.serialize();
+if (!isSerializedWorldV2(snapshot)) throw new Error("expected columnar snapshot");
+
 const encoded = {
   ...snapshot,
-  entities: snapshot.entities.map((e) => ({
-    id: e.id,
-    components: e.components.map((c) => ({ type: c.type, value: myEncode(c.value) })),
+  archetypes: snapshot.archetypes.map((arch) => ({
+    ...arch,
+    columns: arch.columns.map((col) => encodeColumn(col, myEncode)),
   })),
 };
 // 持久化 encoded ...
 
-// 恢复时反向解码
 const decodedSnapshot = {
   ...decoded,
-  entities: decoded.entities.map((e) => ({
-    id: e.id,
-    components: e.components.map((c) => ({ type: c.type, value: myDecode(c.value) })),
+  archetypes: decoded.archetypes.map((arch) => ({
+    ...arch,
+    columns: arch.columns.map((col) => encodeColumn(col, myDecode)),
   })),
 };
 const restored = new World(decodedSnapshot);

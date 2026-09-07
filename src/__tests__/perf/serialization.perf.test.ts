@@ -1,8 +1,15 @@
 import { describe, expect, it } from "bun:test";
 
 import { component, relation, type EntityId } from "../../entity";
+import { isSerializedWorldV2, type SerializedWorld } from "../../storage/serialization";
 import { World } from "../../world/world";
 
+function snapshotEntityCount(snapshot: SerializedWorld): number {
+  if (isSerializedWorldV2(snapshot)) {
+    return snapshot.archetypes.reduce((n, arch) => n + arch.entities.length, 0);
+  }
+  return snapshot.entities.length;
+}
 function benchmark(label: string, warmupRounds: number, measuredRounds: number, fn: (round: number) => void): number {
   const durations: number[] = [];
 
@@ -28,17 +35,11 @@ function benchmark(label: string, warmupRounds: number, measuredRounds: number, 
 /**
  * Serialization performance benchmarks.
  *
- * These benchmarks validate the post-optimization serialization path
- * (see optimization plan for src/world/serialization.ts):
+ * Compares legacy entity-oriented snapshots (`format: "entities"`, version 1)
+ * against the default columnar layout (version 2).
  *
- * Key optimizations exercised:
- * - Column-oriented direct export from Archetype (bypasses per-entity Map + dump())
- * - Per-archetype pre-encoding of component type IDs
- * - ID encoding cache (encodeEntityIdCached) for repeated component/relation IDs
- * - Removal of redundant per-entity work in deserialization
- *
- * Target scale: 8k–12k entities across multiple archetypes + relations.
- * This is large enough to show meaningful differences while keeping test runtime reasonable.
+ * Columnar wins should show up as smaller JSON and cheaper deserialize
+ * (`appendEntitiesFromColumns` vs per-entity Map + addEntity).
  */
 describe("Serialization performance (post-optimization baseline)", () => {
   it("should serialize and deserialize large mixed worlds efficiently", () => {
@@ -117,23 +118,29 @@ describe("Serialization performance (post-optimization baseline)", () => {
     const warmup = 2;
     const measured = 5;
 
-    // === Serialize ===
-    let lastSnapshot: ReturnType<World["serialize"]> | null = null;
+    let lastV1: SerializedWorld | null = null;
+    let lastV2: SerializedWorld | null = null;
 
-    const serializeAvg = benchmark(
-      `serialize ${entityCount} entities (mixed archetypes + relations)`,
-      warmup,
-      measured,
-      () => {
-        lastSnapshot = world.serialize();
-      },
+    const serializeV1Avg = benchmark(`v1 serialize ${entityCount} entities (entity-oriented)`, warmup, measured, () => {
+      lastV1 = world.serialize({ format: "entities" });
+    });
+
+    const serializeV2Avg = benchmark(`v2 serialize ${entityCount} entities (columnar)`, warmup, measured, () => {
+      lastV2 = world.serialize();
+    });
+
+    expect(lastV1).toBeDefined();
+    expect(lastV2).toBeDefined();
+    expect(snapshotEntityCount(lastV1!)).toBeGreaterThanOrEqual(entityCount * 0.9);
+    expect(snapshotEntityCount(lastV2!)).toBeGreaterThanOrEqual(entityCount * 0.9);
+    expect(lastV2!.version).toBe(2);
+
+    const v1Json = JSON.stringify(lastV1);
+    const v2Json = JSON.stringify(lastV2);
+    console.log(
+      `JSON size v1=${v1Json.length} B  v2=${v2Json.length} B  ratio=${(v2Json.length / v1Json.length).toFixed(3)}  serialize v2/v1=${(serializeV2Avg / serializeV1Avg).toFixed(3)}`,
     );
 
-    expect(lastSnapshot).toBeDefined();
-    expect(lastSnapshot!.entities.length).toBeGreaterThanOrEqual(entityCount * 0.9); // rough sanity
-
-    // Measure rough heap impact of a serialize call.
-    // Note: Bun may require --smol or explicit GC for more stable allocation numbers.
     if (typeof Bun !== "undefined" && Bun.gc) {
       Bun.gc(true);
     }
@@ -142,32 +149,41 @@ describe("Serialization performance (post-optimization baseline)", () => {
     const memAfter = process.memoryUsage();
     const heapDeltaMB = ((memAfter.heapUsed - memBefore.heapUsed) / 1024 / 1024).toFixed(2);
     console.log(
-      `serialize heap delta (one call): ~${heapDeltaMB} MB (rss delta: ${((memAfter.rss - memBefore.rss) / 1024 / 1024).toFixed(2)} MB)`,
+      `v2 serialize heap delta (one call): ~${heapDeltaMB} MB (rss delta: ${((memAfter.rss - memBefore.rss) / 1024 / 1024).toFixed(2)} MB)`,
     );
 
-    // === Deserialize (new World from snapshot) ===
-    const deserializeAvg = benchmark(
-      `deserialize ${entityCount} entities (new World(snapshot))`,
+    const deserializeV1Avg = benchmark(
+      `v1 deserialize ${entityCount} entities (new World(v1 snapshot))`,
       warmup,
       measured,
       () => {
-        // We create and immediately let go of the world to measure allocation + construction cost
-        const restored = new World(lastSnapshot!);
-        // Touch one value to prevent dead-code elimination in theory
+        const restored = new World(lastV1!);
         if (restored.exists(entities[0]!)) {
           void restored.get(entities[0]!, Position);
         }
       },
     );
 
-    // === Full JSON roundtrip (very common user pattern) ===
+    const deserializeV2Avg = benchmark(
+      `v2 deserialize ${entityCount} entities (new World(v2 snapshot))`,
+      warmup,
+      measured,
+      () => {
+        const restored = new World(lastV2!);
+        if (restored.exists(entities[0]!)) {
+          void restored.get(entities[0]!, Position);
+        }
+      },
+    );
+    console.log(`deserialize v2/v1=${(deserializeV2Avg / deserializeV1Avg).toFixed(3)}`);
+
     const jsonRoundtripAvg = benchmark(
-      `full JSON roundtrip (stringify + parse + new World) — ${entityCount} entities`,
+      `v2 JSON roundtrip (stringify + parse + new World) — ${entityCount} entities`,
       warmup,
       measured,
       () => {
         const json = JSON.stringify(world.serialize());
-        const parsed = JSON.parse(json);
+        const parsed = JSON.parse(json) as SerializedWorld;
         const restored = new World(parsed);
         if (restored.exists(entities[42]!)) {
           void restored.get(entities[42]!, Position);
@@ -175,15 +191,12 @@ describe("Serialization performance (post-optimization baseline)", () => {
       },
     );
 
-    // Loose upper bounds — these act as regression guards.
-    // The numbers are intentionally generous to account for CI machine variance.
-    // The main value is the detailed console output for manual before/after comparison.
-    expect(serializeAvg).toBeLessThan(80); // ~12k entities serialize
-    expect(deserializeAvg).toBeLessThan(120); // new World(snapshot) tends to be heavier
-    expect(jsonRoundtripAvg).toBeLessThan(200); // includes JSON + full deserialize
+    expect(serializeV2Avg).toBeLessThan(80);
+    expect(deserializeV2Avg).toBeLessThan(120);
+    expect(jsonRoundtripAvg).toBeLessThan(200);
+    expect(v2Json.length).toBeLessThan(v1Json.length);
 
-    // Final sanity: the last deserialized world should still have most entities
-    const finalRestored = new World(lastSnapshot!);
+    const finalRestored = new World(lastV2!);
     expect(finalRestored.exists(entities[0]!)).toBe(true);
     expect(finalRestored.exists(entities[entityCount - 1]!)).toBe(true);
   });
@@ -218,26 +231,52 @@ describe("Serialization performance (post-optimization baseline)", () => {
     const warmup = 1;
     const measured = 4;
 
-    const serializeAvg = benchmark(
-      `serialize ${entityCount} entities (dense entity-relations)`,
+    let lastV1: SerializedWorld | undefined;
+    let lastV2: SerializedWorld | undefined;
+
+    const serializeV1Avg = benchmark(
+      `v1 serialize ${entityCount} entities (dense entity-relations)`,
       warmup,
       measured,
       () => {
-        void world.serialize();
+        lastV1 = world.serialize({ format: "entities" });
       },
     );
 
-    // Deserialize with many relations exercises decode + reference tracking
-    let snapshot: ReturnType<World["serialize"]> | undefined;
+    const serializeV2Avg = benchmark(
+      `v2 serialize ${entityCount} entities (dense entity-relations)`,
+      warmup,
+      measured,
+      () => {
+        lastV2 = world.serialize();
+      },
+    );
 
-    const deserializeAvg = benchmark(`deserialize ${entityCount} entities (dense relations)`, warmup, measured, () => {
-      if (!snapshot) snapshot = world.serialize();
-      const w = new World(snapshot);
-      void w;
-    });
+    const v1Json = JSON.stringify(lastV1);
+    const v2Json = JSON.stringify(lastV2);
+    console.log(
+      `dense JSON size v1=${v1Json.length} B  v2=${v2Json.length} B  ratio=${(v2Json.length / v1Json.length).toFixed(3)}  serialize v2/v1=${(serializeV2Avg / serializeV1Avg).toFixed(3)}`,
+    );
 
-    // Very loose bounds — this scenario is intentionally expensive
-    expect(serializeAvg).toBeLessThan(150);
-    expect(deserializeAvg).toBeLessThan(220);
+    const deserializeV1Avg = benchmark(
+      `v1 deserialize ${entityCount} entities (dense relations)`,
+      warmup,
+      measured,
+      () => {
+        void new World(lastV1!);
+      },
+    );
+    const deserializeV2Avg = benchmark(
+      `v2 deserialize ${entityCount} entities (dense relations)`,
+      warmup,
+      measured,
+      () => {
+        void new World(lastV2!);
+      },
+    );
+    console.log(`dense deserialize v2/v1=${(deserializeV2Avg / deserializeV1Avg).toFixed(3)}`);
+
+    expect(serializeV2Avg).toBeLessThan(150);
+    expect(deserializeV2Avg).toBeLessThan(220);
   });
 });

@@ -1,16 +1,23 @@
 import { describe, expect, it } from "bun:test";
 
 import { component, relation, type EntityId } from "../../entity";
-import { decodeSerializedId, encodeEntityId, encodeEntityIdCached } from "../../storage/serialization";
+import {
+  decodeSerializedId,
+  encodeEntityId,
+  encodeEntityIdCached,
+  isSerializedWorldV2,
+} from "../../storage/serialization";
 import { World } from "../../world/world";
-
 describe("Serialization edge cases", () => {
   it("should serialize empty world", () => {
     const world = new World();
     const snapshot = world.serialize();
 
-    expect(snapshot.entities).toHaveLength(0);
-    expect(snapshot.version).toBeDefined();
+    expect(isSerializedWorldV2(snapshot)).toBe(true);
+    if (isSerializedWorldV2(snapshot)) {
+      expect(snapshot.archetypes).toHaveLength(0);
+    }
+    expect(snapshot.version).toBe(2);
 
     const newWorld = new World(snapshot);
     expect(newWorld.exists(-1 as unknown as ReturnType<typeof world.new>)).toBe(false);
@@ -149,9 +156,15 @@ describe("Serialization edge cases", () => {
     // Second serialization
     const snapshot2 = world2.serialize();
 
-    // Snapshots should be equivalent
-    expect(snapshot1.entities).toHaveLength(snapshot2.entities.length);
     expect(snapshot1.version).toBe(snapshot2.version);
+    expect(isSerializedWorldV2(snapshot1)).toBe(true);
+    expect(isSerializedWorldV2(snapshot2)).toBe(true);
+    if (isSerializedWorldV2(snapshot1) && isSerializedWorldV2(snapshot2)) {
+      const count = (s: typeof snapshot1) =>
+        isSerializedWorldV2(s) ? s.archetypes.reduce((n, a) => n + a.entities.length, 0) : 0;
+      expect(count(snapshot1)).toBe(count(snapshot2));
+      expect(count(snapshot1)).toBe(entities.length);
+    }
 
     // Verify data is preserved
     for (const entity of entities) {

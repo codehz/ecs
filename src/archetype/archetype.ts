@@ -8,7 +8,13 @@ import {
   isSparseRelation,
   isWildcardRelationId,
 } from "../entity";
-import type { SerializedComponent, SerializedEntity, SerializedEntityId } from "../storage/serialization";
+import type {
+  SerializedArchetype,
+  SerializedColumn,
+  SerializedComponent,
+  SerializedEntity,
+  SerializedEntityId,
+} from "../storage/serialization";
 import { isOptionalEntityId, type ComponentTuple, type ComponentType, type LifecycleHookEntry } from "../types";
 import { getOrCompute } from "../utils/utils";
 import { buildCacheKey, buildSingleComponent, getWildcardRelationDataSource, isRelationType } from "./helpers";
@@ -18,6 +24,33 @@ import type { SparseStore } from "./store";
  * Special value to represent missing component data
  */
 export const MISSING_COMPONENT = Symbol("missing component");
+
+function packColumn(data: readonly unknown[]): SerializedColumn {
+  const n = data.length;
+  let undefCount = 0;
+  for (let i = 0; i < n; i++) {
+    const x = data[i];
+    if (x === undefined || x === MISSING_COMPONENT) undefCount++;
+  }
+  if (undefCount === n) return null;
+  if (undefCount === 0) {
+    const v = new Array<unknown>(n);
+    for (let i = 0; i < n; i++) v[i] = data[i];
+    return v;
+  }
+  const v = new Array<unknown>(n);
+  const u: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const x = data[i];
+    if (x === undefined || x === MISSING_COMPONENT) {
+      u.push(i);
+      v[i] = null;
+    } else {
+      v[i] = x;
+    }
+  }
+  return { v, u };
+}
 
 /**
  * Archetype class for ECS architecture
@@ -252,6 +285,71 @@ export class Archetype {
         id: encode(entity),
         components,
       });
+    }
+  }
+
+  /**
+   * @internal Columnar serialization fast-path (snapshot version 2).
+   *
+   * Emits one record for this archetype: type IDs encoded once, entity id list,
+   * and packed columns aligned with `types`. Sparse relation payloads are NOT
+   * included — the caller walks {@link SparseStore.forEachEdge} separately.
+   *
+   * `encodedComponentTypes` is parallel to {@link componentTypes}; `null` means
+   * skipSerialize and that column is omitted from the record.
+   */
+  toSerializedArchetype(
+    encode: (id: EntityId<any>) => SerializedEntityId,
+    encodedComponentTypes: (SerializedEntityId | null)[],
+  ): SerializedArchetype | undefined {
+    if (encodedComponentTypes.length !== this.componentTypes.length) {
+      throw new Error("encodedComponentTypes length must match archetype componentTypes");
+    }
+    const n = this.entities.length;
+    if (n === 0) return undefined;
+
+    const types: SerializedEntityId[] = [];
+    const columns: SerializedColumn[] = [];
+    for (let c = 0; c < this.componentTypes.length; c++) {
+      const encodedType = encodedComponentTypes[c];
+      if (encodedType == null) continue;
+      types.push(encodedType);
+      const componentType = this.componentTypes[c]!;
+      columns.push(isWildcardRelationId(componentType) ? null : packColumn(this.getComponentData(componentType)));
+    }
+
+    const entities = new Array<SerializedEntityId>(n);
+    for (let i = 0; i < n; i++) {
+      entities[i] = encode(this.entities[i]!);
+    }
+    return { types, entities, columns };
+  }
+
+  /**
+   * @internal Restore fast-path: append many entities with columns already
+   * aligned to {@link componentTypes}. Null column = all `undefined`.
+   * Sparse relations are applied by the caller onto the shared store.
+   */
+  appendEntitiesFromColumns(entityIds: EntityId[], columns: (unknown[] | null)[]): void {
+    if (columns.length !== this.componentTypes.length) {
+      throw new Error("columns length must match archetype componentTypes");
+    }
+    const n = entityIds.length;
+    const start = this.entities.length;
+    for (let i = 0; i < n; i++) {
+      const id = entityIds[i]!;
+      this.entities.push(id);
+      this.entityToIndex.set(id, start + i);
+    }
+    for (let c = 0; c < this.componentTypes.length; c++) {
+      const dest = this.getComponentData(this.componentTypes[c]!);
+      const src = columns[c];
+      const destStart = dest.length;
+      dest.length = destStart + n;
+      if (src == null) continue;
+      for (let i = 0; i < n; i++) {
+        dest[destStart + i] = src[i];
+      }
     }
   }
 
