@@ -36,7 +36,7 @@ import {
   resolveSetOperation,
 } from "./operations";
 import { RelationsRuntime } from "./relations-runtime";
-import { deserializeWorld, serializeWorld, type SerializeWorldOptions } from "./serialization";
+import { deserializeWorld, serializeWorld, type SerializeOptions } from "./serialization";
 import { SingletonHandle } from "./singleton";
 
 /**
@@ -950,7 +950,7 @@ export class World {
    * const savedData = JSON.parse(localStorage.getItem('save'));
    * const newWorld = new World(savedData);
    */
-  serialize(options?: Pick<SerializeWorldOptions, "format">): SerializedWorld {
+  serialize(options?: SerializeOptions): SerializedWorld {
     return serializeWorld(
       this.archetypeManager.archetypes as Archetype[],
       this.componentEntities,

@@ -329,12 +329,30 @@ export class Archetype {
    * @internal Restore fast-path: append many entities with columns already
    * aligned to {@link componentTypes}. Null column = all `undefined`.
    * Sparse relations are applied by the caller onto the shared store.
+   *
+   * Validates duplicate entity IDs and per-column `length === n` before any
+   * storage mutation. Null columns write explicit `undefined` (not holes).
    */
   appendEntitiesFromColumns(entityIds: EntityId[], columns: (unknown[] | null)[]): void {
     if (columns.length !== this.componentTypes.length) {
       throw new Error("columns length must match archetype componentTypes");
     }
     const n = entityIds.length;
+    for (let c = 0; c < columns.length; c++) {
+      const src = columns[c];
+      if (src != null && src.length !== n) {
+        throw new Error("column length must match entity count");
+      }
+    }
+    const seen = new Set<EntityId>();
+    for (let i = 0; i < n; i++) {
+      const id = entityIds[i]!;
+      if (this.entityToIndex.has(id) || seen.has(id)) {
+        throw new Error(`Entity ${id} is already in this archetype`);
+      }
+      seen.add(id);
+    }
+
     const start = this.entities.length;
     for (let i = 0; i < n; i++) {
       const id = entityIds[i]!;
@@ -345,10 +363,10 @@ export class Archetype {
       const dest = this.getComponentData(this.componentTypes[c]!);
       const src = columns[c];
       const destStart = dest.length;
-      dest.length = destStart + n;
-      if (src == null) continue;
-      for (let i = 0; i < n; i++) {
-        dest[destStart + i] = src[i];
+      if (src == null) {
+        for (let i = 0; i < n; i++) dest[destStart + i] = undefined;
+      } else {
+        for (let i = 0; i < n; i++) dest[destStart + i] = src[i];
       }
     }
   }

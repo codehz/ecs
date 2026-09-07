@@ -1,7 +1,9 @@
 import { describe, expect, it } from "bun:test";
 
-import { component, relation, type EntityId } from "../../entity";
-import { isSerializedWorldV2, type SerializedWorld } from "../../storage/serialization";
+import { ComponentEntityStore } from "../../component/entity-store";
+import { EntityIdManager, component, relation, type EntityId } from "../../entity";
+import { isSerializedWorldV2, type SerializedColumn, type SerializedWorld } from "../../storage/serialization";
+import { serializeWorld } from "../../world/serialization";
 import { World } from "../../world/world";
 
 function columnValue(snapshot: SerializedWorld, entityId: EntityId, typeName: string): unknown {
@@ -15,6 +17,15 @@ function columnValue(snapshot: SerializedWorld, entityId: EntityId, typeName: st
     if (col == null) return undefined;
     if (Array.isArray(col)) return col[idx];
     return col.u.includes(idx) ? undefined : col.v[idx];
+  }
+  return undefined;
+}
+function packedColumn(snapshot: SerializedWorld, typeName: string): SerializedColumn | undefined {
+  if (!isSerializedWorldV2(snapshot)) return undefined;
+  for (const arch of snapshot.archetypes) {
+    const typeIndex = arch.types.indexOf(typeName);
+    if (typeIndex < 0) continue;
+    return arch.columns[typeIndex];
   }
   return undefined;
 }
@@ -325,5 +336,162 @@ describe("World serialization", () => {
     expect(restored.has(a, Tag)).toBe(true);
     expect(restored.get(b, Optional)).toEqual({ n: 1 });
     expect(restored.get(b, Nullable)).toBe("ok");
+  });
+
+  it("JSON round-trips mixed undefined and null in one column", () => {
+    const Mixed = component<{ n: number } | undefined | null>({ name: "ColMixedSentinel" });
+
+    const world = new World();
+    const a = world.new();
+    const b = world.new();
+    const c = world.new();
+    world.set(a, Mixed, undefined);
+    world.set(b, Mixed, null);
+    world.set(c, Mixed, { n: 1 });
+    world.sync();
+
+    const snapshot = world.serialize();
+    const packed = packedColumn(snapshot, "ColMixedSentinel");
+    expect(packed).toEqual({ v: [null, null, { n: 1 }], u: [0] });
+    const packedObj = packed as { v: unknown[]; u: number[] };
+    const vBefore = packedObj.v.slice();
+
+    const restoredInPlace = new World(snapshot);
+    expect(packedObj.v).toEqual(vBefore);
+    expect(restoredInPlace.has(a, Mixed)).toBe(true);
+    expect(restoredInPlace.get(a, Mixed)).toBeUndefined();
+    expect(restoredInPlace.get(b, Mixed)).toBeNull();
+    expect(restoredInPlace.get(c, Mixed)).toEqual({ n: 1 });
+
+    const parsed = JSON.parse(JSON.stringify(snapshot)) as SerializedWorld;
+    const restored = new World(parsed);
+    expect(restored.has(a, Mixed)).toBe(true);
+    expect(restored.get(a, Mixed)).toBeUndefined();
+    expect(restored.get(b, Mixed)).toBeNull();
+    expect(restored.get(c, Mixed)).toEqual({ n: 1 });
+  });
+
+  it("JSON round-trips sparse relation payloads including undefined", () => {
+    const Link = component<{ w: number } | undefined>({ name: "SparsePayloadLink", sparse: true });
+
+    const world = new World();
+    const a = world.new();
+    const b = world.new();
+    const target = world.new();
+    world.set(a, relation(Link, target), { w: 1 });
+    world.set(b, relation(Link, target), undefined);
+    world.sync();
+
+    const parsed = JSON.parse(JSON.stringify(world.serialize())) as SerializedWorld;
+    expect(isSerializedWorldV2(parsed)).toBe(true);
+    if (isSerializedWorldV2(parsed)) {
+      const table = parsed.sparseRelations?.find((entry) => entry.component === "SparsePayloadLink");
+      expect(table).toBeDefined();
+      expect(table!.values).toEqual({ v: [{ w: 1 }, null], u: [1] });
+    }
+
+    const restored = new World(parsed);
+    expect(restored.get(a, relation(Link, target))).toEqual({ w: 1 });
+    expect(restored.has(b, relation(Link, target))).toBe(true);
+    expect(restored.get(b, relation(Link, target))).toBeUndefined();
+    expect(restored.getRelationSources(target, Link).sort()).toEqual([a, b].sort());
+  });
+
+  it("should drop skipSerialize components present in a dirty v2 snapshot", () => {
+    const Position = component<{ x: number; y: number }>({ name: "SkipSerV2Pos" });
+    const Scratch = component<{ hits: number }>({ name: "SkipSerV2Scratch", skipSerialize: true });
+    const EphemeralRel = component({ name: "SkipSerV2EphemeralRel", skipSerialize: true, sparse: true });
+
+    const e = 1024 as EntityId;
+    const target = 1025 as EntityId;
+
+    const snapshot = {
+      version: 2,
+      entityManager: { nextId: 1026 },
+      archetypes: [
+        {
+          types: ["SkipSerV2Pos", "SkipSerV2Scratch"],
+          entities: [e],
+          columns: [[{ x: 1, y: 2 }], [{ hits: 7 }]],
+        },
+        {
+          types: [] as string[],
+          entities: [target],
+          columns: [] as never[],
+        },
+      ],
+      sparseRelations: [
+        {
+          component: "SkipSerV2EphemeralRel",
+          sources: [e],
+          targets: [target],
+        },
+      ],
+    };
+
+    const restored = new World(snapshot);
+    expect(restored.exists(e)).toBe(true);
+    expect(restored.exists(target)).toBe(true);
+    expect(restored.get(e, Position)).toEqual({ x: 1, y: 2 });
+    expect(restored.has(e, Scratch)).toBe(false);
+    expect(restored.has(e, relation(EphemeralRel, target))).toBe(false);
+    expect(restored.getRelationSources(target, EphemeralRel)).toEqual([]);
+  });
+
+  it("rejects v2 snapshots with column length mismatch or duplicate entity ids", () => {
+    const Pos = component<{ x: number }>({ name: "BadColLenPos" });
+    void Pos;
+
+    expect(
+      () =>
+        new World({
+          version: 2,
+          entityManager: { nextId: 1026 },
+          archetypes: [
+            {
+              types: ["BadColLenPos"],
+              entities: [1024, 1025],
+              columns: [[{ x: 1 }]],
+            },
+          ],
+        }),
+    ).toThrow(/length/);
+
+    expect(
+      () =>
+        new World({
+          version: 2,
+          entityManager: { nextId: 1025 },
+          archetypes: [
+            {
+              types: ["BadColLenPos"],
+              entities: [1024],
+              columns: [],
+            },
+          ],
+        }),
+    ).toThrow(/columns length/);
+
+    expect(
+      () =>
+        new World({
+          version: 2,
+          entityManager: { nextId: 1025 },
+          archetypes: [
+            {
+              types: ["BadColLenPos"],
+              entities: [1024, 1024],
+              columns: [[{ x: 1 }, { x: 2 }]],
+            },
+          ],
+        }),
+    ).toThrow(/duplicate entity id/);
+  });
+
+  it("columnar serialize requires sparseStore", () => {
+    expect(() => serializeWorld([], new ComponentEntityStore(), new EntityIdManager())).toThrow(/sparseStore/);
+    expect(serializeWorld([], new ComponentEntityStore(), new EntityIdManager(), { format: "entities" }).version).toBe(
+      1,
+    );
   });
 });

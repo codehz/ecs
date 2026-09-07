@@ -276,7 +276,11 @@ describe("Serialization performance (post-optimization baseline)", () => {
     );
     console.log(`dense deserialize v2/v1=${(deserializeV2Avg / deserializeV1Avg).toFixed(3)}`);
 
+    const serializeRatio = serializeV2Avg / serializeV1Avg;
     expect(serializeV2Avg).toBeLessThan(150);
     expect(deserializeV2Avg).toBeLessThan(220);
+    // Dense unique-target relations fragment archetypes; v2 serialize is known
+    // ~2× slower than v1. Fail only if it becomes much worse than that baseline.
+    expect(serializeRatio).toBeLessThan(4);
   });
 });

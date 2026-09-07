@@ -36,6 +36,7 @@ export type {
   SerializedWorldV2,
 } from "./storage/serialization";
 export { isSerializedWorldV2 } from "./storage/serialization";
+export type { SerializeFormat, SerializeOptions } from "./world/serialization";
 export { EntityBuilder } from "./world/builder";
 export type { ComponentDef } from "./world/builder";
 export { SingletonHandle } from "./world/singleton";

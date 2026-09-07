@@ -20,11 +20,25 @@ import {
 } from "../storage/serialization";
 import { trackEntityReference, type EntityReferencesMap } from "./references";
 
-/** Snapshot layout produced by {@link serializeWorld}. */
+/** Snapshot layout produced by {@link World.serialize} / {@link serializeWorld}. */
 export type SerializeFormat = "columnar" | "entities";
 
+/**
+ * Public options for {@link World.serialize}.
+ * Does not include internal restore/serialize plumbing (`sparseStore`).
+ */
+export interface SerializeOptions {
+  /**
+   * Snapshot layout. Default `"columnar"` ({@link SerializedWorldV2}).
+   * `"entities"` emits the legacy {@link SerializedWorldV1} layout (kept for
+   * benchmarks and as a migration hatch for callers that still walk
+   * `snapshot.entities`).
+   */
+  format?: SerializeFormat;
+}
+
 /** Options for {@link serializeWorld}. */
-export interface SerializeWorldOptions {
+export interface SerializeWorldOptions extends SerializeOptions {
   /**
    * When `true`, include components marked {@link ComponentOptions.skipSerialize}
    * (and relations whose base has that flag). Intended for debug dumps only
@@ -32,12 +46,6 @@ export interface SerializeWorldOptions {
    * {@link deserializeWorld}. Default `false` (save-game / network snapshot).
    */
   includeSkipSerialize?: boolean;
-  /**
-   * Snapshot layout. Default `"columnar"` ({@link SerializedWorldV2}).
-   * `"entities"` emits the legacy {@link SerializedWorldV1} layout (kept for
-   * benchmarks and as a reference implementation).
-   */
-  format?: SerializeFormat;
   /** Shared sparse relation store. Required for columnar sparse tables. */
   sparseStore?: SparseStore;
 }
@@ -73,6 +81,10 @@ function serializeWorldColumnar(
   options?: SerializeWorldOptions,
 ): SerializedWorldV2 {
   const includeSkipSerialize = options?.includeSkipSerialize === true;
+  const sparseStore = options?.sparseStore;
+  if (sparseStore === undefined) {
+    throw new Error("columnar serialize requires sparseStore");
+  }
   const idCache = new Map<EntityId<unknown>, SerializedEntityId>();
   const encode = (id: EntityId<unknown>): SerializedEntityId => encodeEntityIdCached(id, idCache);
   const skip = includeSkipSerialize ? undefined : shouldSkipSerialize;
@@ -86,7 +98,7 @@ function serializeWorldColumnar(
     if (record !== undefined) serializedArchetypes.push(record);
   }
 
-  const sparseRelations = packSparseRelations(options?.sparseStore, encode, skip);
+  const sparseRelations = packSparseRelations(sparseStore, encode, skip);
   const componentEntitiesArr = serializeComponentEntities(componentEntities, idCache, includeSkipSerialize);
 
   const snapshot: SerializedWorldV2 = {
@@ -146,12 +158,10 @@ function serializeComponentEntities(
 }
 
 function packSparseRelations(
-  sparseStore: SparseStore | undefined,
+  sparseStore: SparseStore,
   encode: (id: EntityId<unknown>) => SerializedEntityId,
   skip: ((componentType: EntityId<unknown>) => boolean) | undefined,
 ): SerializedSparseRelationTable[] {
-  if (sparseStore === undefined) return [];
-
   const grouped = new Map<
     EntityId<unknown>,
     { sources: SerializedEntityId[]; targets: SerializedEntityId[]; values: unknown[] }
@@ -205,10 +215,13 @@ function packValueColumn(data: readonly unknown[]): SerializedColumn {
   return { v, u };
 }
 
-function unpackColumn(col: SerializedColumn | undefined): unknown[] | null {
-  if (col === undefined || col === null) return null;
+function unpackColumn(col: SerializedColumn): unknown[] | null {
+  if (col === null) return null;
   if (Array.isArray(col)) return col;
-  const v = col.v;
+  if (!Array.isArray(col.v) || !Array.isArray(col.u)) {
+    throw new Error("invalid packed column");
+  }
+  const v = col.v.slice();
   for (let i = 0; i < col.u.length; i++) {
     v[col.u[i]!] = undefined;
   }
@@ -292,7 +305,17 @@ function restoreComponentEntities(ctx: WorldDeserializationContext, entries: Ser
 }
 
 function deserializeColumnarEntities(ctx: WorldDeserializationContext, snapshot: SerializedWorldV2): void {
+  const pending: Array<{
+    types: EntityId<unknown>[];
+    columns: (unknown[] | null)[];
+    entityIds: EntityId[];
+  }> = [];
+  const seen = new Set<EntityId>();
+
   for (const record of snapshot.archetypes) {
+    if (!Array.isArray(record.columns) || record.columns.length !== record.types.length) {
+      throw new Error("serialized archetype columns length must match types");
+    }
     const n = record.entities.length;
     const types: EntityId<unknown>[] = [];
     const columns: (unknown[] | null)[] = [];
@@ -301,21 +324,34 @@ function deserializeColumnarEntities(ctx: WorldDeserializationContext, snapshot:
       const componentType = decodeSerializedId(record.types[t]!);
       if (shouldSkipSerialize(componentType)) continue;
       types.push(componentType);
-      columns.push(unpackColumn(record.columns[t]));
+      const unpacked = unpackColumn(record.columns[t]!);
+      if (unpacked != null && unpacked.length !== n) {
+        throw new Error("serialized column length must match entity count");
+      }
+      columns.push(unpacked);
     }
 
-    const archetype = ctx.ensureArchetype(types);
     const entityIds = new Array<EntityId>(n);
     for (let i = 0; i < n; i++) {
       const entityId = decodeSerializedId(record.entities[i]!);
+      if (seen.has(entityId)) {
+        throw new Error(`duplicate entity id in snapshot: ${entityId}`);
+      }
+      seen.add(entityId);
       entityIds[i] = entityId;
-      ctx.setEntityToArchetype(entityId, archetype);
     }
 
-    const aligned = alignColumnsToArchetype(archetype, types, columns);
-    archetype.appendEntitiesFromColumns(entityIds, aligned);
+    pending.push({ types, columns, entityIds });
+  }
 
-    trackColumnReferences(ctx, entityIds, types);
+  for (const item of pending) {
+    const archetype = ctx.ensureArchetype(item.types);
+    for (let i = 0; i < item.entityIds.length; i++) {
+      ctx.setEntityToArchetype(item.entityIds[i]!, archetype);
+    }
+    const aligned = alignColumnsToArchetype(archetype, item.types, item.columns);
+    archetype.appendEntitiesFromColumns(item.entityIds, aligned);
+    trackColumnReferences(ctx, item.entityIds, item.types);
   }
 
   restoreSparseRelations(ctx, snapshot.sparseRelations);
@@ -375,7 +411,13 @@ function restoreSparseRelations(
     if (!isComponentId(componentId) || shouldSkipSerialize(componentId)) continue;
 
     const n = table.sources.length;
-    const values = unpackColumn(table.values);
+    if (n !== table.targets.length) {
+      throw new Error("sparse relation table sources/targets length mismatch");
+    }
+    const values = table.values === undefined ? null : unpackColumn(table.values);
+    if (values != null && values.length !== n) {
+      throw new Error("sparse relation table values length must match sources");
+    }
     for (let i = 0; i < n; i++) {
       const source = decodeSerializedId(table.sources[i]!);
       const target = decodeSerializedId(table.targets[i]!);

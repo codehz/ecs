@@ -308,12 +308,20 @@ describe("Archetype", () => {
     expect(bulk.has(e1)).toBe(true);
     expect(bulk.get(e1)).toHaveLength(2);
 
-    const edges: Array<[EntityId, EntityId]> = [];
-    store.forEachEdge((_componentId, entityId, _relationType, target, _data) => {
-      edges.push([entityId, target]);
+    const edges: Array<{
+      componentId: EntityId;
+      entityId: EntityId;
+      relationType: EntityId;
+      target: EntityId;
+      data: unknown;
+    }> = [];
+    store.forEachEdge((componentId, entityId, relationType, target, data) => {
+      edges.push({ componentId, entityId, relationType, target, data });
     });
-    expect(edges).toHaveLength(2);
-    expect(edges.map((edge) => edge[0])).toEqual([e1, e1]);
+    expect(edges).toEqual([
+      { componentId: velocityComponent, entityId: e1, relationType: r1, target: targetC1, data: { v: 1 } },
+      { componentId: velocityComponent, entityId: e1, relationType: r2, target: targetC2, data: { v: 2 } },
+    ]);
 
     // getAllForEntity on one without
     expect(store.getAllForEntity(e2)).toEqual([]);
@@ -327,6 +335,45 @@ describe("Archetype", () => {
     // delete last demotes? after delete one left in multi, delete last
     store.deleteValue(e1, r2);
     expect(store.hasAnyForComponent(baseComp)).toBe(false);
+  });
+
+  it("appendEntitiesFromColumns writes explicit undefined for null columns", () => {
+    const Tag = component<void>();
+    const archetype = new Archetype([Tag], createSparseStore());
+    const e1 = createEntityId(1024);
+    const e2 = createEntityId(1025);
+
+    archetype.appendEntitiesFromColumns([e1, e2], [null]);
+
+    const col = archetype.getComponentData(Tag);
+    expect(col).toHaveLength(2);
+    expect(Object.hasOwn(col, 0)).toBe(true);
+    expect(Object.hasOwn(col, 1)).toBe(true);
+    let visited = 0;
+    col.forEach(() => {
+      visited++;
+    });
+    expect(visited).toBe(2);
+    expect(archetype.exists(e1)).toBe(true);
+    expect(archetype.exists(e2)).toBe(true);
+  });
+
+  it("appendEntitiesFromColumns rejects duplicate ids and short columns before mutating", () => {
+    const Pos = component<{ x: number }>();
+    const archetype = new Archetype([Pos], createSparseStore());
+    const e1 = createEntityId(1024);
+    const e2 = createEntityId(1025);
+
+    expect(() => archetype.appendEntitiesFromColumns([e1, e1], [[{ x: 1 }, { x: 2 }]])).toThrow(/already/);
+    expect(archetype.size).toBe(0);
+
+    expect(() => archetype.appendEntitiesFromColumns([e1, e2], [[{ x: 1 }]])).toThrow(/length/);
+    expect(archetype.size).toBe(0);
+
+    archetype.addEntity(e1, new Map([[Pos, { x: 1 }]]));
+    expect(() => archetype.appendEntitiesFromColumns([e1], [[{ x: 2 }]])).toThrow(/already/);
+    expect(archetype.size).toBe(1);
+    expect(archetype.get(e1, Pos)).toEqual({ x: 1 });
   });
 
   it("should cover archetype helpers (find*, has*, build*, matchers, error paths)", () => {

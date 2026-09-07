@@ -367,11 +367,12 @@ const debug = world.dump();
 
 **设计要点：**
 
-- 当前 `serialize()` / `dump()` 产出 **列式快照**（`version: 2`）：按 archetype 写 `types` + `entities` + `columns`，sparse 关系单独成表。`new World` **仍接受** 旧的实体列表快照（`version: 1`）。
+- 当前 `serialize()` / `dump()` 产出 **列式快照**（`version: 2`）：按 archetype 写 `types` + `entities` + `columns`，sparse 关系单独成表。**没有顶层 `snapshot.entities`。** 旧代码若遍历 `snapshot.entities` 会直接失败；写成 `snapshot.entities ?? []` 则会静默存空档。请用 `isSerializedWorldV2` 后走 `archetypes` / `sparseRelations`，或临时 `world.serialize({ format: "entities" })` 拿到 `version: 1` 实体列表（迁移舱口）。`new World` **仍接受** 旧的实体列表快照。
 - 二者均返回内存对象，**不会**对组件值执行 `JSON.stringify`，也不会 deep clone；组件值为浅引用。列数组是拷贝，不会 alias 运行时存储。
 - `new World(snapshot)` 是反序列化的唯一入口（没有 `World.deserialize()` 静态方法）。**不要**用 `dump()` 的结果恢复世界。
 - 快照包含实体、组件以及 `EntityIdManager` 分配器状态（保留下一次分配的 ID）；**不会**自动恢复查询缓存或生命周期钩子。
 - 列里的 `undefined` 会打包成 `null` 列或 `{ v, u }`（`u` 为 undefined 下标），以便 `JSON.stringify` 往返后仍能和合法的 `null` 组件值区分。
+- 高基数关系请用 `sparse: true`。稠密的 unique-target 关系会碎片化 archetype，列式 serialize 可能比 v1 慢。
 
 **持久化示例（组件值为 JSON 友好时）：**
 
@@ -386,28 +387,45 @@ const restored = new World(parsed);
 
 **自定义编码示例：**
 
+v2 的组件值出现在三处：`archetypes[].columns`、`sparseRelations[].values`、`componentEntities[].components[].value`。encode/decode 必须全部覆盖。
+
 ```typescript
-import { isSerializedWorldV2 } from "@codehz/ecs";
+import { isSerializedWorldV2, type SerializedColumn, type SerializedWorldV2 } from "@codehz/ecs";
+
+function mapPackedColumn(col: SerializedColumn, encode: (value: unknown) => unknown): SerializedColumn {
+  if (col == null) return col;
+  if (Array.isArray(col)) return col.map(encode);
+  const undefinedSlots = new Set(col.u);
+  return {
+    v: col.v.map((value, i) => (undefinedSlots.has(i) ? value : encode(value))),
+    u: col.u,
+  };
+}
+
+function mapSnapshotValues(snapshot: SerializedWorldV2, encode: (value: unknown) => unknown): SerializedWorldV2 {
+  return {
+    ...snapshot,
+    archetypes: snapshot.archetypes.map((arch) => ({
+      ...arch,
+      columns: arch.columns.map((col) => mapPackedColumn(col, encode)),
+    })),
+    sparseRelations: snapshot.sparseRelations?.map((table) => ({
+      ...table,
+      values: table.values === undefined ? undefined : mapPackedColumn(table.values, encode),
+    })),
+    componentEntities: snapshot.componentEntities?.map((entry) => ({
+      ...entry,
+      components: entry.components.map((c) => ({ ...c, value: encode(c.value) })),
+    })),
+  };
+}
 
 const snapshot = world.serialize();
 if (!isSerializedWorldV2(snapshot)) throw new Error("expected columnar snapshot");
-
-const encoded = {
-  ...snapshot,
-  archetypes: snapshot.archetypes.map((arch) => ({
-    ...arch,
-    columns: arch.columns.map((col) => encodeColumn(col, myEncode)),
-  })),
-};
+const encoded = mapSnapshotValues(snapshot, myEncode);
 // 持久化 encoded ...
 
-const decodedSnapshot = {
-  ...decoded,
-  archetypes: decoded.archetypes.map((arch) => ({
-    ...arch,
-    columns: arch.columns.map((col) => encodeColumn(col, myDecode)),
-  })),
-};
+const decodedSnapshot = mapSnapshotValues(encoded, myDecode);
 const restored = new World(decodedSnapshot);
 ```
 

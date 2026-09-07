@@ -353,9 +353,12 @@ const debug = world.dump();
 
 **Design notes:**
 
-- Both `world.serialize()` and `world.dump()` return in-memory objects. They do **not** call `JSON.stringify` on component values and do **not** deep-clone them (shallow references).
+- `serialize()` / `dump()` emit a **columnar snapshot** (`version: 2`): per-archetype `types` + `entities` + `columns`, with sparse relations in a side table. **There is no top-level `snapshot.entities`.** Existing code that walks `snapshot.entities` will throw; `snapshot.entities ?? []` will silently persist zero entities. Narrow with `isSerializedWorldV2` and use `archetypes` / `sparseRelations`, or temporarily request the legacy layout with `world.serialize({ format: "entities" })`. `new World` **still accepts** version-1 entity-list snapshots.
+- Both APIs return in-memory objects. They do **not** call `JSON.stringify` on component values and do **not** deep-clone them (shallow references). Column arrays are copies and do not alias live storage.
 - `new World(snapshot)` is the sole entry point for deserialization (there is no `World.deserialize()` static method). **Do not** restore from a `dump()` result.
 - The snapshot includes entities, components, and the `EntityIdManager` allocator state (preserving the next ID to assign). It does **not** automatically restore query caches or lifecycle hooks.
+- Column `undefined` is packed as a `null` column or `{ v, u }` (`u` = undefined indices) so a `JSON.stringify` round-trip stays distinct from legitimate `null` component values.
+- Prefer `sparse: true` for high-cardinality relations. Dense unique-target relations fragment archetypes; columnar serialize can be slower than v1 in that case.
 
 **Persistence example (when component values are JSON-friendly):**
 
@@ -370,25 +373,45 @@ const restored = new World(parsed);
 
 **Custom encoding example:**
 
+v2 stores component values in three places: `archetypes[].columns`, `sparseRelations[].values`, and `componentEntities[].components[].value`. Encode/decode must cover all three.
+
 ```typescript
+import { isSerializedWorldV2, type SerializedColumn, type SerializedWorldV2 } from "@codehz/ecs";
+
+function mapPackedColumn(col: SerializedColumn, encode: (value: unknown) => unknown): SerializedColumn {
+  if (col == null) return col;
+  if (Array.isArray(col)) return col.map(encode);
+  const undefinedSlots = new Set(col.u);
+  return {
+    v: col.v.map((value, i) => (undefinedSlots.has(i) ? value : encode(value))),
+    u: col.u,
+  };
+}
+
+function mapSnapshotValues(snapshot: SerializedWorldV2, encode: (value: unknown) => unknown): SerializedWorldV2 {
+  return {
+    ...snapshot,
+    archetypes: snapshot.archetypes.map((arch) => ({
+      ...arch,
+      columns: arch.columns.map((col) => mapPackedColumn(col, encode)),
+    })),
+    sparseRelations: snapshot.sparseRelations?.map((table) => ({
+      ...table,
+      values: table.values === undefined ? undefined : mapPackedColumn(table.values, encode),
+    })),
+    componentEntities: snapshot.componentEntities?.map((entry) => ({
+      ...entry,
+      components: entry.components.map((c) => ({ ...c, value: encode(c.value) })),
+    })),
+  };
+}
+
 const snapshot = world.serialize();
-const encoded = {
-  ...snapshot,
-  entities: snapshot.entities.map((e) => ({
-    id: e.id,
-    components: e.components.map((c) => ({ type: c.type, value: myEncode(c.value) })),
-  })),
-};
+if (!isSerializedWorldV2(snapshot)) throw new Error("expected columnar snapshot");
+const encoded = mapSnapshotValues(snapshot, myEncode);
 // Persist encoded ...
 
-// Decode in reverse when restoring
-const decodedSnapshot = {
-  ...decoded,
-  entities: decoded.entities.map((e) => ({
-    id: e.id,
-    components: e.components.map((c) => ({ type: c.type, value: myDecode(c.value) })),
-  })),
-};
+const decodedSnapshot = mapSnapshotValues(encoded, myDecode);
 const restored = new World(decodedSnapshot);
 ```
 

@@ -263,12 +263,12 @@ This is useful for global configuration, time, resources, etc.
 
 ### 10. Serialization
 
-- `world.serialize()` produces an **in-memory columnar snapshot** (`version: 2`, omits `skipSerialize` components).
+- `world.serialize()` produces an **in-memory columnar snapshot** (`version: 2`, omits `skipSerialize` components). There is **no** top-level `snapshot.entities`; walk `archetypes` / `sparseRelations`, or use `world.serialize({ format: "entities" })` for the legacy layout.
 - `world.dump()` produces the same shape but **includes** `skipSerialize` components — debug only, not for restore.
 - `new World(snapshot)` restores from a `serialize()` snapshot, including legacy `version: 1` entity-list saves.
 - **Not restored**: cached queries, lifecycle hooks, command buffer state.
 - `undefined` is a valid component value and is preserved (column pack uses `null` / `{ v, u }`).
-- For real persistence you must implement custom encode/decode.
+- For real persistence you must implement custom encode/decode covering `archetypes[].columns`, `sparseRelations[].values`, and `componentEntities[].components[].value`.
 
 **Rule**: Treat serialization as "save the current world state for later in this process or for network transfer", not as a general-purpose save file format. Use `dump()` only for debugging.
 
