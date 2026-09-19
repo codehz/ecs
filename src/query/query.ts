@@ -1,7 +1,7 @@
 import type { Archetype } from "../archetype/archetype";
 import { normalizeComponentTypes } from "../component/type-utils";
 import type { EntityId, WildcardRelationId } from "../entity";
-import { getDetailedIdType, isSparseComponent } from "../entity";
+import { getDetailedIdType, isSparseComponent, isWildcardRelationId } from "../entity";
 import type { ComponentTuple, ComponentType } from "../types";
 import type { World } from "../world/world";
 import { EntityViewImpl, type EntityView } from "./entity-view";
@@ -330,6 +330,24 @@ export class Query {
   }
 
   /**
+   * Returns the relations of a wildcard type for every matching entity.
+   *
+   * One list per entity, in {@link getEntities} order — an entity that matches the
+   * query without holding a relation of that component gets an empty list. The pairs
+   * are the ones {@link forEach} and `world.get(entity, wildcard)` hand out; this is
+   * the only way to read a relation's targets through a query.
+   *
+   * Must be declared before the plain `EntityId` overload: `WildcardRelationId` is a
+   * subtype of `EntityId`, so the more specific signature has to win.
+   *
+   * @param componentType - The wildcard relation type
+   * @returns One `[target, value]` list per matching entity
+   *
+   * @example
+   * const parents = query.getComponentData(relation(ChildOf, "*"));
+   */
+  getComponentData<T>(componentType: WildcardRelationId<T>): [EntityId<unknown>, T][][];
+  /**
    * Returns an array containing the data of a single component for every matching entity.
    *
    * @param componentType - The component type to retrieve
@@ -338,8 +356,23 @@ export class Query {
    * @example
    * const positions = query.getComponentData(Position);
    */
-  getComponentData<T>(componentType: EntityId<T>): T[] {
+  getComponentData<T>(componentType: EntityId<T>): T[];
+  getComponentData<T>(componentType: EntityId<T> | WildcardRelationId<T>): T[] | [EntityId<unknown>, T][][] {
     this.ensureNotDisposed();
+
+    // A wildcard has no archetype column to read: expand it per entity the way
+    // `forEach` does (`Archetype.get` reads columns *and* sparse relations, and maps
+    // a void payload to `undefined`). The column fast path below cannot see it and
+    // throws, and `Archetype.getOptional` in the slow path does not look for it at
+    // all — both used to drop the relations while reporting a successful read.
+    if (isWildcardRelationId(componentType as EntityId<any>)) {
+      const wildcard = componentType as WildcardRelationId<T>;
+      const result: [EntityId<unknown>, T][][] = [];
+      this.forEachMatchingEntity((archetype, entity) => {
+        result.push(archetype.get(entity, wildcard) as [EntityId<unknown>, T][]);
+      });
+      return result;
+    }
 
     // Fast path: no entity filter and component is stored as an archetype column
     if (!this.needsEntityFilter && !isSpecificSparseRelation(componentType)) {
