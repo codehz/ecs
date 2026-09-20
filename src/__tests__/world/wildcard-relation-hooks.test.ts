@@ -178,6 +178,40 @@ describe("Wildcard-Relation Hooks", () => {
     expect(calls[0]!.components[2]).toEqual([[target2, { y: 20 }]]);
   });
 
+  it("should not match an entity that holds only the companion component of a sparse wildcard", () => {
+    const world = new World();
+    const A = component<number>();
+    const ChildOf = component<{ weight: number }>({ sparse: true });
+    const parent = world.new();
+    const wildcardChildOf = relation(ChildOf, "*");
+
+    const holder = world.new();
+    const bystander = world.new();
+    world.set(holder, A, 1);
+    world.set(holder, relation(ChildOf, parent), { weight: 5 });
+    world.set(bystander, A, 2);
+    world.sync();
+
+    const calls: { event: string; entityId: EntityId; components: readonly unknown[] }[] = [];
+    world.hook([A, wildcardChildOf], {
+      on_init: (entityId, ...components) => calls.push({ event: "init", entityId, components }),
+      on_set: (entityId, ...components) => calls.push({ event: "set", entityId, components }),
+    });
+
+    // The sparse wildcard marker is the archetype's only evidence of an edge, so a
+    // marker-less archetype is not matched — even though it holds `A`.
+    expect(calls).toEqual([{ event: "init", entityId: holder, components: [1, [[parent, { weight: 5 }]]] }]);
+
+    const late = world.new();
+    world.set(late, A, 3);
+    world.sync();
+    expect(calls.length).toBe(1);
+
+    world.set(late, relation(ChildOf, parent), { weight: 7 });
+    world.sync();
+    expect(calls[1]).toEqual({ event: "set", entityId: late, components: [3, [[parent, { weight: 7 }]]] });
+  });
+
   it("should not match unrelated relation components with wildcard", () => {
     const world = new World();
     const A = component<number>();

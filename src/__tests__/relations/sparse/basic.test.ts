@@ -394,6 +394,37 @@ describe("Sparse Relations", () => {
     }
   });
 
+  it("should report a concrete sparse target slot as undefined when the edge points elsewhere", () => {
+    const world = new World();
+
+    const ChildOf = component<{ weight: number }>({ sparse: true });
+    const A = component<number>();
+    const parent = world.new();
+    const otherParent = world.new();
+    const holder = world.new();
+    const stranger = world.new();
+
+    const calls: { entityId: EntityId; slot: unknown; a: number }[] = [];
+    world.hook([relation(ChildOf, parent), A], {
+      on_set: (entityId, slot, a) => calls.push({ entityId, slot, a }),
+    });
+
+    // The archetype only proves "some edge exists", so `A` alone never matches.
+    world.set(stranger, A, 1);
+    world.sync();
+    expect(calls).toEqual([]);
+
+    // An edge to another target still matches; the slot it does not hold is `undefined`.
+    world.set(holder, A, 2);
+    world.set(holder, relation(ChildOf, otherParent), { weight: 5 });
+    world.sync();
+    expect(calls).toEqual([{ entityId: holder, slot: undefined, a: 2 }]);
+
+    world.set(holder, relation(ChildOf, parent), { weight: 7 });
+    world.sync();
+    expect(calls[1]).toEqual({ entityId: holder, slot: { weight: 7 }, a: 2 });
+  });
+
   it("should trigger lifecycle hooks when sparse relations are removed due to entity destruction", () => {
     const world = new World();
 

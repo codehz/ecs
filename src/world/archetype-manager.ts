@@ -7,11 +7,10 @@ import {
   getComponentIdFromRelationId,
   getDetailedIdType,
   isSparseRelation,
-  isSparseWildcard,
   isWildcardRelationId,
   relation,
 } from "../entity";
-import { matchesFilter } from "../query/filter";
+import { matchesComponentTypes, matchesFilter } from "../query/filter";
 import type { QueryRegistry } from "../query/registry";
 import type { LifecycleHookEntry } from "../types";
 import { getOrCompute } from "../utils/utils";
@@ -235,16 +234,10 @@ export class ArchetypeManager {
   }
 
   public archetypeMatchesHook(archetype: Archetype, entry: LifecycleHookEntry): boolean {
-    return (
-      entry.requiredComponents.every((c: EntityId<any>) => {
-        if (isWildcardRelationId(c)) {
-          if (isSparseWildcard(c)) return true;
-          const componentId = getComponentIdFromRelationId(c);
-          return componentId !== undefined && archetype.hasRelationWithComponentId(componentId);
-        }
-        return archetype.componentTypeSet.has(c) || isSparseRelation(c);
-      }) && matchesFilter(archetype, entry.filter)
-    );
+    // Same matcher queries use: a wildcard requirement (dense or sparse) needs a
+    // relation column or the sparse wildcard marker, and a wildcard relation never
+    // matches vacuously.
+    return matchesComponentTypes(archetype, entry.requiredComponents) && matchesFilter(archetype, entry.filter);
   }
 
   /** Called during cascade deletion cleanup. */

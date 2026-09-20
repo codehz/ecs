@@ -237,9 +237,20 @@ export function collectMultiHookComponents(
   entityId: EntityId,
   componentTypes: readonly ComponentType<any>[],
 ): any[] {
-  return componentTypes.map((ct) =>
-    isOptionalEntityId(ct) ? ctx.getOptional(entityId, ct.optional) : ctx.get(entityId, ct as EntityId<any>),
-  );
+  return componentTypes.map((ct) => {
+    if (isOptionalEntityId(ct)) return ctx.getOptional(entityId, ct.optional);
+
+    const compId = ct as EntityId<any>;
+    if (isWildcardRelationId(compId)) return ctx.get(entityId, compId);
+
+    // Archetype matching is coarser than the requirement for sparse relations: the
+    // archetype carries `relation(Comp, "*")`, so an entity that satisfies a concrete
+    // `relation(Comp, target)` requirement while holding a *different* target still
+    // reaches this hook. That slot is absent, not an error — `get()` would throw inside
+    // `sync()`, where the native binding hands over `undefined`.
+    const present = ctx.getOptional(entityId, compId);
+    return present === undefined ? undefined : present.value;
+  });
 }
 
 /**
@@ -318,7 +329,11 @@ function collectMultiHookComponentsWithRemoved(
     }
 
     const match = findMatchingComponent(removedComponents, compId);
-    return match ? match[1] : ctx.get(entityId, compId);
+    if (match) return match[1];
+
+    // Absent sparse target, not an error — see collectMultiHookComponents.
+    const present = ctx.getOptional(entityId, compId);
+    return present === undefined ? undefined : present.value;
   });
 }
 
